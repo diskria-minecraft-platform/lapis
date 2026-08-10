@@ -1,9 +1,7 @@
 package io.github.recrafter.lapis.phases.builtins
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation
-import io.github.diskria.poetesse.kotlin.KPModifier
-import io.github.diskria.poetesse.kotlin.KPParameter
-import io.github.diskria.poetesse.kotlin.KPType
+import io.github.diskria.poetesse.kotlin.*
 import io.github.recrafter.lapis.common.jvmDescriptor
 import io.github.recrafter.lapis.extensions.kp.*
 import io.github.recrafter.lapis.extensions.withInternalPrefix
@@ -413,7 +411,7 @@ sealed class DescriptorWrapperBuiltin<T : IrDescriptorWrapperImpl<T>>(override v
                 }
             }.also { extensionPackEntities += GenKotlinPropertyEntity(it) }
             impl.returnTypeName?.let { returnTypeName ->
-                val primitiveJvmName = returnTypeName.jvmDescriptor.getPrimitiveName(allowVoid = false)
+                val primitiveJvmName = returnTypeName.jvmDescriptor.primitiveName
                 val type = if (primitiveJvmName != null) returnTypeName else returnTypeName.makeNullable()
                 buildKotlinProperty("returnValue", type, jvmNamespace = impl.className) {
                     setReceiverType(superClassTypeName)

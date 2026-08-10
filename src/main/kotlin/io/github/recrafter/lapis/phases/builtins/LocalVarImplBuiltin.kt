@@ -1,9 +1,7 @@
 package io.github.recrafter.lapis.phases.builtins
 
 import com.llamalad7.mixinextras.sugar.ref.*
-import io.github.diskria.poetesse.kotlin.KPClassName
-import io.github.diskria.poetesse.kotlin.KPModifier
-import io.github.diskria.poetesse.kotlin.KPType
+import io.github.diskria.poetesse.kotlin.*
 import io.github.recrafter.lapis.extensions.kp.*
 import io.github.recrafter.lapis.phases.builtins.SimpleBuiltin.LocalVar
 import io.github.recrafter.lapis.phases.lowering.IrVisibilityModifier

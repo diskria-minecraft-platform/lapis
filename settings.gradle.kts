@@ -23,7 +23,7 @@ dependencyResolutionManagement {
 }
 
 projekt {
-    version = "0.8.7"
+    version = "0.9.1"
     license = MIT
     publish = setOf(MAVEN_CENTRAL)
 

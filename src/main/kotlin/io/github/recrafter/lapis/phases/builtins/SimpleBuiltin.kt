@@ -1,6 +1,8 @@
 package io.github.recrafter.lapis.phases.builtins
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation
+import io.github.diskria.poetesse.kotlin.KPAny
+import io.github.diskria.poetesse.kotlin.KPBoolean
 import io.github.diskria.poetesse.kotlin.KPModifier
 import io.github.diskria.poetesse.kotlin.KPType
 import io.github.recrafter.lapis.extensions.kp.*

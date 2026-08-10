@@ -14,23 +14,11 @@ import io.github.recrafter.lapis.phases.lowering.types.IrTypeName
 
 val KPNothing: KPClassName = NOTHING
 
-val KPBoolean: KPClassName = BOOLEAN
-val KPByte: KPClassName = BYTE
-val KPShort: KPClassName = SHORT
-val KPInt: KPClassName = INT
-val KPLong: KPClassName = LONG
-val KPChar: KPClassName = CHAR
-val KPFloat: KPClassName = FLOAT
-val KPDouble: KPClassName = DOUBLE
-val KPUnit: KPClassName = UNIT
-
-val KPAny: KPClassName = ANY
 val KPString: KPClassName = STRING
 val KPList: KPClassName = LIST
 val KPSet: KPClassName = SET
 val KPMap: KPClassName = MAP
 
-val KPArray: KPClassName = ARRAY
 val KPBooleanArray: KPClassName = BOOLEAN_ARRAY
 val KPByteArray: KPClassName = BYTE_ARRAY
 val KPShortArray: KPClassName = SHORT_ARRAY
@@ -39,8 +27,6 @@ val KPLongArray: KPClassName = LONG_ARRAY
 val KPCharArray: KPClassName = CHAR_ARRAY
 val KPFloatArray: KPClassName = FLOAT_ARRAY
 val KPDoubleArray: KPClassName = DOUBLE_ARRAY
-
-val KPStar: KPWildcardTypeName = STAR
 
 inline fun <reified A : Annotation> buildKotlinAnnotation(
     useSiteTarget: UseSiteTarget? = null,

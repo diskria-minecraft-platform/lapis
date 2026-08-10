@@ -2,14 +2,14 @@ package io.github.recrafter.lapis.phases.lowering.types
 
 import com.squareup.kotlinpoet.ExperimentalKotlinPoetApi
 import io.github.diskria.poetesse.java.JPTypeName
-import io.github.diskria.poetesse.kotlin.KPLambdaTypeName
+import io.github.diskria.poetesse.kotlin.KPFunctionalTypeName
 import io.github.recrafter.lapis.extensions.common.lapisError
 import io.github.recrafter.lapis.extensions.kp.buildKotlinParameter
 import io.github.recrafter.lapis.extensions.kp.orUnit
 import io.github.recrafter.lapis.extensions.quoted
 import io.github.recrafter.lapis.phases.lowering.models.IrParameter
 
-class IrLambdaTypeName(override val kotlin: KPLambdaTypeName) : IrTypeName(kotlin) {
+class IrLambdaTypeName(override val kotlin: KPFunctionalTypeName) : IrTypeName(kotlin) {
 
     override val java: JPTypeName
         get() = lapisError(
@@ -26,7 +26,7 @@ class IrLambdaTypeName(override val kotlin: KPLambdaTypeName) : IrTypeName(kotli
             contextParameters: List<IrTypeName> = emptyList(),
         ): IrLambdaTypeName =
             IrLambdaTypeName(
-                KPLambdaTypeName.get(
+                KPFunctionalTypeName.get(
                     receiver = receiverTypeName?.kotlin,
                     parameters = parameters.map(::buildKotlinParameter),
                     returnType = returnTypeName?.kotlin.orUnit(),

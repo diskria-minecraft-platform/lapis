@@ -86,8 +86,7 @@ class IrMixin(
     override val className: IrClassName,
     override val side: Side,
     val injections: List<IrInjection>,
-    val externalBridge: IrMixinExternalBridge?,
-    val internalBridge: IrMixinInternalBridge?,
+    val bridge: IrMixinBridge?,
     val targetInternalName: String?,
     val mixinAnnotations: List<IrMixinAnnotation>,
 ) : IrMixinRelatedBlueprint(JPTypeKind.CLASS)

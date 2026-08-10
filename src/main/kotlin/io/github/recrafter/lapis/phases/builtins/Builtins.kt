@@ -21,15 +21,11 @@ class Builtins(
     var isExternalGenerated: Boolean = false
         private set
 
-    private var isInternalGenerated: Boolean = false
-
-    private val externalClassName: IrClassName =
-        IrClassName.of(generatedModPackageName, Lapis.NAME)
-
-    private val internalClassName: IrClassName =
-        IrClassName.of(generatedModPackageName, Lapis.NAME + "Internal")
-
+    private val externalClassName: IrClassName = IrClassName.of(generatedModPackageName, Lapis.NAME)
+    private val internalClassName: IrClassName = IrClassName.of(generatedModPackageName, Lapis.NAME + "Internal")
     private val requestedInternalBuiltins: MutableMap<String, Builtin<*>> = mutableMapOf()
+
+    private var isInternalGenerated: Boolean = false
 
     fun generateExternal() {
         if (isExternalGenerated) {
@@ -68,7 +64,7 @@ class Builtins(
         if (builtin.isInternal) {
             requestedInternalBuiltins.getOrPut(builtin.name) { builtin }
         }
-        return (if (builtin.isInternal) internalClassName else externalClassName).inner(builtin.name)
+        return (if (builtin.isInternal) internalClassName else externalClassName).nested(builtin.name)
     }
 
     fun <T : IrDescriptorWrapperImpl<T>> generateDescriptorWrapperImpl(

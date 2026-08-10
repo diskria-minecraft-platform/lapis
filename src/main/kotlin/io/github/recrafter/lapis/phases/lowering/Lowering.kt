@@ -13,9 +13,6 @@ import io.github.recrafter.lapis.common.JavaModifiers
 import io.github.recrafter.lapis.common.binaryName
 import io.github.recrafter.lapis.common.getMixinReference
 import io.github.recrafter.lapis.extensions.common.lapisError
-import io.github.recrafter.lapis.extensions.kp.KPBoolean
-import io.github.recrafter.lapis.extensions.kp.KPInt
-import io.github.recrafter.lapis.extensions.kp.KPStar
 import io.github.recrafter.lapis.extensions.withInternalPrefix
 import io.github.recrafter.lapis.logging.Logger
 import io.github.recrafter.lapis.phases.bootstrap.Options
@@ -209,34 +206,27 @@ class Lowering(
             className = resolveMixinRelatedClassName(patch.className, sourcePackageLCP, "Mixin"),
             side = patch.side,
             injections = patch.injections.flatMap(::lowerInjections),
-            externalBridge = lowerMixinExternalBridge(patch),
-            internalBridge = lowerMixinInternalBridge(patch),
+            bridge = lowerMixinBridge(patch),
             targetInternalName = patch.targetJvmClassName?.internalName,
             mixinAnnotations = patch.mixinAnnotations.map(::lowerMixinAnnotation),
         )
 
-    private fun lowerMixinExternalBridge(patch: Patch): IrMixinExternalBridge? =
-        if (patch.extensionSources.isNotEmpty()) {
-            IrMixinExternalBridge(
+    private fun lowerMixinBridge(patch: Patch): IrMixinBridge? {
+        val entries = patch.extensionSources.map(::lowerMixinExternalBridgeEntry) +
+            patch.shadowSources.map(::lowerMixinInternalBridgeEntry)
+        return if (entries.isNotEmpty()) {
+            IrMixinBridge(
                 originatingFiles = listOfNotNull(patch.containingFile),
-                className = patch.className.derived("ExternalBridge"),
-                entries = patch.extensionSources.map(::lowerMixinExternalBridgeEntry),
+                className = patch.className.derived("Bridge"),
+                entries = entries,
             )
         } else null
+    }
 
-    private fun lowerMixinInternalBridge(patch: Patch): IrMixinInternalBridge? =
-        if (patch.shadowSources.isNotEmpty()) {
-            IrMixinInternalBridge(
-                originatingFiles = listOfNotNull(patch.containingFile),
-                className = patch.className.derived("InternalBridge"),
-                entries = patch.shadowSources.map(::lowerMixinInternalBridgeEntry),
-            )
-        } else null
-
-    private fun lowerMixinExternalBridgeEntry(source: PatchExtensionSource): IrMixinExternalBridgeEntry =
+    private fun lowerMixinExternalBridgeEntry(source: PatchExtensionSource): IrMixinBridgeExtensionEntry =
         when (source) {
             is ExtensionProperty -> with(source) {
-                IrMixinExternalBridgeExtensionPropertyEntry(
+                IrMixinBridgeExtensionProperty(
                     typeName = typeName,
                     sourceName = name,
                     sourceGetterJvmName = getterJvmName,
@@ -248,7 +238,7 @@ class Lowering(
             }
 
             is ExtensionFunction -> with(source) {
-                IrMixinExternalBridgeExtensionFunctionEntry(
+                IrMixinBridgeExtensionFunction(
                     sourceName = name,
                     sourceJvmName = jvmName,
                     name = jvmName.withModIdPrefix(),
@@ -259,10 +249,10 @@ class Lowering(
             }
         }
 
-    private fun lowerMixinInternalBridgeEntry(source: PatchShadowSource): IrMixinInternalBridgeEntry =
+    private fun lowerMixinInternalBridgeEntry(source: PatchShadowSource): IrMixinBridgeShadowEntry =
         when (source) {
             is ShadowProperty -> with(source) {
-                IrMixinInternalBridgeShadowPropertyEntry(
+                IrMixinBridgeShadow(
                     typeName = typeName,
                     sourceName = name,
                     sourceGetterJvmName = getterJvmName,
@@ -277,7 +267,7 @@ class Lowering(
             }
 
             is ShadowFunction -> with(source) {
-                IrMixinInternalBridgeShadowFunctionEntry(
+                IrMixinBridgeShadowFunction(
                     sourceName = name,
                     sourceJvmName = jvmName,
                     name = jvmName.withModIdPrefix(),
@@ -834,11 +824,8 @@ fun KPWildcardTypeName.asIrWildcardTypeName(): IrWildcardTypeName =
 fun KPTypeVariableName.asIrTypeVariableName(): IrTypeVariableName =
     IrTypeVariableName(this)
 
-fun KPLambdaTypeName.asIrLambdaTypeName(): IrLambdaTypeName =
+fun KPFunctionalTypeName.asIrFunctionalTypeName(): IrLambdaTypeName =
     IrLambdaTypeName(this)
-
-fun KPDynamic.asIrDynamic(): IrDynamic =
-    IrDynamic(this)
 
 fun KSType.asIrTypeName(): IrTypeName =
     toTypeName().asIrTypeName()

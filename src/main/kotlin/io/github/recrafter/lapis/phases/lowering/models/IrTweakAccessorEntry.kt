@@ -70,7 +70,7 @@ class IrTweakAccessorMethodEntry(
         append(" ")
         append(name)
         append(" ")
-        append(JvmDescriptor.Signature.of(parameterTypes, returnTypeName))
+        append(JvmDescriptor.signatureOf(parameterTypes, returnTypeName))
     }
 
     override fun buildTransformerTweak(ownerJvmClassName: JvmClassName): String = buildString {
@@ -79,6 +79,6 @@ class IrTweakAccessorMethodEntry(
         append(ownerJvmClassName.binaryName)
         append(" ")
         append(name)
-        append(JvmDescriptor.Signature.of(parameterTypes, returnTypeName))
+        append(JvmDescriptor.signatureOf(parameterTypes, returnTypeName))
     }
 }

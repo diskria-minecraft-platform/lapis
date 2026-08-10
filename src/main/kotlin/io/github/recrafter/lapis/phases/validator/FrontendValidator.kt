@@ -6,6 +6,7 @@ import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.Variance
 import com.squareup.kotlinpoet.ksp.toClassName
 import io.github.diskria.poetesse.java.JPModifier
+import io.github.diskria.poetesse.kotlin.KPBoolean
 import io.github.recrafter.lapis.annotations.AccessStrategy
 import io.github.recrafter.lapis.annotations.Ats
 import io.github.recrafter.lapis.annotations.Op
@@ -15,7 +16,6 @@ import io.github.recrafter.lapis.common.KSBaseTypes
 import io.github.recrafter.lapis.common.findArrayComponentType
 import io.github.recrafter.lapis.extensions.common.lapisError
 import io.github.recrafter.lapis.extensions.indexOfFirstOrNull
-import io.github.recrafter.lapis.extensions.kp.KPBoolean
 import io.github.recrafter.lapis.extensions.ks.isValid
 import io.github.recrafter.lapis.extensions.ks.starProjectedType
 import io.github.recrafter.lapis.extensions.ks.toClassDeclaration
@@ -256,11 +256,11 @@ class FrontendValidator(
         val constructorParameters = constructor.parameters.mapNotNull {
             runOrNullOnSkip { it.validate(originClassDeclaration) }
         }
-        val extensionProperties = bodyProperties.filter { it.hasExtensionAnnotation }.mapNotNull {
-            runOrNullOnSkip { it.validateAsExtension(isAccessibleTarget, originClassDeclaration) }
-        }
         val (parsedInjectionFunctions, parsedRegularFunctions) = functions.partition {
             it.hasHookAnnotation || resolveMixinAnnotations(it.annotations).isNotEmpty()
+        }
+        val extensionProperties = bodyProperties.filter { it.hasExtensionAnnotation }.mapNotNull {
+            runOrNullOnSkip { it.validateAsExtension(isAccessibleTarget, originClassDeclaration) }
         }
         val extensionFunctions = parsedRegularFunctions.filter { it.hasExtensionAnnotation }.mapNotNull {
             runOrNullOnSkip { it.validateAsExtension(isAccessibleTarget, originClassDeclaration) }
@@ -303,7 +303,7 @@ class FrontendValidator(
             extensionSources = extensionProperties + extensionFunctions,
             shadowSources = shadowProperties + shadowFunctions,
             injections = injections + companionObjectInjections,
-            mixinAnnotations = resolveMixinAnnotations(annotations),
+            mixinAnnotations = mixinAnnotations,
         )
     }
 

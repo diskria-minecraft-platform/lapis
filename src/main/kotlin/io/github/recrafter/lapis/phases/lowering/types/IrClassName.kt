@@ -1,9 +1,14 @@
 package io.github.recrafter.lapis.phases.lowering.types
 
 import io.github.diskria.poetesse.java.JPClassName
+import io.github.diskria.poetesse.java.JPObject
+import io.github.diskria.poetesse.kotlin.KPAny
 import io.github.diskria.poetesse.kotlin.KPClassName
 import io.github.recrafter.lapis.extensions.jp.*
-import io.github.recrafter.lapis.extensions.kp.*
+import io.github.recrafter.lapis.extensions.kp.KPList
+import io.github.recrafter.lapis.extensions.kp.KPMap
+import io.github.recrafter.lapis.extensions.kp.KPSet
+import io.github.recrafter.lapis.extensions.kp.KPString
 import io.github.recrafter.lapis.phases.lowering.asIrClassName
 
 class IrClassName(override val kotlin: KPClassName) : IrTypeName(kotlin) {
@@ -30,7 +35,7 @@ class IrClassName(override val kotlin: KPClassName) : IrTypeName(kotlin) {
         }
     }
 
-    fun inner(name: String): IrClassName =
+    fun nested(name: String): IrClassName =
         kotlin.nestedClass(name).asIrClassName()
 
     fun derived(suffix: String): IrClassName =

@@ -1,7 +1,7 @@
 package io.github.recrafter.lapis.phases.lowering.models
 
+import io.github.diskria.poetesse.kotlin.KPBoolean
 import io.github.recrafter.lapis.annotations.Op
-import io.github.recrafter.lapis.extensions.kp.KPBoolean
 import io.github.recrafter.lapis.phases.lowering.asIrTypeName
 import io.github.recrafter.lapis.phases.lowering.models.common.IrMixinAnnotation
 import io.github.recrafter.lapis.phases.lowering.types.IrClassName

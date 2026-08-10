@@ -8,17 +8,6 @@ import io.github.recrafter.lapis.phases.lowering.IrVisibilityModifier
 import io.github.recrafter.lapis.phases.lowering.types.IrClassName
 import io.github.recrafter.lapis.phases.lowering.types.IrTypeName
 
-val JPBoolean: JPTypeName = JPTypeName.BOOLEAN
-val JPByte: JPTypeName = JPTypeName.BYTE
-val JPShort: JPTypeName = JPTypeName.SHORT
-val JPInt: JPTypeName = JPTypeName.INT
-val JPLong: JPTypeName = JPTypeName.LONG
-val JPChar: JPTypeName = JPTypeName.CHAR
-val JPFloat: JPTypeName = JPTypeName.FLOAT
-val JPDouble: JPTypeName = JPTypeName.DOUBLE
-val JPVoid: JPTypeName = JPTypeName.VOID
-
-val JPObject: JPClassName = JPClassName.OBJECT
 val JPString: JPClassName = JPClassName.get(String::class.java)
 val JPList: JPClassName = JPClassName.get(List::class.java)
 val JPSet: JPClassName = JPClassName.get(Set::class.java)

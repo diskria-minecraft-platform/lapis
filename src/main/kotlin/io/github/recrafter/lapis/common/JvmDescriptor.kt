@@ -1,17 +1,15 @@
 package io.github.recrafter.lapis.common
 
-import io.github.diskria.poetesse.java.JPArrayTypeName
-import io.github.diskria.poetesse.java.JPClassName
-import io.github.diskria.poetesse.java.JPParameterizedTypeName
-import io.github.diskria.poetesse.java.JPTypeName
-import io.github.recrafter.lapis.extensions.common.lapisError
-import io.github.recrafter.lapis.extensions.jp.*
+import io.github.diskria.poetesse.java.*
+import io.github.recrafter.lapis.extensions.jp.binaryName
 import io.github.recrafter.lapis.phases.lowering.types.IrTypeName
 import io.github.recrafter.lapis.phases.validator.models.schemas.*
 
 class JvmDescriptor(private val type: JPTypeName) {
 
-    fun getPrimitiveName(allowVoid: Boolean = true): String? =
+    val is64bit: Boolean = type.isPrimitive && (type == JPLong || type == JPDouble)
+
+    val primitiveName: String? = if (type.isPrimitive) {
         when (type) {
             JPBoolean -> "Z"
             JPByte -> "B"
@@ -21,23 +19,24 @@ class JvmDescriptor(private val type: JPTypeName) {
             JPChar -> "C"
             JPFloat -> "F"
             JPDouble -> "D"
-            JPVoid -> if (allowVoid) VOID_NAME else null
             else -> null
         }
+    } else null
 
-    override fun toString(): String =
-        when (type) {
-            is JPClassName -> type.objectName
-            is JPParameterizedTypeName -> type.rawType().objectName
-            is JPArrayTypeName -> "[" + type.componentType().jvmDescriptor
-            else -> getPrimitiveName() ?: lapisError("Unsupported Java type")
-        }
+    override fun toString(): String = when (type) {
+        is JPClassName -> type.objectName
+        is JPArrayTypeName -> "[" + type.componentType().jvmDescriptor
+        is JPParameterizedTypeName -> type.rawType().objectName
+        is JPTypeVariableName -> error("!")
+        is JPWildcardTypeName -> error("!")
+        else -> primitiveName ?: VOID_NAME
+    }
 
     private val JPClassName.objectName: String
         get() = JvmClassName.of(binaryName).descriptor
 
-    object Signature {
-        fun of(parameterTypeNames: List<IrTypeName>, returnTypeName: IrTypeName?): String =
+    companion object {
+        fun signatureOf(parameterTypeNames: List<IrTypeName>, returnTypeName: IrTypeName?): String =
             parameterTypeNames.joinToString(prefix = "(", separator = "", postfix = ")") {
                 it.jvmDescriptor.toString()
             } + (returnTypeName?.jvmDescriptor ?: VOID_NAME)
@@ -64,7 +63,7 @@ fun Descriptor.getMixinReference(isTarget: Boolean = false): String =
             }
             append(mappingName)
             append(
-                JvmDescriptor.Signature.of(
+                JvmDescriptor.signatureOf(
                     functionTypeParameters.map { it.typeName },
                     returnTypeName
                 )
@@ -76,7 +75,7 @@ fun Descriptor.getMixinReference(isTarget: Boolean = false): String =
                 append(CONSTRUCTOR_NAME)
             }
             append(
-                JvmDescriptor.Signature.of(
+                JvmDescriptor.signatureOf(
                     functionTypeParameters.map { it.typeName },
                     if (isTarget) returnTypeName else null
                 )

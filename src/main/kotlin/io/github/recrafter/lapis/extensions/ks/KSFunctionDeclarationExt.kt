@@ -1,3 +1,4 @@
+
 package io.github.recrafter.lapis.extensions.ks
 
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration

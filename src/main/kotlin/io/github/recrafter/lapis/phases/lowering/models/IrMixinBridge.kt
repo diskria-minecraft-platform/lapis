@@ -7,23 +7,11 @@ import io.github.recrafter.lapis.phases.lowering.models.common.IrMixinAnnotation
 import io.github.recrafter.lapis.phases.lowering.types.IrClassName
 import io.github.recrafter.lapis.phases.lowering.types.IrTypeName
 
-sealed class IrMixinBridge(
+class IrMixinBridge(
     override val originatingFiles: List<KSFile>,
     override val className: IrClassName,
-    open val entries: List<IrMixinBridgeEntry>,
+    val entries: List<IrMixinBridgeEntry>,
 ) : IrKotlinClassBlueprint(KPTypeKind.INTERFACE)
-
-class IrMixinExternalBridge(
-    originatingFiles: List<KSFile>,
-    className: IrClassName,
-    override val entries: List<IrMixinExternalBridgeEntry>,
-) : IrMixinBridge(originatingFiles, className, entries)
-
-class IrMixinInternalBridge(
-    originatingFiles: List<KSFile>,
-    className: IrClassName,
-    override val entries: List<IrMixinInternalBridgeEntry>,
-) : IrMixinBridge(originatingFiles, className, entries)
 
 sealed interface IrMixinBridgeEntry {
     val sourceName: String
@@ -40,7 +28,7 @@ sealed interface IrMixinBridgeEntryKind : IrReturnable {
         get() = parameters.size >= 23
 }
 
-sealed class IrMixinBridgePropertyEntry(
+sealed class IrMixinBridgeProperty(
     override val sourceName: String,
     val typeName: IrTypeName,
     getterName: String,
@@ -48,16 +36,14 @@ sealed class IrMixinBridgePropertyEntry(
     setterName: String?,
     sourceSetterJvmName: String?,
 ) : IrMixinBridgeEntry {
-    val getter: IrMixinBridgeEntryPropertyGetter = IrMixinBridgeEntryPropertyGetter(
-        getterName, sourceGetterJvmName, typeName
-    )
-    val setter: IrMixinBridgeEntryPropertySetter? = if (setterName != null && sourceSetterJvmName != null) {
-        IrMixinBridgeEntryPropertySetter(setterName, sourceSetterJvmName, typeName)
+    val getter: Getter = Getter(getterName, sourceGetterJvmName, typeName)
+    val setter: Setter? = if (setterName != null && sourceSetterJvmName != null) {
+        Setter(setterName, sourceSetterJvmName, typeName)
     } else null
 
     override val kinds: List<IrMixinBridgeEntryKind> = listOfNotNull(getter, setter)
 
-    class IrMixinBridgeEntryPropertyGetter(
+    class Getter(
         override val name: String,
         override val sourceJvmName: String,
         val typeName: IrTypeName,
@@ -66,7 +52,7 @@ sealed class IrMixinBridgePropertyEntry(
         override val returnTypeName: IrTypeName = typeName
     }
 
-    class IrMixinBridgeEntryPropertySetter(
+    class Setter(
         override val name: String,
         override val sourceJvmName: String,
         val typeName: IrTypeName,
@@ -87,13 +73,11 @@ sealed class IrMixinBridgeFunctionEntry(
     override val kinds: List<IrMixinBridgeEntryKind> = listOf(this)
 }
 
-sealed interface IrMixinExternalBridgeEntry : IrMixinBridgeEntry
-
-sealed interface IrMixinExternalBridgeExtensionEntry : IrMixinExternalBridgeEntry {
+sealed interface IrMixinBridgeExtensionEntry : IrMixinBridgeEntry {
     val receiverTypeName: IrTypeName
 }
 
-class IrMixinExternalBridgeExtensionPropertyEntry(
+class IrMixinBridgeExtensionProperty(
     sourceName: String,
     typeName: IrTypeName,
     sourceGetterJvmName: String,
@@ -101,16 +85,16 @@ class IrMixinExternalBridgeExtensionPropertyEntry(
     getterName: String,
     setterName: String?,
     override val receiverTypeName: IrTypeName,
-) : IrMixinBridgePropertyEntry(
+) : IrMixinBridgeProperty(
     sourceName,
     typeName,
     getterName,
     sourceGetterJvmName,
     setterName,
     sourceSetterJvmName,
-), IrMixinExternalBridgeExtensionEntry
+), IrMixinBridgeExtensionEntry
 
-class IrMixinExternalBridgeExtensionFunctionEntry(
+class IrMixinBridgeExtensionFunction(
     sourceName: String,
     name: String,
     sourceJvmName: String,
@@ -118,16 +102,14 @@ class IrMixinExternalBridgeExtensionFunctionEntry(
     returnTypeName: IrTypeName?,
     override val receiverTypeName: IrTypeName,
 ) : IrMixinBridgeFunctionEntry(sourceName, name, sourceJvmName, parameters, returnTypeName),
-    IrMixinExternalBridgeExtensionEntry
+    IrMixinBridgeExtensionEntry
 
-sealed interface IrMixinInternalBridgeEntry : IrMixinBridgeEntry
-
-sealed interface IrMixinInternalBridgeShadowEntry : IrMixinInternalBridgeEntry {
+sealed interface IrMixinBridgeShadowEntry : IrMixinBridgeEntry {
     val modifiers: Set<JPModifier>
     val isStatic: Boolean get() = JPModifier.STATIC in modifiers
 }
 
-class IrMixinInternalBridgeShadowPropertyEntry(
+class IrMixinBridgeShadow(
     sourceName: String,
     typeName: IrTypeName,
     getterName: String,
@@ -138,16 +120,16 @@ class IrMixinInternalBridgeShadowPropertyEntry(
     override val modifiers: Set<JPModifier>,
     val isFinal: Boolean,
     val mixinAnnotations: List<IrMixinAnnotation>,
-) : IrMixinBridgePropertyEntry(
+) : IrMixinBridgeProperty(
     sourceName,
     typeName,
     getterName,
     sourceGetterJvmName,
     setterName,
     sourceSetterJvmName,
-), IrMixinInternalBridgeShadowEntry
+), IrMixinBridgeShadowEntry
 
-class IrMixinInternalBridgeShadowFunctionEntry(
+class IrMixinBridgeShadowFunction(
     sourceName: String,
     name: String,
     sourceJvmName: String,
@@ -157,4 +139,4 @@ class IrMixinInternalBridgeShadowFunctionEntry(
     val mixinAnnotations: List<IrMixinAnnotation>,
     override val modifiers: Set<JPModifier>,
 ) : IrMixinBridgeFunctionEntry(sourceName, name, sourceJvmName, parameters, returnTypeName),
-    IrMixinInternalBridgeShadowEntry
+    IrMixinBridgeShadowEntry
