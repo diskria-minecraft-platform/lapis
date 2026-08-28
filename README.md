@@ -1,10 +1,8 @@
 # Lapis
 
-A Kotlin Symbol Processor (KSP) for Sponge Mixins. Built exclusively for Minecraft modding, Lapis focuses on
-intent-based injections and compile-time safety. It provides a Kotlin-first frontend with a type-safe DSL, leverages a
-MixinExtras-based backend, and automates the generation of Mixin and AW/AT configurations.
+A Kotlin Symbol Processor (KSP) for Sponge Mixins. Built exclusively for Minecraft modding, Lapis focuses on intent-based injections and compile-time safety. It provides a Kotlin-first frontend with a type-safe DSL, leverages a MixinExtras-based backend, and automates the generation of Mixin and AW/AT configurations.
 
-[![Maven Central](https://img.shields.io/maven-central/v/io.github.recrafter/lapis.svg?label=Maven+Central&style=for-the-badge)](https://central.sonatype.com/artifact/io.github.recrafter/lapis) [![License: MIT](https://img.shields.io/static/v1?label=License&style=for-the-badge&message=MIT&color=yellow)](https://spdx.org/licenses/MIT)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.diskria/lapis.svg?label=Maven+Central&style=for-the-badge)](https://central.sonatype.com/artifact/io.github.diskria/lapis) [![License: MIT](https://img.shields.io/static/v1?label=License&message=MIT&color=yellow&style=for-the-badge)](https://spdx.org/licenses/MIT)
 
 ---
 
@@ -84,9 +82,9 @@ abstract class AdvancementsScreenPatch(@Origin val screen: AdvancementsScreen) {
 
 > [!TIP]
 > ### 💡 The "Escape from Mixin" Architecture
-> 
+>
 > Standard Sponge Mixins force you to play by their bytecode rules: you can't easily inherit state from abstract classes, share contracts between mixins, or build deep OOP hierarchies without hitting runtime crashes.
-> 
+>
 > Because Lapis decouples your code into a **pure Kotlin class (`@Patch`)** and a **thin generated bridge (`@Mixin`)**, you get the best of both worlds:
 > 1. **Real Type System**: Your patch feels and behaves like a regular class. Extend abstract handlers, implement custom interfaces, and hold complex state natively.
 > 2. **Clean Runtime Class**: Your custom interfaces stay in the Patch and don't pollute the target Minecraft class at runtime. The generated Mixin only carries the lightweight, generated bridges it actually needs.
@@ -367,6 +365,6 @@ straight to the compiler.
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the [MIT License](https://spdx.org/licenses/MIT).

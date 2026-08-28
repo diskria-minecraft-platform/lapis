@@ -1,9 +1,16 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    alias(libs.plugins.projektor)
+    alias(convention.plugins.projektor)
     alias(libs.plugins.ksp)
+}
+
+projekt {
+    kotlinLibrary()
+    distribute {
+        mavenLocal()
+        mavenCentral()
+    }
 }
 
 dependencies {
@@ -21,12 +28,6 @@ dependencies {
 
     ksp(libs.auto.service)
     implementation(libs.auto.service.annotations)
-}
-
-projekt {
-    kotlinLibrary {
-        jvmTarget = JvmTarget.JVM_17
-    }
 }
 
 tasks {

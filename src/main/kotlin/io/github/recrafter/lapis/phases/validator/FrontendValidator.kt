@@ -358,9 +358,7 @@ class FrontendValidator(
     ): ExtensionFunction {
         kspRequire(isPublic) { "342" }
         kspRequireNotNull(jvmName) { "343" }
-        if (receiverClassDeclaration != null) {
-            kspRequire(extensionReceiverClassDeclaration == receiverClassDeclaration) { "308" }
-        }
+        kspRequire(extensionReceiverClassDeclaration == null) { "361" }
         kspRequire(isAccessibleTarget) { "345" }
         kspRequire(!isOpen && !isAbstract) { "346" }
         val parameters = parameters.map {
