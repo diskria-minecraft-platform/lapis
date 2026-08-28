@@ -1,7 +1,5 @@
 [versions]
-projektor = "6.+"
-
-ksp = "2.3.6"
+ksp = "2.3.11"
 
 mixin = "0.8.7"
 mixin-extras = "0.5.3"
@@ -19,7 +17,6 @@ auto-service = "1.2.0"
 auto-service-annotations = "1.1.1"
 
 [plugins]
-projektor = { id = "io.github.diskria.projektor", version.ref = "projektor" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 
 [libraries]
@@ -30,7 +27,7 @@ mixin-extras = { group = "io.github.llamalad7", name = "mixinextras-common", ver
 
 asm = { group = "org.ow2.asm", name = "asm", version.ref = "asm" }
 
-lapis-annotations = { group = "io.github.recrafter", name = "lapis-annotations", version.ref = "lapis-annotations" }
+lapis-annotations = { group = "io.github.diskria", name = "lapis-annotations", version.ref = "lapis-annotations" }
 
 poetesse = { group = "io.github.diskria", name = "poetesse", version.ref = "poetesse" }
 kotlin-poet-ksp = { group = "com.squareup", name = "kotlinpoet-ksp", version.ref = "kotlin-poet-ksp" }
