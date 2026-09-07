@@ -1,28 +1,28 @@
 pluginManagement {
     repositories {
+        mavenLocal()
         gradlePluginPortal()
     }
 }
 
 plugins {
-    id("io.github.diskria.projektor") version "8.0.7"
-    id("io.github.recrafter.recipe") version "1.2.6"
+    id("io.github.diskria.projektor") version "8.0.12"
+}
+
+projektor {
+    version = "0.9.1"
+    license { mit() }
+    monorepo {
+        kotlinLibrary(":lapis-ksp", "lapis")
+        kotlinLibrary(":lapis-annotations")
+    }
 }
 
 dependencyResolutionManagement {
     repositories {
-        mavenLocal()
-    }
-}
-
-projekt {
-    version = "0.9.1"
-    license { mit() }
-    kotlinLibrary()
-}
-
-recipe {
-    crafter {
-        mavensOnly()
+        maven("https://repo.spongepowered.org/repository/maven-public") {
+            name = "SpongePublic"
+            content { includeGroup("org.spongepowered") }
+        }
     }
 }
