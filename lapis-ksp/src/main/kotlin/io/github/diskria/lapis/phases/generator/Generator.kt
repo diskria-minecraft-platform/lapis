@@ -42,10 +42,7 @@ import io.github.diskria.lapis.phases.lowering.models.common.*
 import io.github.diskria.lapis.phases.lowering.types.IrClassName
 import io.github.diskria.lapis.phases.lowering.types.IrLambdaTypeName
 import io.github.diskria.lapis.phases.lowering.types.orVoid
-import io.github.diskria.poetesse.Poetesse
 import io.github.diskria.poetesse.PoetesseFile
-import io.github.diskria.poetesse.interop.array
-import io.github.diskria.poetesse.interop.xType
 import io.github.diskria.poetesse.java.*
 import io.github.diskria.poetesse.kotlin.*
 import kotlinx.serialization.json.Json
@@ -63,60 +60,7 @@ class Generator(
     private val codeGenerator: CodeGenerator,
     @Suppress("unused") private val logger: Logger,
 ) {
-    // TODO move to poetesse-ksp
-    @Suppress("unused")
-    fun PoetesseFile.writeWith(
-        codeGenerator: CodeGenerator,
-        aggregating: Boolean,
-        originatingKSFiles: Iterable<KSFile>,
-    ) {
-        writeWith(codeGenerator, Dependencies(aggregating, *originatingKSFiles.toList().toTypedArray()))
-    }
-
-    fun PoetesseFile.writeWith(codeGenerator: CodeGenerator, dependencies: Dependencies = Dependencies.ALL_FILES) {
-        codeGenerator
-            .createNewFile(dependencies, packageName.orEmpty(), fileName, extensionName)
-            .writer()
-            .use(::writeTo)
-    }
-
     fun generate(schemas: List<IrSchema>, patches: List<IrPatch>) {
-        // TODO remove :D
-        val indentTrimConfig = Poetesse {
-            defaultRawMultilineTrim = Poetesse.StringTrim.Default
-        }
-        indentTrimConfig {
-            val argsType = xType<String>().array()
-            java.file("com.example", "HelloJava") {
-                class_(fileName) {
-                    public()
-                    method("main") {
-                        static()
-                        parameter("args", argsType)
-                        body {
-                            val message by variable<String> {
-                                initializer { S("Hello, Java!") }
-                            }
-                            line { "${T<System>()}.out.println($message)" }
-                        }
-                    }
-                }
-            }.writeWith(codeGenerator)
-
-            kotlin.file("com.example", "HelloKotlin") {
-                function("main") {
-                    public()
-                    parameter("args", argsType)
-                    body {
-                        val message by variable<String> {
-                            initializer { S("Hello, Kotlin!") }
-                        }
-                        line { "println($message)" }
-                    }
-                }
-            }.writeWith(codeGenerator)
-        }
-
         schemas.forEach { schema ->
             val extensionPackAccumulator = GenExtensionPackAccumulator()
             schema.descriptors.forEach { descriptor ->
@@ -1297,3 +1241,18 @@ class Generator(
 }
 
 private val configJson: Json = Json { prettyPrint = true }
+
+fun PoetesseFile.writeWith(codeGenerator: CodeGenerator, dependencies: Dependencies = Dependencies.ALL_FILES) {
+    codeGenerator
+        .createNewFile(dependencies, packageName.orEmpty(), fileName, extensionName)
+        .writer()
+        .use(::writeTo)
+}
+
+fun PoetesseFile.writeWith(
+    codeGenerator: CodeGenerator,
+    aggregating: Boolean,
+    originatingKSFiles: Iterable<KSFile>,
+) {
+    writeWith(codeGenerator, Dependencies(aggregating, *originatingKSFiles.toList().toTypedArray()))
+}
