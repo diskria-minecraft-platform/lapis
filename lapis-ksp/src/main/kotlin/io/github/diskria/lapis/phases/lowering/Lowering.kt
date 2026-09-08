@@ -727,9 +727,10 @@ class Lowering(
     ): IrClassName {
         val sourcePackageName = sourceClassName.packageName
         val mixinPackageName = buildString {
-            append(options.mixinPackage + options.mixinGeneratedSubpackage)
-            if (sourcePackageName != sourcePackageLCP) {
-                sourcePackageName?.let { append(it.removePrefix("$sourcePackageLCP.")) }
+            append(options.mixinPackage)
+            options.mixinGeneratedSubpackage?.let { append(".$it") }
+            if (sourcePackageName != null && sourcePackageName != sourcePackageLCP) {
+                append(".${sourcePackageName.removePrefix("$sourcePackageLCP.")}")
             }
         }
         return IrClassName.of(mixinPackageName, sourceClassName.simpleName).derived(suffix)

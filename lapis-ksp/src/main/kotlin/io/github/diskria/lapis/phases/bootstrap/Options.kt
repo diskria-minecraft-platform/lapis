@@ -7,7 +7,7 @@ data class Options(
     val modUniquePrefix: String,
     val builtinsPackage: String,
     val mixinPackage: String,
-    val mixinGeneratedSubpackage: String = ".generated",
+    val mixinGeneratedSubpackage: String? = null,
     val enableFabricTweaks: Boolean = false,
     val enableForgeTweaks: Boolean = false,
 )
