@@ -13,7 +13,8 @@ projektor {
     version = "0.9.1"
     license { mit() }
     monorepo {
-        kotlinLibrary(":lapis-ksp", "lapis")
+        gradlePlugin(":lapis-gradle-plugin", "lapis")
+        kotlinLibrary(":lapis-ksp")
         kotlinLibrary(":lapis-annotations")
     }
 }

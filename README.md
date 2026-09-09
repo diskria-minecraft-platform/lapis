@@ -2,7 +2,7 @@
 
 A Kotlin Symbol Processor (KSP) for Sponge Mixins. Built exclusively for Minecraft modding, Lapis focuses on intent-based injections and compile-time safety. It provides a Kotlin-first frontend with a type-safe DSL, leverages a MixinExtras-based backend, and automates the generation of Mixin and AW/AT configurations.
 
-[![Maven Central](https://img.shields.io/maven-central/v/io.github.diskria/lapis.svg?label=Maven+Central&style=for-the-badge)](https://central.sonatype.com/artifact/io.github.diskria/lapis) [![Maven Central](https://img.shields.io/maven-central/v/io.github.diskria/lapis-annotations.svg?label=Maven+Central&style=for-the-badge)](https://central.sonatype.com/artifact/io.github.diskria/lapis-annotations) [![License: MIT](https://img.shields.io/static/v1?label=License&message=MIT&color=yellow&style=for-the-badge)](https://spdx.org/licenses/MIT)
+[![Gradle Plugin Portal](https://img.shields.io/gradle-plugin-portal/v/io.github.diskria.lapis.svg?label=Gradle+Plugin+Portal&style=for-the-badge)](https://plugins.gradle.org/plugin/io.github.diskria.lapis) [![Maven Central](https://img.shields.io/maven-central/v/io.github.diskria/lapis-ksp.svg?label=Maven+Central&style=for-the-badge)](https://central.sonatype.com/artifact/io.github.diskria/lapis-ksp) [![Maven Central](https://img.shields.io/maven-central/v/io.github.diskria/lapis-annotations.svg?label=Maven+Central&style=for-the-badge)](https://central.sonatype.com/artifact/io.github.diskria/lapis-annotations) [![License: MIT](https://img.shields.io/static/v1?label=License&message=MIT&color=yellow&style=for-the-badge)](https://spdx.org/licenses/MIT)
 
 ---
 

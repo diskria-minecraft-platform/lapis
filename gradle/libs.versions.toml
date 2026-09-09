@@ -22,3 +22,5 @@ asm = { group = "org.ow2.asm", name = "asm", version.ref = "asm" }
 poetesse = { group = "io.github.diskria", name = "poetesse", version.ref = "poetesse" }
 kotlin-poet-ksp = { group = "com.squareup", name = "kotlinpoet-ksp", version.ref = "kotlin-poet-ksp" }
 kotlin-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json-jvm", version.ref = "kotlin-serialization-json" }
+
+ksp-plugin = { group = "com.google.devtools.ksp", name = "com.google.devtools.ksp.gradle.plugin", version.ref = "ksp" }
