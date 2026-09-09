@@ -1,0 +1,181 @@
+package io.github.diskria.lapis.ksp.phases.generator.builders
+
+import io.github.diskria.lapis.ksp.extensions.common.Builder
+import io.github.diskria.lapis.ksp.extensions.jp.buildJavaCodeBlock
+import io.github.diskria.lapis.ksp.extensions.jp.buildJavaMethod
+import io.github.diskria.lapis.ksp.extensions.jp.setBody
+import io.github.diskria.lapis.ksp.phases.lowering.asIrTypeName
+import io.github.diskria.lapis.ksp.phases.lowering.models.IrParameter
+import io.github.diskria.lapis.ksp.phases.lowering.models.format
+import io.github.diskria.lapis.ksp.phases.lowering.types.IrTypeName
+import io.github.diskria.poetesse.java.*
+import kotlin.reflect.KClass
+
+@JvmInline
+value class IrJavaCodeBlock(private val builder: JPCodeBlockBuilder) {
+
+    fun add(format: String, argumentsBuilder: Builder<Arguments> = {}) {
+        builder.add(format.fixFormat(), *argumentsBuilder.build())
+    }
+
+    fun IrJavaCodeBlock.lambda_(
+        parameters: List<IrParameter> = emptyList(),
+        bodyBuilder: Builder<GenJavaMethodBody>
+    ) {
+        val bodyCode = buildJavaMethod("temp") { setBody(bodyBuilder) }.code().toString()
+        beginControlFlow("(${parameters.format}) ->") { parameters.forEach { +it } }
+        builder.add(bodyCode)
+        endControlFlow()
+    }
+
+    fun IrJavaCodeBlock.lambda_(
+        parameters: List<IrParameter> = emptyList(),
+        expression: JPCodeBlock
+    ) {
+        add("(${parameters.format}) -> %L") { parameters.forEach { +it }; +expression }
+    }
+
+    fun build(): JPCodeBlock = builder.build()
+
+    private fun beginControlFlow(format: String, argumentsBuilder: Builder<Arguments> = {}) {
+        builder.beginControlFlow(format.fixFormat(), *argumentsBuilder.build())
+    }
+
+    private fun endControlFlow(newLine: Boolean = false) {
+        if (newLine) {
+            builder.endControlFlow()
+        } else {
+            builder.unindent()
+            builder.add("}")
+        }
+    }
+
+    private fun String.fixFormat(): String = replace('%', '$')
+
+    private fun Builder<Arguments>.build(): Array<Any> = Arguments().apply(this).build()
+
+    @JvmInline
+    value class Arguments(private val arguments: MutableList<Any> = mutableListOf()) {
+
+        operator fun String.unaryPlus() {
+            arguments += this
+        }
+
+        operator fun Boolean.unaryPlus() {
+            arguments += this
+        }
+
+        operator fun Byte.invoke() {
+            arguments += this
+        }
+
+        operator fun Short.invoke() {
+            arguments += this
+        }
+
+        operator fun Int.invoke() {
+            arguments += this
+        }
+
+        operator fun Long.invoke() {
+            arguments += "${this}L"
+        }
+
+        operator fun Char.unaryPlus() {
+            arguments += when {
+                code in 32..126 && this != '\'' && this != '\\' -> "'$this'"
+                this == '\n' -> "'\\n'"
+                this == '\r' -> "'\\r'"
+                this == '\t' -> "'\\t'"
+                else -> String.format("'\\u%04X'", code)
+            }
+        }
+
+        operator fun Float.invoke() {
+            arguments += "${this}f"
+        }
+
+        operator fun Double.invoke() {
+            arguments += this
+        }
+
+        operator fun JPCodeBlock.unaryPlus() {
+            arguments += this
+        }
+
+        operator fun JPAnnotation.unaryPlus() {
+            arguments += this
+        }
+
+        operator fun JPField.unaryPlus() {
+            arguments += this
+        }
+
+        operator fun JPParameter.unaryPlus() {
+            arguments += this
+        }
+
+        operator fun JPMethod.unaryPlus() {
+            arguments += this
+        }
+
+        operator fun GenJavaEntity.invoke() {
+            when (this) {
+                is GenJavaFieldEntity -> +field
+
+                is GenJavaMethodEntity -> {
+                    +method; parameters.forEach { +it }
+                }
+            }
+        }
+
+        operator fun GenJavaEntity.unaryPlus() {
+            when (this) {
+                is GenJavaFieldEntity -> +field
+                is GenJavaMethodEntity -> +method
+            }
+        }
+
+        operator fun KClass<*>.unaryPlus() {
+            +asIrTypeName()
+        }
+
+        operator fun IrTypeName.unaryPlus() {
+            arguments += java
+        }
+
+        operator fun IrParameter.unaryPlus() {
+            arguments += asName(name)
+        }
+
+        fun build(): Array<Any> = arguments.toTypedArray()
+
+        private fun asName(name: String): JPMethod =
+            buildJavaMethod(name)
+    }
+}
+
+fun Boolean.toJavaCodeBlock(): JPCodeBlock = buildJavaCodeBlock("%L") { +this@toJavaCodeBlock }
+fun Byte.toJavaCodeBlock(): JPCodeBlock = buildJavaCodeBlock("%L") { this@toJavaCodeBlock() }
+fun Short.toJavaCodeBlock(): JPCodeBlock = buildJavaCodeBlock("%L") { this@toJavaCodeBlock() }
+fun Int.toJavaCodeBlock(): JPCodeBlock = buildJavaCodeBlock("%L") { this@toJavaCodeBlock() }
+fun Long.toJavaCodeBlock(): JPCodeBlock = buildJavaCodeBlock("%L") { this@toJavaCodeBlock() }
+fun Char.toJavaCodeBlock(): JPCodeBlock = buildJavaCodeBlock("%L") { +this@toJavaCodeBlock }
+fun Float.toJavaCodeBlock(): JPCodeBlock = buildJavaCodeBlock("%L") { this@toJavaCodeBlock() }
+fun Double.toJavaCodeBlock(): JPCodeBlock = buildJavaCodeBlock("%L") { this@toJavaCodeBlock() }
+
+fun String.toJavaCodeBlock(asValue: Boolean = false): JPCodeBlock =
+    buildJavaCodeBlock(if (asValue) "%S" else "%L") { +this@toJavaCodeBlock }
+
+fun IrTypeName.toJavaCodeBlock(asClassType: Boolean = false): JPCodeBlock =
+    buildJavaCodeBlock(if (asClassType) "%T.class" else "%T") { +this@toJavaCodeBlock }
+
+fun JPField.toCodeBlock(): JPCodeBlock = buildJavaCodeBlock("%N") { +this@toCodeBlock }
+fun JPParameter.toCodeBlock(): JPCodeBlock = buildJavaCodeBlock("%N") { +this@toCodeBlock }
+fun JPAnnotation.toCodeBlock(): JPCodeBlock = buildJavaCodeBlock("%L") { +this@toCodeBlock }
+fun GenJavaEntity.toCodeBlock(asCall: Boolean = true): JPCodeBlock = buildJavaCodeBlock("%N") {
+    if (asCall) this@toCodeBlock()
+    else +this@toCodeBlock
+}
+
+val nullJavaCodeBlock: JPCodeBlock = buildJavaCodeBlock("null")

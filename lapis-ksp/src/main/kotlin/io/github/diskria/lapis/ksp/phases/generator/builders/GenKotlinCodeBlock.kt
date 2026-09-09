@@ -1,0 +1,115 @@
+package io.github.diskria.lapis.ksp.phases.generator.builders
+
+import io.github.diskria.lapis.ksp.extensions.common.Builder
+import io.github.diskria.lapis.ksp.extensions.kp.buildKotlinCodeBlock
+import io.github.diskria.lapis.ksp.extensions.kp.buildKotlinFunction
+import io.github.diskria.lapis.ksp.phases.lowering.models.IrParameter
+import io.github.diskria.lapis.ksp.phases.lowering.types.IrTypeName
+import io.github.diskria.poetesse.java.JPField
+import io.github.diskria.poetesse.java.JPMethod
+import io.github.diskria.poetesse.kotlin.*
+import kotlin.reflect.KCallable
+
+@JvmInline
+value class IrKotlinCodeBlock(private val builder: KPCodeBlockBuilder) {
+
+    fun add(format: String, argumentsBuilder: Builder<Arguments> = {}) {
+        builder.add(format, *argumentsBuilder.build())
+    }
+
+    fun build(): KPCodeBlock = builder.build()
+
+    private fun Builder<Arguments>.build(): Array<Any> = Arguments().apply(this).build()
+
+    @JvmInline
+    value class Arguments(private val arguments: MutableList<Any> = mutableListOf()) {
+
+        operator fun Boolean.unaryPlus() {
+            arguments += this
+        }
+
+        operator fun String.unaryPlus() {
+            arguments += this
+        }
+
+        operator fun KPCodeBlock.unaryPlus() {
+            arguments += this
+        }
+
+        operator fun KPParameter.unaryPlus() {
+            arguments += this
+        }
+
+        operator fun KPProperty.unaryPlus() {
+            arguments += this
+        }
+
+        operator fun KPFunction.unaryPlus() {
+            arguments += this
+        }
+
+        operator fun GenKotlinEntity.invoke() {
+            when (this) {
+                is GenKotlinPropertyEntity -> +property
+
+                is GenKotlinFunctionEntity -> {
+                    +function; parameters.forEach { +it }
+                }
+            }
+        }
+
+        operator fun GenKotlinEntity.unaryPlus() {
+            when (this) {
+                is GenKotlinPropertyEntity -> +property
+                is GenKotlinFunctionEntity -> +function
+            }
+        }
+
+        operator fun JPField.unaryPlus() {
+            arguments += asName(name())
+        }
+
+        operator fun JPMethod.unaryPlus() {
+            arguments += asName(name())
+        }
+
+        operator fun GenJavaEntity.invoke() {
+            when (this) {
+                is GenJavaFieldEntity -> +field
+
+                is GenJavaMethodEntity -> {
+                    +method; parameters.forEach { +it }
+                }
+            }
+        }
+
+        operator fun GenJavaEntity.unaryPlus() {
+            when (this) {
+                is GenJavaFieldEntity -> +field
+                is GenJavaMethodEntity -> +method
+            }
+        }
+
+        operator fun KCallable<*>.unaryPlus() {
+            arguments += name
+        }
+
+        operator fun IrTypeName.unaryPlus() {
+            arguments += kotlin
+        }
+
+        operator fun IrParameter.unaryPlus() {
+            arguments += asName(name)
+        }
+
+        fun build(): Array<Any> = arguments.toTypedArray()
+
+        private fun asName(name: String): KPFunction =
+            buildKotlinFunction(name)
+    }
+}
+
+fun Boolean.toKotlinCodeBlock(): KPCodeBlock = buildKotlinCodeBlock("%L") { +this@toKotlinCodeBlock }
+fun IrParameter.toKotlinCodeBlock(): KPCodeBlock = buildKotlinCodeBlock("%N") { +this@toKotlinCodeBlock }
+
+val nullKotlinCodeBlock: KPCodeBlock = buildKotlinCodeBlock("null")

@@ -1,0 +1,62 @@
+package io.github.diskria.lapis.ksp.extensions.jp
+
+import io.github.diskria.lapis.ksp.extensions.common.Builder
+import io.github.diskria.lapis.ksp.phases.generator.builders.IrJavaCodeBlock
+import io.github.diskria.lapis.ksp.phases.generator.builders.toCodeBlock
+import io.github.diskria.lapis.ksp.phases.generator.builders.toJavaCodeBlock
+import io.github.diskria.lapis.ksp.phases.lowering.types.IrTypeName
+import io.github.diskria.poetesse.java.JPAnnotationBuilder
+import kotlin.reflect.KClass
+import kotlin.reflect.KProperty1
+
+fun <A : Annotation> JPAnnotationBuilder.setArgumentValue(property: KProperty1<A, Boolean>, boolean: Boolean) {
+    addMember(property.name, boolean.toJavaCodeBlock())
+}
+
+fun <A : Annotation> JPAnnotationBuilder.setArgumentValue(property: KProperty1<A, Int>, int: Int) {
+    addMember(property.name, int.toJavaCodeBlock())
+}
+
+fun <A : Annotation> JPAnnotationBuilder.setArgumentValue(property: KProperty1<A, String>, string: String) {
+    addMember(property.name, string.toJavaCodeBlock(asValue = true))
+}
+
+fun <A : Annotation> JPAnnotationBuilder.setArgumentValue(property: KProperty1<A, KClass<*>>, className: IrTypeName) {
+    addMember(property.name, className.toJavaCodeBlock(asClassType = true))
+}
+
+inline fun <reified A : Annotation, reified EA : Annotation> JPAnnotationBuilder.setArgumentValue(
+    property: KProperty1<A, EA>,
+    crossinline builder: Builder<JPAnnotationBuilder> = {}
+) {
+    addMember(property.name, buildJavaAnnotation<EA>(builder).toCodeBlock())
+}
+
+@JvmName("setStringArrayArgumentValue")
+inline fun <reified A : Annotation> JPAnnotationBuilder.setArgumentValue(
+    property: KProperty1<A, Array<out String>>,
+    strings: List<String>,
+) {
+    setArrayArgumentValue(property, strings, "%S") { strings.forEach { +it } }
+}
+
+@JvmName("setAnnotationArrayArgumentValue")
+inline fun <reified A : Annotation, reified EA : Annotation> JPAnnotationBuilder.setArgumentValue(
+    property: KProperty1<A, Array<out EA>>,
+    crossinline builder: Builder<JPAnnotationBuilder> = {}
+) {
+    val annotations = listOf(buildJavaAnnotation<EA>(builder))
+    setArrayArgumentValue(property, annotations, "%L") { annotations.forEach { +it } }
+}
+
+inline fun <reified A : Annotation> JPAnnotationBuilder.setArrayArgumentValue(
+    property: KProperty1<A, *>,
+    array: List<*>,
+    placeholder: String,
+    noinline argumentsBuilder: Builder<IrJavaCodeBlock.Arguments> = {}
+) {
+    addMember(
+        property.name,
+        buildJavaCodeBlock(array.joinToString(prefix = "{", postfix = "}") { placeholder }, argumentsBuilder)
+    )
+}

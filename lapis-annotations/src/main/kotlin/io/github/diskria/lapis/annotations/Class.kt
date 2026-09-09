@@ -3,7 +3,8 @@
 package io.github.diskria.lapis.annotations
 
 import kotlin.annotation.AnnotationRetention.SOURCE
-import kotlin.annotation.AnnotationTarget.*
+import kotlin.annotation.AnnotationTarget.CLASS
+import kotlin.annotation.AnnotationTarget.FUNCTION
 import kotlin.reflect.KClass
 
 @Target(CLASS)
