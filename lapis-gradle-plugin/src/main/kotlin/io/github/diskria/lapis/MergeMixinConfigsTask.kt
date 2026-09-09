@@ -38,26 +38,23 @@ abstract class MergeMixinConfigsTask : DefaultTask() {
         outputFile.writeText(json.encodeToString(JsonElement.serializer(), mergedJson))
     }
 
-    private fun mergeConfigs(userJson: JsonObject, generatedJson: JsonObject): JsonObject = buildJsonObject {
+    private fun mergeConfigs(userJson: JsonObject, genJson: JsonObject): JsonObject = buildJsonObject {
         val processedGenKeys = mutableSetOf<String>()
-        for ((key, userValue) in userJson) {
-            val generatedValue = generatedJson[key]
-            if (generatedValue != null) {
+        userJson.forEach { (key, userValue) ->
+            val genValue = genJson[key]
+            val mergedValue = if (genValue != null) {
                 processedGenKeys.add(key)
                 when {
-                    userValue is JsonArray && generatedValue is JsonArray -> {
-                        val mergedContent = (userValue + generatedValue).distinct()
-                        put(key, JsonArray(mergedContent))
-                    }
-
-                    else -> put(key, userValue)
+                    userValue is JsonArray && genValue is JsonArray -> JsonArray(userValue + genValue)
+                    else -> userValue
                 }
             } else {
-                put(key, userValue)
+                userValue
             }
+            put(key, mergedValue)
         }
-        generatedJson.entries.filterNot { it.key in processedGenKeys }.forEach { (key, generatedValue) ->
-            put(key, generatedValue)
-        }
+        genJson.entries
+            .filterNot { it.key in processedGenKeys }
+            .forEach { (key, genValue) -> put(key, genValue) }
     }
 }
