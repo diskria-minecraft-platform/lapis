@@ -8,13 +8,13 @@ import org.gradle.api.tasks.*
 @CacheableTask
 abstract class MergeMixinConfigsTask : DefaultTask() {
 
-    @get:InputFile
     @get:PathSensitive(PathSensitivity.RELATIVE)
+    @get:InputFile
     abstract val userConfig: RegularFileProperty
 
-    @get:InputFile
-    @get:PathSensitive(PathSensitivity.RELATIVE)
     @get:Optional
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    @get:InputFiles
     abstract val generatedConfig: RegularFileProperty
 
     @get:OutputFile
