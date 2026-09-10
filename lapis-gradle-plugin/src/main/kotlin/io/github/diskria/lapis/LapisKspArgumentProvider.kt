@@ -1,16 +1,19 @@
 package io.github.diskria.lapis
 
+import io.github.diskria.lapis.extensions.getRootRelativePathString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.gradle.api.file.ProjectLayout
 import org.gradle.api.file.RegularFile
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.*
 import org.gradle.process.CommandLineArgumentProvider
+import javax.inject.Inject
 
-class LapisKspArgumentProvider(
+abstract class LapisKspArgumentProvider @Inject constructor(
     @Input
     val uniqueModPrefix: Property<String>,
 
@@ -29,18 +32,23 @@ class LapisKspArgumentProvider(
     @Optional
     @Input
     val builtinsPackage: Property<String>,
+
+    @Internal
+    val layout: ProjectLayout,
 ) : CommandLineArgumentProvider {
 
     override fun asArguments(): Iterable<String> {
         val uniqueModPrefix = uniqueModPrefix.orNull ?: error("Property 'uniqueModPrefix' is required but not set.")
         val configFile = mixinConfigFile.get().asFile
-        val mixinPackage = Json.parseToJsonElement(configFile.readText()).jsonObject["package"]
-            ?.jsonPrimitive
-            ?.contentOrNull
-            ?: error(
-                "Missing required 'package' field in " +
-                    "mixin config '${configFile.name}' (${configFile.absolutePath})."
+        val mixinPackage = runCatching {
+            Json.parseToJsonElement(configFile.readText()).jsonObject["package"]?.jsonPrimitive?.contentOrNull
+        }.getOrNull() ?: run {
+            val configPath = configFile.getRootRelativePathString(layout)
+            error(
+                "Invalid or unparseable JSON in mixin config '${configFile.name}' ($configPath). " +
+                    "Ensure the file is valid JSON and contains a 'package' field."
             )
+        }
         return listOfNotNull(
             "uniqueModPrefix" to uniqueModPrefix,
             enableFabricTweaks.orNull?.let { "enableFabricTweaks" to it },

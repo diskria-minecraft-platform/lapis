@@ -10,6 +10,7 @@ import org.gradle.api.Project
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.kotlin.dsl.create
 import org.gradle.kotlin.dsl.getByType
+import org.gradle.kotlin.dsl.newInstance
 import org.gradle.kotlin.dsl.withType
 import org.gradle.language.jvm.tasks.ProcessResources
 import kotlin.io.path.invariantSeparatorsPathString
@@ -62,7 +63,7 @@ class LapisGradlePlugin : Plugin<Project> {
                 val processResourcesTaskName = "process${sourceSetNamePart}Resources"
                 withType<KspAATask>().matching { it.name == kspTaskName }.configureEach { task ->
                     task.commandLineArgumentProviders.add(
-                        LapisKspArgumentProvider(
+                        project.objects.newInstance<LapisKspArgumentProvider>(
                             lapisExtension.modId,
                             lapisExtension.enableFabricTweaks,
                             lapisExtension.enableForgeTweaks,

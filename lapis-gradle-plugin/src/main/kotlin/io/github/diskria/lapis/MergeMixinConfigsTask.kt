@@ -43,12 +43,12 @@ abstract class MergeMixinConfigsTask : DefaultTask() {
         val trailingWhitespaces = userFileText.takeLastWhile { it.isWhitespace() }
         val userJson = Json.parseToJsonElement(userFileText).jsonObject
         val mergedJson = mergeJsonObjects(userJson, genJson)
-        mergedFile.parentFile.mkdirs()
         val jsonForOutput = Json {
             prettyPrint = true
             prettyPrintIndent = indent
         }
         val mergedFileText = jsonForOutput.encodeToString(JsonElement.serializer(), mergedJson)
+        mergedFile.parentFile.mkdirs()
         mergedFile.writeText(mergedFileText + trailingWhitespaces)
     }
 
