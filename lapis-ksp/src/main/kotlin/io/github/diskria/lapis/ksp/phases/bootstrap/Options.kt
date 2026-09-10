@@ -11,6 +11,7 @@ data class Options(
     val enableFabricTweaks: Boolean = false,
     val enableForgeTweaks: Boolean = false,
     val disableLCP: Boolean = false,
+    val disableBuiltinsPackageIsolationWarning: Boolean = false,
 ) {
     init {
         require(IDENTIFIER_REGEX.matches(uniqueModPrefix)) {
