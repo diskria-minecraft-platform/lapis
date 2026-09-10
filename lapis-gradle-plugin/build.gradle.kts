@@ -1,5 +1,7 @@
 projekt {
-    gradlePlugin()
+    gradlePlugin {
+        supportsIsolatedProjects = true
+    }
     distribute {
         mavenLocal()
         gradlePluginPortal()
