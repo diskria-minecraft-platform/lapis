@@ -31,11 +31,24 @@ abstract class MergeMixinConfigsTask : DefaultTask() {
             userFile.copyTo(mergedFile, overwrite = true)
             return
         }
-        val userJson = json.parseToJsonElement(userFile.readText()).jsonObject
-        val genJson = json.parseToJsonElement(genFile.readText()).jsonObject
+        val genFileText = genFile.readText()
+        val genJson = json.parseToJsonElement(genFileText).jsonObject
+        if (genJson.isEmpty()) {
+            userFile.copyTo(mergedFile, overwrite = true)
+            return
+        }
+        val userFileText = userFile.readText()
+        val indent = userFileText.lineSequence()
+            .map { line -> line.takeWhile { it.isWhitespace() } }
+            .firstOrNull { it.isNotEmpty() }
+            ?: "  "
+        val trailingWhitespaces = userFileText.takeLastWhile { it.isWhitespace() }
+        val userJson = json.parseToJsonElement(userFileText).jsonObject
         val mergedJson = mergeConfigs(userJson, genJson)
         mergedFile.parentFile.mkdirs()
-        mergedFile.writeText(json.encodeToString(JsonElement.serializer(), mergedJson))
+        val jsonWithIndent = Json(json) { prettyPrintIndent = indent }
+        val mergedFileText = jsonWithIndent.encodeToString(JsonElement.serializer(), mergedJson)
+        mergedFile.writeText(mergedFileText + trailingWhitespaces)
     }
 
     private fun mergeConfigs(userJson: JsonObject, genJson: JsonObject): JsonObject = buildJsonObject {
@@ -45,7 +58,7 @@ abstract class MergeMixinConfigsTask : DefaultTask() {
             val mergedValue = if (genValue != null) {
                 processedGenKeys.add(key)
                 when {
-                    userValue is JsonArray && genValue is JsonArray -> JsonArray(userValue + genValue)
+                    userValue is JsonArray && genValue is JsonArray -> JsonArray((userValue + genValue).distinct())
                     else -> userValue
                 }
             } else {
