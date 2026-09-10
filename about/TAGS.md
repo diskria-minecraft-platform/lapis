@@ -1,4 +1,4 @@
 ksp
 code-generation
-mixin
+spongepowered-mixin
 minecraft-modding
