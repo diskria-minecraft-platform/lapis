@@ -10,6 +10,7 @@ data class Options(
     val mixinGeneratedSubpackage: String? = null,
     val enableFabricTweaks: Boolean = false,
     val enableForgeTweaks: Boolean = false,
+    val disableLCP: Boolean = false,
 ) {
     init {
         require(PACKAGE_REGEX.matches(mixinPackage)) {

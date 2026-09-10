@@ -35,7 +35,9 @@ class Lowering(
     private val patches: MutableList<IrPatch> = mutableListOf()
 
     fun lower(result: ValidatorResult): IrResult {
-        val mixinSourcePackageLCP = findMixinSourcePackageLCP(result.schemas + result.patches)
+        val mixinSourcePackageLCP = if (options.disableLCP) null else {
+            findMixinSourcePackageLCP(result.schemas + result.patches)
+        }
         patches += result.patches.map { lowerPatch(it, mixinSourcePackageLCP) }
         return IrResult(
             schemas = result.schemas.map { schema ->
@@ -121,7 +123,7 @@ class Lowering(
         )
     }
 
-    private fun lowerMixinAccessor(schema: Schema, sourcePackageLCP: String): IrMixinAccessor? {
+    private fun lowerMixinAccessor(schema: Schema, sourcePackageLCP: String?): IrMixinAccessor? {
         val descriptors = schema.descriptors.mapNotNull {
             if (it.accessRequest !is MixinAccessRequest) {
                 return@mapNotNull null
@@ -166,7 +168,7 @@ class Lowering(
         )
     }
 
-    private fun lowerPatch(patch: Patch, mixinSourcePackageLCP: String): IrPatch {
+    private fun lowerPatch(patch: Patch, mixinSourcePackageLCP: String?): IrPatch {
         val constructorArguments = patch.constructorParameters.map(::lowerPatchConstructorArgument)
         return IrPatch(
             className = patch.className,
@@ -200,7 +202,7 @@ class Lowering(
             )
         } else null
 
-    private fun lowerMixin(patch: Patch, sourcePackageLCP: String): IrMixin =
+    private fun lowerMixin(patch: Patch, sourcePackageLCP: String?): IrMixin =
         IrMixin(
             originatingFiles = listOfNotNull(patch.containingFile),
             className = resolveMixinRelatedClassName(patch.className, sourcePackageLCP, "Mixin"),
@@ -723,13 +725,13 @@ class Lowering(
         else null
 
     private fun resolveMixinRelatedClassName(
-        sourceClassName: IrClassName, sourcePackageLCP: String, suffix: String,
+        sourceClassName: IrClassName, sourcePackageLCP: String?, suffix: String,
     ): IrClassName {
         val sourcePackageName = sourceClassName.packageName
         val mixinPackageName = buildString {
             append(options.mixinPackage)
             options.mixinGeneratedSubpackage?.let { append(".$it") }
-            if (sourcePackageName != null && sourcePackageName != sourcePackageLCP) {
+            if (sourcePackageName != null && sourcePackageLCP != null && sourcePackageName != sourcePackageLCP) {
                 append(".${sourcePackageName.removePrefix("$sourcePackageLCP.")}")
             }
         }
