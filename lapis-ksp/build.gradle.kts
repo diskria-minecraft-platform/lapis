@@ -23,6 +23,6 @@ dependencies {
 
     implementation(libs.kotlin.serialization.json)
 
-    ksp(libs.auto.service)
+    ksp(libs.auto.service.ksp)
     compileOnly(libs.auto.service.annotations)
 }
