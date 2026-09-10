@@ -12,7 +12,7 @@ import org.gradle.process.CommandLineArgumentProvider
 
 class LapisKspArgumentProvider(
     @Input
-    val modId: Property<String>,
+    val uniqueModPrefix: Property<String>,
 
     @Optional
     @Input
@@ -32,13 +32,17 @@ class LapisKspArgumentProvider(
 ) : CommandLineArgumentProvider {
 
     override fun asArguments(): Iterable<String> {
-        val modId = modId.orNull ?: error("Property 'modId' is required but not set.")
+        val uniqueModPrefix = uniqueModPrefix.orNull ?: error("Property 'uniqueModPrefix' is required but not set.")
         val configFile = mixinConfigFile.get().asFile
-        val jsonElement = Json.parseToJsonElement(configFile.readText())
-        val mixinPackage = jsonElement.jsonObject["package"]?.jsonPrimitive?.contentOrNull
-            ?: error("Package not found in mixin config: ${configFile.path}")
+        val mixinPackage = Json.parseToJsonElement(configFile.readText()).jsonObject["package"]
+            ?.jsonPrimitive
+            ?.contentOrNull
+            ?: error(
+                "Missing required 'package' field in " +
+                    "mixin config '${configFile.name}' (${configFile.absolutePath})."
+            )
         return listOfNotNull(
-            "modUniquePrefix" to modId,
+            "uniqueModPrefix" to uniqueModPrefix,
             enableFabricTweaks.orNull?.let { "enableFabricTweaks" to it },
             enableForgeTweaks.orNull?.let { "enableForgeTweaks" to it },
             "mixinPackage" to mixinPackage,

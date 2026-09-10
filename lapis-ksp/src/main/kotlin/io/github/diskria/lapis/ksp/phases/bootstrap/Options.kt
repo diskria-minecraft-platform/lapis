@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class Options(
-    val modUniquePrefix: String,
+    val uniqueModPrefix: String,
     val mixinPackage: String,
     val builtinsPackage: String = mixinPackage.substringBeforeLast("."),
     val mixinGeneratedSubpackage: String? = null,

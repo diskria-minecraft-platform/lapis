@@ -19,32 +19,31 @@ class LapisGradlePlugin : Plugin<Project> {
     override fun apply(project: Project) {
         project.pluginManager.apply("com.google.devtools.ksp")
         val lapisExtension = project.extensions.create<LapisExtension>("lapis")
-        val lapisRootKspConfig = project.configurations.maybeCreate("lapisRootKsp")
         lapisExtension.sourceSets.all { sourceSetSpec ->
             val sourceSetName = sourceSetSpec.name
             val sourceSetNamePart = if (sourceSetName == "main") "" else sourceSetName.capitalized()
+
             val kspConfigurationName = "ksp${sourceSetNamePart}"
             val lapisKspConfigurationName = "lapis${kspConfigurationName.capitalized()}"
-            val lapisKspConfig = project.configurations.maybeCreate(lapisKspConfigurationName).apply {
-                extendsFrom(lapisRootKspConfig)
+            val lapisKspConfiguration = project.configurations.maybeCreate(lapisKspConfigurationName).apply {
                 dependencies.add(project.dependencies.create("io.github.diskria:lapis-ksp:$PLUGIN_VERSION"))
             }
-            project.configurations.matching { it.name == kspConfigurationName }.configureEach { configuration ->
-                configuration.extendsFrom(lapisKspConfig)
+            project.configurations.matching { it.name == kspConfigurationName }.configureEach { kspConfiguration ->
+                kspConfiguration.extendsFrom(lapisKspConfiguration)
             }
-            val classpathName = "${sourceSetNamePart}CompileClasspath".decapitalized()
-            val lapisClasspathName = "lapis${classpathName.capitalized()}"
-            val lapisClasspath = project.configurations.maybeCreate(lapisClasspathName).apply {
+
+            val compileClasspathName = "${sourceSetNamePart}CompileClasspath".decapitalized()
+            val lapisCompileClasspathName = "lapis${compileClasspathName.capitalized()}"
+            val lapisCompileClasspath = project.configurations.maybeCreate(lapisCompileClasspathName).apply {
                 dependencies.add(project.dependencies.create("io.github.diskria:lapis-annotations:$PLUGIN_VERSION"))
             }
-            project.configurations.matching { it.name == classpathName }.configureEach { classpath ->
-                classpath.extendsFrom(lapisClasspath)
+            project.configurations.matching { it.name == compileClasspathName }.configureEach { compileClasspath ->
+                compileClasspath.extendsFrom(lapisCompileClasspath)
             }
 
             val buildDirectory = project.layout.buildDirectory
             val kspResourcesDirectory = buildDirectory.dir("generated/ksp/$sourceSetName/resources")
             val mergedResourcesDirectory = buildDirectory.dir("generated/lapis-merged/$sourceSetName/resources")
-
             val relativePathProvider = sourceSetSpec.mixinConfig.map { config ->
                 val userConfigPath = config.asFile.toPath()
                 project.extensions.getByType<SourceSetContainer>()

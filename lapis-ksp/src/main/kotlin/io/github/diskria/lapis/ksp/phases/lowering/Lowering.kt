@@ -231,8 +231,8 @@ class Lowering(
                     sourceName = name,
                     sourceGetterJvmName = getterJvmName,
                     sourceSetterJvmName = setterJvmName,
-                    getterName = getterJvmName.withModUniquePrefix(),
-                    setterName = setterJvmName?.withModUniquePrefix(),
+                    getterName = getterJvmName.withUniqueModPrefix(),
+                    setterName = setterJvmName?.withUniqueModPrefix(),
                     receiverTypeName = receiverClassDeclaration.asIrClassName(),
                 )
             }
@@ -241,7 +241,7 @@ class Lowering(
                 IrMixinBridgeExtensionFunction(
                     sourceName = name,
                     sourceJvmName = jvmName,
-                    name = jvmName.withModUniquePrefix(),
+                    name = jvmName.withUniqueModPrefix(),
                     parameters = parameters.map { it.asIrParameter() },
                     returnTypeName = returnTypeName,
                     receiverTypeName = receiverClassDeclaration.asIrClassName(),
@@ -257,8 +257,8 @@ class Lowering(
                     sourceName = name,
                     sourceGetterJvmName = getterJvmName,
                     sourceSetterJvmName = setterJvmName,
-                    getterName = getterJvmName.withModUniquePrefix(),
-                    setterName = setterJvmName?.withModUniquePrefix(),
+                    getterName = getterJvmName.withUniqueModPrefix(),
+                    setterName = setterJvmName?.withUniqueModPrefix(),
                     mappingName = mappingName,
                     modifiers = modifiers.toMutableSet().apply { remove(JPModifier.FINAL) },
                     isFinal = JPModifier.FINAL in modifiers,
@@ -270,7 +270,7 @@ class Lowering(
                 IrMixinBridgeShadowFunction(
                     sourceName = name,
                     sourceJvmName = jvmName,
-                    name = jvmName.withModUniquePrefix(),
+                    name = jvmName.withUniqueModPrefix(),
                     parameters = parameters.map { it.asIrParameter() },
                     returnTypeName = returnTypeName,
                     mappingName = mappingName,
@@ -610,7 +610,7 @@ class Lowering(
                 typeName = parameter.typeName,
                 varImplBuiltin = LocalVarImplBuiltin.of(parameter.typeName),
                 key = parameter.key,
-                namespace = if (parameter.isExported) options.modUniquePrefix else null,
+                namespace = if (parameter.isExported) options.uniqueModPrefix else null,
             )
 
             else -> null
@@ -794,8 +794,8 @@ class Lowering(
             currentParts.zip(nextParts).takeWhile { (current, next) -> current == next }.joinToString(".") { it.first }
         }.orEmpty()
 
-    private fun String.withModUniquePrefix(): String =
-        withInternalPrefix(options.modUniquePrefix)
+    private fun String.withUniqueModPrefix(): String =
+        withInternalPrefix(options.uniqueModPrefix)
 }
 
 fun FunctionTypeParameter.asIrFunctionTypeParameter(): IrFunctionTypeParameter =
