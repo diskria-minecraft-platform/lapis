@@ -22,6 +22,10 @@ data class Options(
         require(builtinsPackage.isEmpty() || PACKAGE_REGEX.matches(builtinsPackage)) {
             "Invalid 'builtinsPackage': '$builtinsPackage'. Must be a valid package name or empty for root package."
         }
+        require(builtinsPackage != mixinPackage && !builtinsPackage.startsWith("$mixinPackage.")) {
+            "Invalid 'builtinsPackage': '$builtinsPackage'. " +
+                "Cannot be equal to or inside 'mixinPackage' ($mixinPackage)."
+        }
         mixinGeneratedSubpackage?.let { subpackage ->
             require(PACKAGE_REGEX.matches(subpackage)) {
                 "Invalid 'mixinGeneratedSubpackage': '$subpackage'. Must be a valid Java package name " +

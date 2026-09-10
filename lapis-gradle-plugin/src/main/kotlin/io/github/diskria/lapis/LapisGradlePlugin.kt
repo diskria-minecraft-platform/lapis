@@ -65,11 +65,11 @@ class LapisGradlePlugin : Plugin<Project> {
                     task.commandLineArgumentProviders.add(
                         project.objects.newInstance<LapisKspArgumentProvider>(
                             lapisExtension.uniqueModPrefix,
+                            sourceSetSpec.mixinConfig,
+                            sourceSetSpec.builtinsPackage,
                             lapisExtension.enableFabricTweaks,
                             lapisExtension.enableForgeTweaks,
                             lapisExtension.disableLCP,
-                            sourceSetSpec.mixinConfig,
-                            sourceSetSpec.builtinsPackage,
                         )
                     )
                 }

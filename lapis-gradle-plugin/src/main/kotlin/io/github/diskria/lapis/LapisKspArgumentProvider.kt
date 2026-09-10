@@ -17,6 +17,14 @@ abstract class LapisKspArgumentProvider @Inject constructor(
     @Input
     val uniqueModPrefix: Property<String>,
 
+    @PathSensitive(PathSensitivity.RELATIVE)
+    @InputFile
+    val mixinConfigFile: Provider<RegularFile>,
+
+    @Optional
+    @Input
+    val builtinsPackage: Property<String>,
+
     @Optional
     @Input
     val enableFabricTweaks: Property<Boolean>,
@@ -28,14 +36,6 @@ abstract class LapisKspArgumentProvider @Inject constructor(
     @Optional
     @Input
     val disableLCP: Property<Boolean>,
-
-    @PathSensitive(PathSensitivity.RELATIVE)
-    @InputFile
-    val mixinConfigFile: Provider<RegularFile>,
-
-    @Optional
-    @Input
-    val builtinsPackage: Property<String>,
 
     @Internal
     val layout: ProjectLayout,
@@ -55,11 +55,11 @@ abstract class LapisKspArgumentProvider @Inject constructor(
         }
         return listOfNotNull(
             "uniqueModPrefix" to uniqueModPrefix,
+            "mixinPackage" to mixinPackage,
+            builtinsPackage.orNull?.let { "builtinsPackage" to it },
             enableFabricTweaks.orNull?.let { "enableFabricTweaks" to it },
             enableForgeTweaks.orNull?.let { "enableForgeTweaks" to it },
             disableLCP.orNull?.let { "disableLCP" to it },
-            "mixinPackage" to mixinPackage,
-            builtinsPackage.orNull?.let { "builtinsPackage" to it },
         ).map { (key, value) -> "lapis.$key=$value" }
     }
 }
