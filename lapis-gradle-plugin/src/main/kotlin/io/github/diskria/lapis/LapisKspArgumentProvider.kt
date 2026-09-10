@@ -14,17 +14,21 @@ class LapisKspArgumentProvider(
     @Input
     val modId: Property<String>,
 
-    @Input
     @Optional
+    @Input
     val enableFabricTweaks: Property<Boolean>,
 
-    @Input
     @Optional
+    @Input
     val enableForgeTweaks: Property<Boolean>,
 
-    @InputFile
     @PathSensitive(PathSensitivity.RELATIVE)
+    @InputFile
     val mixinConfigFile: Provider<RegularFile>,
+
+    @Optional
+    @Input
+    val builtinsPackage: Property<String>,
 ) : CommandLineArgumentProvider {
 
     override fun asArguments(): Iterable<String> {
@@ -38,6 +42,7 @@ class LapisKspArgumentProvider(
             enableFabricTweaks.orNull?.let { "enableFabricTweaks" to it },
             enableForgeTweaks.orNull?.let { "enableForgeTweaks" to it },
             "mixinPackage" to mixinPackage,
+            builtinsPackage.orNull?.let { "builtinsPackage" to it },
         ).map { (key, value) -> "lapis.$key=$value" }
     }
 }

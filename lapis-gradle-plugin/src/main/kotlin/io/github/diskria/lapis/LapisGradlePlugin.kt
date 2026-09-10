@@ -3,12 +3,12 @@ package io.github.diskria.lapis
 import com.google.devtools.ksp.gradle.KspAATask
 import io.github.diskria.lapis.api.LapisExtension
 import io.github.diskria.lapis.extensions.capitalized
+import io.github.diskria.lapis.extensions.decapitalized
 import io.github.diskria.lapis.extensions.register
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.kotlin.dsl.create
-import org.gradle.kotlin.dsl.dependencies
 import org.gradle.kotlin.dsl.getByType
 import org.gradle.kotlin.dsl.withType
 import org.gradle.language.jvm.tasks.ProcessResources
@@ -19,30 +19,34 @@ class LapisGradlePlugin : Plugin<Project> {
     override fun apply(project: Project) {
         project.pluginManager.apply("com.google.devtools.ksp")
         val lapisExtension = project.extensions.create<LapisExtension>("lapis")
-        lapisExtension.sourceSetSpecs.all { sourceSetSpec ->
+        val lapisRootKspConfig = project.configurations.maybeCreate("lapisRootKsp")
+        lapisExtension.sourceSets.all { sourceSetSpec ->
             val sourceSetName = sourceSetSpec.name
             val sourceSetNamePart = if (sourceSetName == "main") "" else sourceSetName.capitalized()
             val kspConfigurationName = "ksp${sourceSetNamePart}"
-            val kspTaskName = "${kspConfigurationName}Kotlin"
-            val processResourcesTaskName = "process${sourceSetNamePart}Resources"
-            val mergeMixinConfigsTaskName = "merge${sourceSetNamePart}MixinConfigs"
+            val lapisKspConfigurationName = "lapis${kspConfigurationName.capitalized()}"
+            val lapisKspConfig = project.configurations.maybeCreate(lapisKspConfigurationName).apply {
+                extendsFrom(lapisRootKspConfig)
+                dependencies.add(project.dependencies.create("io.github.diskria:lapis-ksp:$PLUGIN_VERSION"))
+            }
+            project.configurations.matching { it.name == kspConfigurationName }.configureEach { configuration ->
+                configuration.extendsFrom(lapisKspConfig)
+            }
+            val classpathName = "${sourceSetNamePart}CompileClasspath".decapitalized()
+            val lapisClasspathName = "lapis${classpathName.capitalized()}"
+            val lapisClasspath = project.configurations.maybeCreate(lapisClasspathName).apply {
+                dependencies.add(project.dependencies.create("io.github.diskria:lapis-annotations:$PLUGIN_VERSION"))
+            }
+            project.configurations.matching { it.name == classpathName }.configureEach { classpath ->
+                classpath.extendsFrom(lapisClasspath)
+            }
 
             val buildDirectory = project.layout.buildDirectory
             val kspResourcesDirectory = buildDirectory.dir("generated/ksp/$sourceSetName/resources")
             val mergedResourcesDirectory = buildDirectory.dir("generated/lapis-merged/$sourceSetName/resources")
 
-            val userConfigFile = project.providers.provider {
-                val singleFile = lapisExtension.mixinConfig.orNull
-                if (singleFile != null && lapisExtension.isMultiSetMode.get()) {
-                    error(
-                        "Conflicting mixin configuration: 'lapis.mixinConfig' property is intended for 'main' only. " +
-                            "Use 'lapis.mixinConfig(sourceSet, ...)' instead when configuring multiple sourceSets."
-                    )
-                }
-                singleFile ?: sourceSetSpec.mixinConfig.orNull
-            }
-            val relativePathProvider = userConfigFile.map { file ->
-                val userConfigPath = file.asFile.toPath()
+            val relativePathProvider = sourceSetSpec.mixinConfig.map { config ->
+                val userConfigPath = config.asFile.toPath()
                 project.extensions.getByType<SourceSetContainer>()
                     .findByName(sourceSetName)
                     ?.resources
@@ -54,21 +58,25 @@ class LapisGradlePlugin : Plugin<Project> {
                     ?: userConfigPath.fileName.toString()
             }
             with(project.tasks) {
+                val kspTaskName = "${kspConfigurationName}Kotlin"
+                val mergeMixinConfigsTaskName = "merge${sourceSetNamePart}MixinConfigs"
+                val processResourcesTaskName = "process${sourceSetNamePart}Resources"
                 withType<KspAATask>().matching { it.name == kspTaskName }.configureEach { task ->
                     task.commandLineArgumentProviders.add(
                         LapisKspArgumentProvider(
                             lapisExtension.modId,
                             lapisExtension.enableFabricTweaks,
                             lapisExtension.enableForgeTweaks,
-                            userConfigFile,
+                            sourceSetSpec.mixinConfig,
+                            sourceSetSpec.builtinsPackage,
                         )
                     )
                 }
                 val mergeMixinConfigsTask = register<MergeMixinConfigsTask>(name = mergeMixinConfigsTaskName) { task ->
                     task.dependsOn(kspTaskName)
-                    task.userConfigFile.set(userConfigFile)
-                    task.generatedConfigFile.set(kspResourcesDirectory.get().file("lapis-intermediates/mixins.json"))
-                    task.mergedConfigFile.set(
+                    task.userConfig.set(sourceSetSpec.mixinConfig)
+                    task.generatedConfig.set(kspResourcesDirectory.get().file("lapis-intermediates/mixins.json"))
+                    task.mergedConfig.set(
                         relativePathProvider.flatMap { relativePath ->
                             mergedResourcesDirectory.map { it.file(relativePath) }
                         }
@@ -85,7 +93,7 @@ class LapisGradlePlugin : Plugin<Project> {
                     }
                     task.from(
                         mergeMixinConfigsTask.flatMap {
-                            it.mergedConfigFile.zip(relativePathProvider) { outputFile, relativePath ->
+                            it.mergedConfig.zip(relativePathProvider) { outputFile, relativePath ->
                                 val resourcesPath = outputFile.asFile.absolutePath.removeSuffix(relativePath)
                                 project.layout.projectDirectory.dir(resourcesPath)
                             }
@@ -93,13 +101,6 @@ class LapisGradlePlugin : Plugin<Project> {
                     )
                 }
             }
-            project.configurations.matching { it.name == kspConfigurationName }.configureEach { configuration ->
-                val dependency = project.dependencies.create("io.github.diskria:lapis-ksp:$PLUGIN_VERSION")
-                configuration.dependencies.add(dependency)
-            }
-        }
-        project.dependencies {
-            "compileOnly"("io.github.diskria:lapis-annotations:$PLUGIN_VERSION")
         }
     }
 

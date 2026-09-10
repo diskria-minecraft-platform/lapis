@@ -10,32 +10,32 @@ abstract class MergeMixinConfigsTask : DefaultTask() {
 
     @get:InputFile
     @get:PathSensitive(PathSensitivity.RELATIVE)
-    abstract val userConfigFile: RegularFileProperty
+    abstract val userConfig: RegularFileProperty
 
     @get:InputFile
     @get:PathSensitive(PathSensitivity.RELATIVE)
     @get:Optional
-    abstract val generatedConfigFile: RegularFileProperty
+    abstract val generatedConfig: RegularFileProperty
 
     @get:OutputFile
-    abstract val mergedConfigFile: RegularFileProperty
+    abstract val mergedConfig: RegularFileProperty
 
     private val json = Json { prettyPrint = true }
 
     @TaskAction
     fun merge() {
-        val userFile = userConfigFile.get().asFile
-        val genFile = generatedConfigFile.orNull?.asFile
-        val outputFile = mergedConfigFile.get().asFile
+        val userFile = userConfig.get().asFile
+        val genFile = generatedConfig.orNull?.asFile
+        val mergedFile = mergedConfig.get().asFile
         if (genFile == null || !genFile.exists()) {
-            userFile.copyTo(outputFile, overwrite = true)
+            userFile.copyTo(mergedFile, overwrite = true)
             return
         }
         val userJson = json.parseToJsonElement(userFile.readText()).jsonObject
         val genJson = json.parseToJsonElement(genFile.readText()).jsonObject
         val mergedJson = mergeConfigs(userJson, genJson)
-        outputFile.parentFile.mkdirs()
-        outputFile.writeText(json.encodeToString(JsonElement.serializer(), mergedJson))
+        mergedFile.parentFile.mkdirs()
+        mergedFile.writeText(json.encodeToString(JsonElement.serializer(), mergedJson))
     }
 
     private fun mergeConfigs(userJson: JsonObject, genJson: JsonObject): JsonObject = buildJsonObject {
