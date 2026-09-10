@@ -1,7 +1,7 @@
 [versions]
 auto-service = "1.2.0"
 auto-service-annotations = "1.1.1"
-ksp = "2.3.11"
+ksp = "2.3.12"
 mixin = "0.8.7"
 mixin-extras = "0.5.5"
 asm = "9.9.1"

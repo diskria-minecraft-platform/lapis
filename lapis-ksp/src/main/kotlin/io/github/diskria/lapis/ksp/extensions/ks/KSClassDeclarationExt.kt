@@ -2,15 +2,13 @@ package io.github.diskria.lapis.ksp.extensions.ks
 
 import com.google.devtools.ksp.*
 import com.google.devtools.ksp.symbol.*
+import com.google.devtools.ksp.validate
 
 val KSClassDeclaration.starProjectedType: KSType
     get() = asStarProjectedType()
 
 val KSClassDeclaration.type: KSType
     get() = asType(emptyList())
-
-val KSClassDeclaration.isInterface: Boolean
-    get() = classKind == ClassKind.INTERFACE
 
 val KSClassDeclaration.isClass: Boolean
     get() = classKind == ClassKind.CLASS
@@ -28,7 +26,7 @@ val KSClassDeclaration.isSealed: Boolean
     get() = Modifier.SEALED in modifiers
 
 val KSClassDeclaration.isValid: Boolean
-    get() = validate()
+    get() = validate(enableNewFeatures = true)
 
 val KSClassDeclaration.bodyPropertyDeclarations: Sequence<KSPropertyDeclaration>
     get() {
