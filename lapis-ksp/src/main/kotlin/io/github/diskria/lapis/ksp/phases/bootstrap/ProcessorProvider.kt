@@ -57,13 +57,16 @@ class ProcessorProvider : SymbolProcessorProvider {
                 }
             )
         }
-        return optionsJson.decodeFromJsonElement(
-            buildJsonObject {
-                processorOptions.forEach { (key, value) ->
-                    put(key, JsonPrimitive(value))
-                }
+        val jsonObject = buildJsonObject {
+            processorOptions.forEach { (key, value) ->
+                put(key, JsonPrimitive(value))
             }
-        )
+        }
+        return runCatching<Options> {
+            optionsJson.decodeFromJsonElement(jsonObject)
+        }.getOrElse { error ->
+            logger.fatal("Failed to parse Lapis KSP arguments: ${error.message}")
+        }
     }
 
     private fun String.withArgumentPrefix(): String =
