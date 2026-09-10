@@ -25,6 +25,10 @@ abstract class LapisKspArgumentProvider @Inject constructor(
     @Input
     val enableForgeTweaks: Property<Boolean>,
 
+    @Optional
+    @Input
+    val disableLCP: Property<Boolean>,
+
     @PathSensitive(PathSensitivity.RELATIVE)
     @InputFile
     val mixinConfigFile: Provider<RegularFile>,
@@ -53,6 +57,7 @@ abstract class LapisKspArgumentProvider @Inject constructor(
             "uniqueModPrefix" to uniqueModPrefix,
             enableFabricTweaks.orNull?.let { "enableFabricTweaks" to it },
             enableForgeTweaks.orNull?.let { "enableForgeTweaks" to it },
+            disableLCP.orNull?.let { "disableLCP" to it },
             "mixinPackage" to mixinPackage,
             builtinsPackage.orNull?.let { "builtinsPackage" to it },
         ).map { (key, value) -> "lapis.$key=$value" }

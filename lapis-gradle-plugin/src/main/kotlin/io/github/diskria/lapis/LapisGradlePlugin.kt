@@ -67,6 +67,7 @@ class LapisGradlePlugin : Plugin<Project> {
                             lapisExtension.modId,
                             lapisExtension.enableFabricTweaks,
                             lapisExtension.enableForgeTweaks,
+                            lapisExtension.disableLCP,
                             sourceSetSpec.mixinConfig,
                             sourceSetSpec.builtinsPackage,
                         )
