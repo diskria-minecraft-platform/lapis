@@ -64,7 +64,7 @@ class LapisGradlePlugin : Plugin<Project> {
                 withType<KspAATask>().matching { it.name == kspTaskName }.configureEach { task ->
                     task.commandLineArgumentProviders.add(
                         project.objects.newInstance<LapisKspArgumentProvider>(
-                            lapisExtension.modId,
+                            lapisExtension.uniqueModPrefix,
                             lapisExtension.enableFabricTweaks,
                             lapisExtension.enableForgeTweaks,
                             lapisExtension.disableLCP,

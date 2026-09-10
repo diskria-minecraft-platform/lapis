@@ -7,7 +7,7 @@ import javax.inject.Inject
 
 abstract class LapisExtension @Inject internal constructor(objects: ObjectFactory) : LapisDslScope {
 
-    val modId = objects.property<String>()
+    val uniqueModPrefix = objects.property<String>()
     val enableFabricTweaks = objects.property<Boolean>()
     val enableForgeTweaks = objects.property<Boolean>()
     val disableLCP = objects.property<Boolean>()
