@@ -340,14 +340,14 @@ class Generator(
                                 addModifiers(KPModifier.OVERRIDE)
                                 setGetter {
                                     setBody {
-                                        return_("%N.%L()") { +internalBridgeParameter; +entry.getter.name }
+                                        return_("%N.%N()") { +internalBridgeParameter; +entry.getter.name }
                                     }
                                 }
                                 entry.setter?.let { setter ->
                                     setSetter {
                                         setParameters(setter.parameters)
                                         setBody {
-                                            code_("%N.%L(%N)") {
+                                            code_("%N.%N(%N)") {
                                                 +internalBridgeParameter; +setter.name; +setter.parameter
                                             }
                                         }
@@ -362,7 +362,7 @@ class Generator(
                                 setParameters(entry.parameters)
                                 setReturnType(entry.returnTypeName)
                                 setBody {
-                                    code_("%N.%L(${entry.parameters.format})", isReturn = entry.isReturn) {
+                                    code_("%N.%N(${entry.parameters.format})", isReturn = entry.isReturn) {
                                         +internalBridgeParameter; +entry.name; entry.parameters.forEach { +it }
                                     }
                                 }
@@ -840,7 +840,7 @@ class Generator(
                         setGetter {
                             addModifiers(KPModifier.INLINE)
                             setBody {
-                                return_("(this as %T).%L()") { +bridge.className; +entry.getter.name }
+                                return_("(this as %T).%N()") { +bridge.className; +entry.getter.name }
                             }
                         }
                         entry.setter?.let { setter ->
@@ -848,7 +848,7 @@ class Generator(
                                 addModifiers(KPModifier.INLINE)
                                 setParameters(setter.parameters)
                                 setBody {
-                                    code_("(this as %T).%L(%N)") { +bridge.className; +setter.name; +setter.parameter }
+                                    code_("(this as %T).%N(%N)") { +bridge.className; +setter.name; +setter.parameter }
                                 }
                             }
                         }
@@ -862,7 +862,7 @@ class Generator(
                         setParameters(entry.parameters)
                         setReturnType(entry.returnTypeName)
                         setBody {
-                            code_("(this as %T).%L(${entry.parameters.format})", isReturn = entry.isReturn) {
+                            code_("(this as %T).%N(${entry.parameters.format})", isReturn = entry.isReturn) {
                                 +bridge.className; +entry.name; entry.parameters.forEach { +it }
                             }
                         }
