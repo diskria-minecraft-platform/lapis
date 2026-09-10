@@ -20,8 +20,6 @@ abstract class MergeMixinConfigsTask : DefaultTask() {
     @get:OutputFile
     abstract val mergedConfig: RegularFileProperty
 
-    private val json = Json { prettyPrint = true }
-
     @TaskAction
     fun merge() {
         val userFile = userConfig.get().asFile
@@ -32,7 +30,7 @@ abstract class MergeMixinConfigsTask : DefaultTask() {
             return
         }
         val genFileText = genFile.readText()
-        val genJson = json.parseToJsonElement(genFileText).jsonObject
+        val genJson = Json.parseToJsonElement(genFileText).jsonObject
         if (genJson.isEmpty()) {
             userFile.copyTo(mergedFile, overwrite = true)
             return
@@ -43,15 +41,18 @@ abstract class MergeMixinConfigsTask : DefaultTask() {
             .firstOrNull { it.isNotEmpty() }
             ?: "  "
         val trailingWhitespaces = userFileText.takeLastWhile { it.isWhitespace() }
-        val userJson = json.parseToJsonElement(userFileText).jsonObject
-        val mergedJson = mergeConfigs(userJson, genJson)
+        val userJson = Json.parseToJsonElement(userFileText).jsonObject
+        val mergedJson = mergeJsonObjects(userJson, genJson)
         mergedFile.parentFile.mkdirs()
-        val jsonWithIndent = Json(json) { prettyPrintIndent = indent }
-        val mergedFileText = jsonWithIndent.encodeToString(JsonElement.serializer(), mergedJson)
+        val jsonForOutput = Json {
+            prettyPrint = true
+            prettyPrintIndent = indent
+        }
+        val mergedFileText = jsonForOutput.encodeToString(JsonElement.serializer(), mergedJson)
         mergedFile.writeText(mergedFileText + trailingWhitespaces)
     }
 
-    private fun mergeConfigs(userJson: JsonObject, genJson: JsonObject): JsonObject = buildJsonObject {
+    private fun mergeJsonObjects(userJson: JsonObject, genJson: JsonObject): JsonObject = buildJsonObject {
         val processedGenKeys = mutableSetOf<String>()
         userJson.forEach { (key, userValue) ->
             val genValue = genJson[key]
