@@ -56,19 +56,30 @@ abstract class LapisKspArgumentProvider @Inject constructor(
             error("Mixin config file (${mixinConfigFile.relativePath()}) does not exist.")
         }
         val jsonObject = runCatching { Json.parseToJsonElement(mixinConfigFile.readText()).jsonObject }.getOrElse {
-            error("Cannot parse mixin config (${mixinConfigFile.relativePath()}). Ensure the file contains valid JSON.")
+            error("Cannot parse mixin config (${mixinConfigFile.relativePath()}): ensure the file contains valid JSON.")
         }
-        val mixinPackage = jsonObject["package"]?.jsonPrimitive?.contentOrNull?.removeSuffix(".")
+        val rawMixinPackage = jsonObject["package"]?.jsonPrimitive?.contentOrNull
             ?: error("Missing 'package' field in mixin config (${mixinConfigFile.relativePath()}).")
+        val normalizedMixinPackage = rawMixinPackage.removeSuffix(".").takeIf { it.isNotBlank() }
+            ?: error(
+                "Invalid 'package' field in mixin config (${mixinConfigFile.relativePath()}): " +
+                    "package cannot be empty or default."
+            )
         return listOfNotNull(
             "uniqueModPrefix" to uniqueModPrefix,
-            "mixinPackage" to mixinPackage,
+            "mixinPackage" to normalizedMixinPackage,
             builtinsPackage.orNull?.let { "builtinsPackage" to it },
             enableFabricTweaks.orNull?.let { "enableFabricTweaks" to it },
             enableForgeTweaks.orNull?.let { "enableForgeTweaks" to it },
             disableLCP.orNull?.let { "disableLCP" to it },
             disableBuiltinsPackageIsolationWarning.orNull?.let { "disableBuiltinsPackageIsolationWarning" to it },
-        ).map { (key, value) -> "lapis.$key=$value" }
+        ).map { (key, value) ->
+            val valueStr = value.toString()
+            if (valueStr.isBlank()) {
+                error("Property 'lapis.$key' cannot be empty or blank.")
+            }
+            "lapis.$key=$valueStr"
+        }
     }
 
     private fun File.relativePath() = getRootRelativePath(layout)
