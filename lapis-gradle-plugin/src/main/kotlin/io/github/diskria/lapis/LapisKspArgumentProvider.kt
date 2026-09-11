@@ -1,6 +1,6 @@
 package io.github.diskria.lapis
 
-import io.github.diskria.lapis.extensions.getRootRelativePathString
+import io.github.diskria.lapis.extensions.getRootRelativePath
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -11,6 +11,7 @@ import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.*
 import org.gradle.process.CommandLineArgumentProvider
+import java.io.File
 import javax.inject.Inject
 
 abstract class LapisKspArgumentProvider @Inject constructor(
@@ -51,19 +52,16 @@ abstract class LapisKspArgumentProvider @Inject constructor(
             ?: error("Property 'lapis.uniqueModPrefix' is required but not set.")
         val mixinConfigFile = mixinConfig.orNull?.asFile
             ?: error("Property 'lapis.mixinConfig' is required but not set.")
-        require(mixinConfigFile.isFile) {
-            val configPath = mixinConfigFile.getRootRelativePathString(layout)
-            "Mixin config ($configPath) does not exist."
+        if (!mixinConfigFile.isFile) {
+            error("Mixin config file (${mixinConfigFile.relativePath()}) does not exist.")
         }
-        val mixinPackage = runCatching {
-            Json.parseToJsonElement(mixinConfigFile.readText()).jsonObject["package"]?.jsonPrimitive?.contentOrNull
-        }.getOrNull() ?: run {
-            val configPath = mixinConfigFile.getRootRelativePathString(layout)
-            error(
-                "Invalid or unparseable mixin config ($configPath). " +
-                    "Ensure the file is valid JSON and contains a 'package' field."
-            )
+        val jsonObject = runCatching {
+            Json.parseToJsonElement(mixinConfigFile.readText()).jsonObject
+        }.getOrElse {
+            error("Cannot parse mixin config (${mixinConfigFile.relativePath()}). Ensure the file contains valid JSON.")
         }
+        val mixinPackage = jsonObject["package"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+            ?: error("Missing or empty 'package' field in mixin config (${mixinConfigFile.relativePath()}).")
         return listOfNotNull(
             "uniqueModPrefix" to uniqueModPrefix,
             "mixinPackage" to mixinPackage,
@@ -74,4 +72,6 @@ abstract class LapisKspArgumentProvider @Inject constructor(
             disableBuiltinsPackageIsolationWarning.orNull?.let { "disableBuiltinsPackageIsolationWarning" to it },
         ).map { (key, value) -> "lapis.$key=$value" }
     }
+
+    private fun File.relativePath() = getRootRelativePath(layout)
 }

@@ -4,5 +4,5 @@ import org.gradle.api.file.ProjectLayout
 import java.io.File
 import kotlin.io.path.invariantSeparatorsPathString
 
-fun File.getRootRelativePathString(layout: ProjectLayout): String =
+fun File.getRootRelativePath(layout: ProjectLayout): String =
     relativeToOrNull(layout.settingsDirectory.asFile)?.toPath()?.invariantSeparatorsPathString ?: ".../$name"
