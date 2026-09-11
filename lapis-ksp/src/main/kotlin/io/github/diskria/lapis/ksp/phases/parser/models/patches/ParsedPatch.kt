@@ -21,12 +21,10 @@ class ParsedPatch(
     val initStrategy: InitStrategy?,
     val classDeclaration: KSClassDeclaration,
     val targetClassDeclaration: KSClassDeclaration?,
-
     val companionObjects: List<ParsedPatchCompanionObject>,
     val constructors: List<ParsedPatchConstructor>,
     val bodyProperties: List<ParsedPatchProperty>,
     val functions: List<ParsedPatchFunction>,
-
     val annotations: List<ParsedAnnotation>,
 ) : SymbolSource {
     override val symbol: KSNode = classDeclaration

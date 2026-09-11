@@ -40,6 +40,14 @@ inline fun <reified A : Annotation> JPAnnotationBuilder.setArgumentValue(
     setArrayArgumentValue(property, strings, "%S") { strings.forEach { +it } }
 }
 
+@JvmName("setClassArrayArgumentValue")
+inline fun <reified A : Annotation> JPAnnotationBuilder.setArgumentValue(
+    property: KProperty1<A, Array<KClass<*>>>,
+    types: List<IrTypeName>,
+) {
+    setArrayArgumentValue(property, types, "%T.class") { types.forEach { +it } }
+}
+
 @JvmName("setAnnotationArrayArgumentValue")
 inline fun <reified A : Annotation, reified EA : Annotation> JPAnnotationBuilder.setArgumentValue(
     property: KProperty1<A, Array<out EA>>,

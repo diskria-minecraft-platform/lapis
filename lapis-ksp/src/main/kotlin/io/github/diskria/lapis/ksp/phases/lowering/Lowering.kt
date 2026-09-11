@@ -117,7 +117,7 @@ class Lowering(
             side = patch.side,
             injections = patch.injections.flatMap(::lowerInjections),
             bridge = lowerMixinBridge(patch),
-            targetInternalName = patch.targetJvmClassName?.internalName,
+            targetClassName = patch.targetClassDeclaration?.asIrClassName(),
             mixinAnnotations = patch.mixinAnnotations.map(::lowerMixinAnnotation),
         )
 

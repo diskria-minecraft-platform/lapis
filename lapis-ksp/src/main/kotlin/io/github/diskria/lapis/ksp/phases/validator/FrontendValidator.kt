@@ -199,20 +199,6 @@ class FrontendValidator(
         kspRequire(hasPackageName) { "218" }
         kspRequire(isPublic) { "219" }
         val mixinAnnotations = resolveMixinAnnotations(annotations)
-        val originClassDeclaration = if (targetClassDeclaration != null) {
-            validateClassDeclaration(targetClassDeclaration)
-            val qualifiedName = targetClassDeclaration.qualifiedName?.asString()
-            val schema = validSchemas[qualifiedName]
-            if (schema != null) {
-                schema.originClassDeclaration
-            } else {
-                kspRequire(qualifiedName !in invalidSchemas) { "228" }
-                targetClassDeclaration
-            }
-        } else {
-            kspRequire(mixinAnnotations.isNotEmpty()) { "232" }
-            null
-        }
         kspRequire(isClass) { "235" }
         kspRequire(!isObject) { "236" }
         kspRequire(!isSealed) { "237" }
@@ -220,16 +206,16 @@ class FrontendValidator(
         val constructor = kspRequireNotNull(constructors.singleOrNull()) { "239" }
         constructor.kspRequire(constructor.isPublic) { "240" }
         val constructorParameters = constructor.parameters.mapNotNull {
-            runOrNullOnSkip { it.validate(originClassDeclaration) }
+            runOrNullOnSkip { it.validate(targetClassDeclaration) }
         }
         val (parsedInjectionFunctions, parsedRegularFunctions) = functions.partition {
             it.hasHookAnnotation || resolveMixinAnnotations(it.annotations).isNotEmpty()
         }
         val extensionProperties = bodyProperties.filter { it.hasExtensionAnnotation }.mapNotNull {
-            runOrNullOnSkip { it.validateAsExtension(originClassDeclaration) }
+            runOrNullOnSkip { it.validateAsExtension(targetClassDeclaration) }
         }
         val extensionFunctions = parsedRegularFunctions.filter { it.hasExtensionAnnotation }.mapNotNull {
-            runOrNullOnSkip { it.validateAsExtension(originClassDeclaration) }
+            runOrNullOnSkip { it.validateAsExtension(targetClassDeclaration) }
         }
         val shadowProperties = bodyProperties.filter { it.hasShadowAnnotation }.mapNotNull {
             runOrNullOnSkip { it.validateAsShadow() }
@@ -238,14 +224,14 @@ class FrontendValidator(
             runOrNullOnSkip { it.validateAsShadow() }
         }
         val injections = parsedInjectionFunctions.mapNotNull {
-            runOrNullOnSkip { it.validateAsInjection(isInCompanionObject = false, originClassDeclaration) }
+            runOrNullOnSkip { it.validateAsInjection(isInCompanionObject = false, targetClassDeclaration) }
         }
         val companionObjects = companionObjects.mapNotNull {
             runOrNullOnSkip { it.validate() }
         }
         val companionObjectInjections = companionObjects.flatMap { companionObject ->
             companionObject.functions.mapNotNull {
-                runOrNullOnSkip { it.validateAsInjection(isInCompanionObject = true, originClassDeclaration) }
+                runOrNullOnSkip { it.validateAsInjection(isInCompanionObject = true, targetClassDeclaration) }
             }
         }
         val hasStaticHooksOnly = constructorParameters.isEmpty()
@@ -263,7 +249,7 @@ class FrontendValidator(
             side = side,
             initStrategy = initStrategy,
             isImplRequired = !hasStaticHooksOnly,
-            targetJvmClassName = originClassDeclaration?.qualifiedName?.asString()?.let { JvmClassName.of(it) },
+            targetClassDeclaration = targetClassDeclaration,
 
             constructorParameters = constructorParameters,
             extensionSources = extensionProperties + extensionFunctions,
@@ -279,16 +265,15 @@ class FrontendValidator(
     }
 
     private fun ParsedPatchConstructorParameter.validate(
-        originClassDeclaration: KSClassDeclaration?
+        targetClassDeclaration: KSClassDeclaration?
     ): PatchConstructorParameter {
         validateType(type)
         return when {
             hasOriginAnnotation -> {
                 val typeClassDeclaration = type.toClassDeclaration()
-                validateClassDeclaration(typeClassDeclaration)
-                if (originClassDeclaration != null) {
-                    kspRequire(typeClassDeclaration == originClassDeclaration) { "308" }
-                }
+                kspRequire(
+                    validateClassDeclaration(typeClassDeclaration) == validateClassDeclaration(targetClassDeclaration)
+                ) { "308" }
                 kspRequire(type.arguments.none { it.variance != Variance.STAR }) { "309" }
                 PatchConstructorOriginParameter(typeClassDeclaration)
             }
@@ -298,7 +283,7 @@ class FrontendValidator(
     }
 
     private fun ParsedPatchProperty.validateAsExtension(
-        receiverClassDeclaration: KSClassDeclaration?,
+        targetClassDeclaration: KSClassDeclaration?,
     ): ExtensionProperty {
         validateType(type)
         kspRequireNotNull(getter) { "322" }
@@ -306,18 +291,17 @@ class FrontendValidator(
         kspRequire(isPublic) { "324" }
         kspRequire(!hasExtensionReceiver) { "325" }
         kspRequire(!isOpen && !isAbstract) { "327" }
-        validateClassDeclaration(receiverClassDeclaration)
         return ExtensionProperty(
             name = name,
             getterJvmName = getter.jvmName,
             setterJvmName = if (setter != null) kspRequireNotNull(setter.jvmName) { "332" } else null,
             type = type,
-            receiverClassDeclaration = receiverClassDeclaration,
+            receiverClassDeclaration = validateClassDeclaration(targetClassDeclaration),
         )
     }
 
     private fun ParsedPatchFunction.validateAsExtension(
-        receiverClassDeclaration: KSClassDeclaration?,
+        targetClassDeclaration: KSClassDeclaration?,
     ): ExtensionFunction {
         kspRequire(isPublic) { "342" }
         kspRequireNotNull(jvmName) { "343" }
@@ -329,13 +313,12 @@ class FrontendValidator(
                 type = validateType(it.type),
             )
         }
-        validateClassDeclaration(receiverClassDeclaration)
         return ExtensionFunction(
             name = name,
             jvmName = jvmName,
             parameters = parameters,
             returnType = returnType,
-            receiverClassDeclaration = receiverClassDeclaration,
+            receiverClassDeclaration = validateClassDeclaration(targetClassDeclaration),
         )
     }
 
@@ -385,7 +368,7 @@ class FrontendValidator(
 
     private fun ParsedPatchFunction.validateAsInjection(
         isInCompanionObject: Boolean,
-        originClassDeclaration: KSClassDeclaration?,
+        targetClassDeclaration: KSClassDeclaration?,
     ): PatchInjection {
         kspRequireNotNull(jvmName) { "408" }
         kspRequire(!hasTypeParameters) { "409" }
@@ -396,8 +379,8 @@ class FrontendValidator(
         }
         if (isInCompanionObject) {
             kspRequire(extensionReceiverClassDeclaration == null) { "438" }
-        } else if (originClassDeclaration != null && extensionReceiverClassDeclaration != null) {
-            kspRequire(extensionReceiverClassDeclaration == originClassDeclaration) { "441" }
+        } else if (extensionReceiverClassDeclaration != null) {
+            kspRequire(extensionReceiverClassDeclaration == validateClassDeclaration(targetClassDeclaration)) { "441" }
         }
         if (mixinAnnotations.isNotEmpty()) {
             kspRequire(!hasHookAnnotation) { "416" }

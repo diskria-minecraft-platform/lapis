@@ -9,7 +9,7 @@ import kotlin.reflect.KClass
 
 @Target(CLASS)
 @Retention(SOURCE)
-annotation class Patch(
+annotation class KMixin(
     val target: KClass<*> = Unit::class,
     val side: Side = Side.Common,
     val initStrategy: InitStrategy = InitStrategy.Lazy,

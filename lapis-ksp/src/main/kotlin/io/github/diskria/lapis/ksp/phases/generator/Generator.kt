@@ -114,11 +114,11 @@ class Generator(
             if (mixin.mixinAnnotations.isNotEmpty()) {
                 addAnnotations(mixin.mixinAnnotations.map { buildMixinAnnotation(it) })
             } else {
-                if (mixin.targetInternalName == null) {
+                if (mixin.targetClassName == null) {
                     lapisError("Target internal name cannot be null")
                 }
                 addAnnotation<Mixin> {
-                    setArgumentValue(Mixin::targets, listOf(mixin.targetInternalName))
+                    setArgumentValue(Mixin::value, listOf(mixin.targetClassName))
                 }
             }
             addModifiers(JPModifier.ABSTRACT)

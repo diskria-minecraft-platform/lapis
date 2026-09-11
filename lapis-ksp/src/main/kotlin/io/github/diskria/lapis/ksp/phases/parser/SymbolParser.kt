@@ -33,7 +33,7 @@ class SymbolParser(
     fun prepare(): ParserPrepareResult =
         ParserPrepareResult(
             resolver.getSymbolsAnnotatedWith<Class>().filterIsInstance<KSClassDeclaration>().toList(),
-            resolver.getSymbolsAnnotatedWith<Patch>().filterIsInstance<KSClassDeclaration>().toList(),
+            resolver.getSymbolsAnnotatedWith<KMixin>().filterIsInstance<KSClassDeclaration>().toList(),
         )
 
     fun parse(): ParserResult =
@@ -168,10 +168,10 @@ class SymbolParser(
         )
 
     private fun parsePatch(classDeclaration: KSClassDeclaration): ParsedPatch = with(classDeclaration) {
-        val patchAnnotation = findAnnotation<Patch>()
+        val kMixinAnnotation = findAnnotation<KMixin>()
         ParsedPatch(
             name = name,
-            side = patchAnnotation?.getArgumentValue(Patch::side) ?: Side.Common,
+            side = kMixinAnnotation?.getArgumentValue(KMixin::side) ?: Side.Common,
             isClass = isClass,
             isObject = isObject,
             isOpen = isExplicitlyOpen,
@@ -180,16 +180,13 @@ class SymbolParser(
             isTopLevel = parentDeclaration == null,
             hasPackageName = packageName.asString().isNotEmpty(),
             isPublic = isPublic(),
-            initStrategy = patchAnnotation?.getArgumentValue(Patch::initStrategy),
+            initStrategy = kMixinAnnotation?.getArgumentValue(KMixin::initStrategy),
             classDeclaration = classDeclaration,
-
-            targetClassDeclaration = patchAnnotation?.getArgumentValue(Patch::target)?.toClassDeclaration(),
-
+            targetClassDeclaration = kMixinAnnotation?.getArgumentValue(KMixin::target)?.toClassDeclaration(),
             companionObjects = companionObjectClassDeclarations.map(::parsePatchCompanionObject).toList(),
             constructors = constructorDeclarations.map(::parsePatchConstructor).toList(),
             bodyProperties = bodyPropertyDeclarations.map(::parsePatchBodyProperty).toList(),
             functions = functionDeclarations.map(::parsePatchFunction).toList(),
-
             annotations = annotations.map(::parseAnnotation).toList(),
         )
     }
