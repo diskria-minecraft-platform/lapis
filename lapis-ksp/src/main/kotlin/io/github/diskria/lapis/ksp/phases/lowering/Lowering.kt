@@ -8,7 +8,6 @@ import com.squareup.kotlinpoet.ksp.toTypeName
 import io.github.diskria.lapis.annotations.ConstructorHeadPhase
 import io.github.diskria.lapis.annotations.Op
 import io.github.diskria.lapis.ksp.common.JavaModifiers
-import io.github.diskria.lapis.ksp.common.binaryName
 import io.github.diskria.lapis.ksp.common.getMixinReference
 import io.github.diskria.lapis.ksp.extensions.common.lapisError
 import io.github.diskria.lapis.ksp.extensions.withInternalPrefix
@@ -44,8 +43,6 @@ class Lowering(
                 IrSchema(
                     className = schema.className,
                     descriptors = schema.descriptors.map(::lowerDescriptor),
-                    tweakAccessor = lowerTweakAccessor(schema),
-                    mixinAccessor = lowerMixinAccessor(schema, mixinSourcePackageLCP),
                 )
             },
             patches = patches,
@@ -78,95 +75,6 @@ class Lowering(
                 returnTypeName = descriptor.className,
             )
         }
-
-    private fun lowerTweakAccessor(schema: Schema): IrTweakAccessor? {
-        val descriptors = schema.descriptors.mapNotNull {
-            if (it.accessRequest !is TweakAccessRequest) {
-                return@mapNotNull null
-            }
-            it to it.accessRequest
-        }
-        if (schema.accessRequest == null && descriptors.isEmpty()) {
-            return null
-        }
-        val entries = mutableListOf<IrTweakAccessorEntry>()
-        if (schema.accessRequest is TweakAccessRequest) {
-            entries += IrTweakAccessorClassEntry(
-                removeFinal = schema.accessRequest.shouldRemoveFinal,
-            )
-        }
-        descriptors.forEach { (descriptor, accessRequest) ->
-            entries += when (descriptor) {
-                is InvokableDescriptor -> {
-                    val isConstructor = descriptor is ConstructorDescriptor
-                    IrTweakAccessorMethodEntry(
-                        name = descriptor.binaryName,
-                        parameterTypes = descriptor.functionTypeParameters.map { it.typeName },
-                        returnTypeName = if (isConstructor) null else descriptor.returnTypeName,
-                        removeFinal = accessRequest.shouldRemoveFinal,
-                    )
-                }
-
-                is FieldDescriptor -> {
-                    IrTweakAccessorFieldEntry(
-                        name = descriptor.mappingName,
-                        typeName = descriptor.fieldTypeName,
-                        removeFinal = accessRequest.shouldRemoveFinal,
-                    )
-                }
-            }
-        }
-        return IrTweakAccessor(
-            originatingFiles = listOfNotNull(schema.containingFile),
-            ownerJvmClassName = schema.originJvmClassName,
-            entries = entries,
-        )
-    }
-
-    private fun lowerMixinAccessor(schema: Schema, sourcePackageLCP: String?): IrMixinAccessor? {
-        val descriptors = schema.descriptors.mapNotNull {
-            if (it.accessRequest !is MixinAccessRequest) {
-                return@mapNotNull null
-            }
-            it to it.accessRequest
-        }
-        if (descriptors.isEmpty()) {
-            return null
-        }
-        val members = mutableListOf<IrMixinAccessorMember>()
-        descriptors.forEach { (descriptor, accessRequest) ->
-            if (descriptor is FieldDescriptor && accessRequest is MixinFieldAccessRequest) {
-                members += IrMixinAccessorFieldMember(
-                    name = descriptor.name,
-                    mappingName = descriptor.mappingName,
-                    typeName = descriptor.fieldTypeName,
-                    isStatic = descriptor.isStatic,
-                    removeFinal = accessRequest.shouldRemoveFinal,
-                    ops = accessRequest.ops,
-                    descriptorClassName = descriptor.className,
-                )
-            } else if (descriptor is InvokableDescriptor && accessRequest is MixinInvokableAccessRequest) {
-                members += IrMixinAccessorMethodMember(
-                    name = descriptor.name,
-                    mappingName = descriptor.binaryName,
-                    parameters = accessRequest.parameters,
-                    returnTypeName = descriptor.returnTypeName,
-                    isConstructor = descriptor is ConstructorDescriptor,
-                    isStatic = descriptor is ConstructorDescriptor || descriptor.isStatic,
-                    descriptorClassName = descriptor.className,
-                )
-            }
-        }
-        return IrMixinAccessor(
-            originatingFiles = listOfNotNull(schema.containingFile),
-            className = resolveMixinRelatedClassName(schema.className, sourcePackageLCP, "Accessor"),
-            side = schema.side,
-            targetInternalName = schema.originJvmClassName.internalName,
-            instanceTypeName = schema.originTypeName,
-            isAccessibleSchema = schema.isAccessible,
-            members = members,
-        )
-    }
 
     private fun lowerPatch(patch: Patch, mixinSourcePackageLCP: String?): IrPatch {
         val constructorArguments = patch.constructorParameters.map(::lowerPatchConstructorArgument)

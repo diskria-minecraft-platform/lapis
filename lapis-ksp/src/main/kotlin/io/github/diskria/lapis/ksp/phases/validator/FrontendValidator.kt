@@ -5,7 +5,6 @@ import com.google.devtools.ksp.symbol.KSDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.Variance
 import com.squareup.kotlinpoet.ksp.toClassName
-import io.github.diskria.lapis.annotations.AccessStrategy
 import io.github.diskria.lapis.annotations.Ats
 import io.github.diskria.lapis.annotations.Op
 import io.github.diskria.lapis.ksp.common.JavaModifiers
@@ -24,7 +23,6 @@ import io.github.diskria.lapis.ksp.phases.builtins.Builtins
 import io.github.diskria.lapis.ksp.phases.builtins.DescriptorWrapperBuiltin
 import io.github.diskria.lapis.ksp.phases.builtins.SimpleBuiltin
 import io.github.diskria.lapis.ksp.phases.lowering.asIrTypeName
-import io.github.diskria.lapis.ksp.phases.lowering.models.IrParameter
 import io.github.diskria.lapis.ksp.phases.parser.models.ParserResult
 import io.github.diskria.lapis.ksp.phases.parser.models.common.*
 import io.github.diskria.lapis.ksp.phases.parser.models.patches.*
@@ -93,15 +91,10 @@ class FrontendValidator(
             kspRequire(isTopLevel) { "92" }
         }
         kspRequire(hasPackageName) { "94" }
-        val accessRequest = resolveAccessRequest(
-            AccessMember.CLASS,
-            hasAccessAnnotation, accessStrategy, isAccessUnfinal, isAccessible,
-            emptyList(), emptyList(),
-        )
         val descriptors = descriptors.mapNotNull { parsedDescriptor ->
             val qualifiedName = parsedDescriptor.classDeclaration.qualifiedName?.asString() ?: return@mapNotNull null
             val descriptor = runOrNullOnSkip {
-                parsedDescriptor.validate(originClassDeclaration, originJvmClassName, isAccessible)
+                parsedDescriptor.validate(originClassDeclaration, originJvmClassName)
             }
             if (descriptor != null) {
                 validDescriptors[qualifiedName] = descriptor
@@ -113,12 +106,8 @@ class FrontendValidator(
         return Schema(
             symbol = symbol,
             classDeclaration = classDeclaration,
-
             originJvmClassName = originJvmClassName,
             originClassDeclaration = originClassDeclaration,
-            side = side,
-            isAccessible = isAccessible,
-            accessRequest = accessRequest,
             descriptors = descriptors,
         )
     }
@@ -126,7 +115,6 @@ class FrontendValidator(
     private fun ParsedDescriptor.validate(
         schemaOriginClassDeclaration: KSClassDeclaration,
         schemaOriginJvmClassName: JvmClassName,
-        isAccessibleSchema: Boolean,
     ): Descriptor {
         kspRequire(classDeclaration.typeParameters.isEmpty()) { "130" }
         kspRequire(
@@ -141,21 +129,14 @@ class FrontendValidator(
         if (hasFieldAnnotation) {
             kspRequire(genericArgument is ParsedDescriptorGenericArgumentSimpleType) { "136" }
             validateType(genericArgument.type)
-            val accessRequest = resolveAccessRequest(
-                AccessMember.FIELD,
-                hasAccessAnnotation, accessStrategy, isAccessUnfinal, isAccessibleSchema,
-                accessFieldOps, emptyList(),
-            )
-            if (accessRequest != null && accessRequest !is TweakAccessRequest && (isStatic || !isAccessibleSchema)) {
-                kspRequire(isObject) { "195" }
-            }
             return FieldDescriptor(
                 symbol = symbol,
                 classDeclaration = classDeclaration,
 
                 name = name,
                 receiverType = receiverType,
-                inaccessibleReceiverJvmClassName = if (isAccessibleSchema) null else schemaOriginJvmClassName,
+//                inaccessibleReceiverJvmClassName = if (isAccessibleSchema) null else schemaOriginJvmClassName, TODO
+                inaccessibleReceiverJvmClassName = schemaOriginJvmClassName,
                 mappingName = mappingName,
                 fieldType = genericArgument.type,
                 arrayComponentType = genericArgument.type.findArrayComponentType(
@@ -163,7 +144,6 @@ class FrontendValidator(
                     genericArgument.typeArguments.filterNotNull()
                 ),
                 isStatic = isStatic,
-                accessRequest = accessRequest,
             )
         }
         kspRequire(genericArgument is ParsedDescriptorGenericArgumentFunctionType) { "160" }
@@ -176,16 +156,6 @@ class FrontendValidator(
                 name = parameter.name,
             )
         }
-        val accessRequest = resolveAccessRequest(
-            AccessMember.INVOKABLE,
-            hasAccessAnnotation, accessStrategy, isAccessUnfinal, isAccessibleSchema,
-            emptyList(), functionTypeParameters,
-        )
-        if (accessRequest != null && accessRequest !is TweakAccessRequest &&
-            (hasConstructorAnnotation || isStatic || !isAccessibleSchema)
-        ) {
-            kspRequire(isObject) { "195" }
-        }
         return when {
             hasMethodAnnotation -> {
                 MethodDescriptor(
@@ -194,21 +164,18 @@ class FrontendValidator(
 
                     name = name,
                     receiverType = receiverType,
-                    inaccessibleReceiverJvmClassName = if (isAccessibleSchema) null else schemaOriginJvmClassName,
+//                    inaccessibleReceiverJvmClassName = if (isAccessibleSchema) null else schemaOriginJvmClassName, TODO
+                    inaccessibleReceiverJvmClassName = schemaOriginJvmClassName,
                     returnType = genericArgument.returnType,
                     mappingName = mappingName,
                     functionTypeParameters = functionTypeParameters,
                     isStatic = isStatic,
-                    accessRequest = accessRequest,
                 )
             }
 
             hasConstructorAnnotation -> {
                 kspRequire(genericArgument.returnType == null) { "192" }
                 kspRequire(!hasMappingNameAnnotation) { "193" }
-                if (accessRequest is MixinAccessRequest) {
-                    kspRequire(isAccessibleSchema) { "195" }
-                }
                 ConstructorDescriptor(
                     symbol = symbol,
                     classDeclaration = classDeclaration,
@@ -216,7 +183,6 @@ class FrontendValidator(
                     name = name,
                     returnType = receiverType,
                     functionTypeParameters = functionTypeParameters,
-                    accessRequest = accessRequest,
                 )
             }
 
@@ -233,19 +199,19 @@ class FrontendValidator(
         kspRequire(hasPackageName) { "218" }
         kspRequire(isPublic) { "219" }
         val mixinAnnotations = resolveMixinAnnotations(annotations)
-        val (isAccessibleTarget, originClassDeclaration) = if (targetClassDeclaration != null) {
+        val originClassDeclaration = if (targetClassDeclaration != null) {
             validateClassDeclaration(targetClassDeclaration)
             val qualifiedName = targetClassDeclaration.qualifiedName?.asString()
             val schema = validSchemas[qualifiedName]
             if (schema != null) {
-                schema.isAccessible to schema.originClassDeclaration
+                schema.originClassDeclaration
             } else {
                 kspRequire(qualifiedName !in invalidSchemas) { "228" }
-                true to targetClassDeclaration
+                targetClassDeclaration
             }
         } else {
             kspRequire(mixinAnnotations.isNotEmpty()) { "232" }
-            false to null
+            null
         }
         kspRequire(isClass) { "235" }
         kspRequire(!isObject) { "236" }
@@ -260,10 +226,10 @@ class FrontendValidator(
             it.hasHookAnnotation || resolveMixinAnnotations(it.annotations).isNotEmpty()
         }
         val extensionProperties = bodyProperties.filter { it.hasExtensionAnnotation }.mapNotNull {
-            runOrNullOnSkip { it.validateAsExtension(isAccessibleTarget, originClassDeclaration) }
+            runOrNullOnSkip { it.validateAsExtension(originClassDeclaration) }
         }
         val extensionFunctions = parsedRegularFunctions.filter { it.hasExtensionAnnotation }.mapNotNull {
-            runOrNullOnSkip { it.validateAsExtension(isAccessibleTarget, originClassDeclaration) }
+            runOrNullOnSkip { it.validateAsExtension(originClassDeclaration) }
         }
         val shadowProperties = bodyProperties.filter { it.hasShadowAnnotation }.mapNotNull {
             runOrNullOnSkip { it.validateAsShadow() }
@@ -332,7 +298,6 @@ class FrontendValidator(
     }
 
     private fun ParsedPatchProperty.validateAsExtension(
-        isAccessibleTarget: Boolean,
         receiverClassDeclaration: KSClassDeclaration?,
     ): ExtensionProperty {
         validateType(type)
@@ -340,7 +305,6 @@ class FrontendValidator(
         kspRequireNotNull(getter.jvmName) { "323" }
         kspRequire(isPublic) { "324" }
         kspRequire(!hasExtensionReceiver) { "325" }
-        kspRequire(isAccessibleTarget) { "326" }
         kspRequire(!isOpen && !isAbstract) { "327" }
         validateClassDeclaration(receiverClassDeclaration)
         return ExtensionProperty(
@@ -353,13 +317,11 @@ class FrontendValidator(
     }
 
     private fun ParsedPatchFunction.validateAsExtension(
-        isAccessibleTarget: Boolean,
         receiverClassDeclaration: KSClassDeclaration?,
     ): ExtensionFunction {
         kspRequire(isPublic) { "342" }
         kspRequireNotNull(jvmName) { "343" }
         kspRequire(extensionReceiverClassDeclaration == null) { "361" }
-        kspRequire(isAccessibleTarget) { "345" }
         kspRequire(!isOpen && !isAbstract) { "346" }
         val parameters = parameters.map {
             FunctionParameter(
@@ -846,54 +808,6 @@ class FrontendValidator(
             skipSymbol()
         }
         return ordinals.toSet()
-    }
-
-    private enum class AccessMember { CLASS, FIELD, INVOKABLE }
-
-    private fun SymbolSource.resolveAccessRequest(
-        member: AccessMember,
-        hasAccessAnnotation: Boolean,
-        accessStrategy: AccessStrategy?,
-        isAccessUnfinal: Boolean,
-        isAccessibleSchema: Boolean,
-        fieldOps: List<Op>,
-        functionTypeParameters: List<FunctionTypeParameter>,
-    ): AccessRequest? {
-        if (!hasAccessAnnotation) return null
-        kspRequireNotNull(accessStrategy) { "825" }
-        return when (accessStrategy) {
-            AccessStrategy.Tweak -> {
-                kspRequire(isAccessibleSchema) { "828" }
-                kspRequire(options.enableFabricTweaks || options.enableForgeTweaks) { "829" }
-                TweakAccessRequest(isAccessUnfinal)
-            }
-
-            AccessStrategy.Mixin -> when (member) {
-                AccessMember.CLASS -> skipWithError { "834" }
-                AccessMember.FIELD -> {
-                    kspRequire(fieldOps.isNotEmpty()) { "836" }
-                    MixinFieldAccessRequest(isAccessUnfinal, fieldOps)
-                }
-
-                AccessMember.INVOKABLE -> {
-                    kspRequire(!isAccessUnfinal) { "841" }
-                    val parameters = mutableListOf<IrParameter>()
-                    val anonymousParameterIndices = mutableListOf<Int>()
-                    functionTypeParameters.forEachIndexed { index, functionTypeParameter ->
-                        val name = functionTypeParameter.name
-                        if (name != null) {
-                            parameters += IrParameter(name, functionTypeParameter.typeName)
-                        } else {
-                            anonymousParameterIndices += index
-                        }
-                    }
-                    kspRequire(anonymousParameterIndices.isEmpty()) { "852" }
-                    MixinInvokableAccessRequest(parameters)
-                }
-            }
-
-            AccessStrategy.Reflection -> TODO()
-        }
     }
 
     private fun SymbolSource.resolveModifiers(modifiers: List<Modifier>, isMethod: Boolean): Set<Modifier> {

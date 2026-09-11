@@ -55,17 +55,16 @@ class SymbolParser(
         val isAccessible = classDeclaration.parentDeclarations(includeSelf = true).none {
             it.hasAnnotation<LocalClass>() || it.hasAnnotation<AnonymousClass>()
         }
-        val (currentJvmClassName, originClassDeclaration, side) = when {
+        val (currentJvmClassName, originClassDeclaration) = when {
             parentJvmClassName == null -> {
                 val type = classAnnotation?.getArgumentValue(Class::type)?.toClassDeclaration()
                 val qualifiedName = classAnnotation?.getArgumentValue(Class::name) ?: type?.qualifiedName?.asString()
                 val rootJvmClassName = qualifiedName?.let { JvmClassName.of(it) }
-                Triple(
+                Pair(
                     rootJvmClassName,
                     type ?: qualifiedName?.let {
                         resolver.getClassDeclarationByName(resolver.getKSNameFromString(it))
-                    },
-                    classAnnotation?.getArgumentValue(Class::side),
+                    }
                 )
             }
 
@@ -80,10 +79,9 @@ class SymbolParser(
                 } else {
                     innerClassAnnotation.getArgumentValue(InnerClass::delegate)?.toClassDeclaration()
                 }
-                Triple(
+                Pair(
                     innerJvmClassName,
                     classDeclaration,
-                    innerClassAnnotation.getArgumentValue(InnerClass::side),
                 )
             }
 
@@ -93,33 +91,29 @@ class SymbolParser(
                 val localJvmClassName = if (index != null && name != null) {
                     parentJvmClassName.local(index, name)
                 } else null
-                Triple(
+                Pair(
                     localJvmClassName,
                     localClassAnnotation.getArgumentValue(LocalClass::delegate)?.toClassDeclaration(),
-                    localClassAnnotation.getArgumentValue(LocalClass::side),
                 )
             }
 
             anonymousClassAnnotation != null -> {
                 val index = anonymousClassAnnotation.getArgumentValue(AnonymousClass::index)
                 val anonymousJvmClassName = index?.let { parentJvmClassName.anonymous(it) }
-                Triple(
+                Pair(
                     anonymousJvmClassName,
                     anonymousClassAnnotation.getArgumentValue(AnonymousClass::delegate)?.toClassDeclaration(),
-                    anonymousClassAnnotation.getArgumentValue(AnonymousClass::side),
                 )
             }
 
-            else -> Triple(null, null, null)
+            else -> Pair(null, null)
         }
-        val accessAnnotation = classDeclaration.findAnnotation<Access>()
         val (schemaClassDeclarations, descriptorClassDeclarations) = classDeclaration.innerClassDeclarations.partition {
             it.hasAnnotation<Class>() || it.hasAnnotation<InnerClass>() ||
                 it.hasAnnotation<LocalClass>() || it.hasAnnotation<AnonymousClass>()
         }
         return ParsedSchema(
             classDeclaration = classDeclaration,
-            side = side ?: Side.Common,
             isTopLevel = classDeclaration.parentDeclaration == null,
             hasPackageName = classDeclaration.packageName.asString().isNotEmpty(),
             originClassDeclaration = originClassDeclaration,
@@ -128,10 +122,6 @@ class SymbolParser(
             hasInnerClassAnnotation = innerClassAnnotation != null,
             hasLocalClassAnnotation = localClassAnnotation != null,
             hasAnonymousClassAnnotation = anonymousClassAnnotation != null,
-            isAccessible = isAccessible,
-            hasAccessAnnotation = accessAnnotation != null,
-            isAccessUnfinal = accessAnnotation?.getArgumentValue(Access::unfinal) == true,
-            accessStrategy = accessAnnotation?.getArgumentValue(Access::strategy),
             descriptors = descriptorClassDeclarations.map(::parseDescriptor),
             nestedSchemas = schemaClassDeclarations.map { parseSchema(it, currentJvmClassName) },
         )
@@ -141,7 +131,6 @@ class SymbolParser(
         val fieldAnnotation = classDeclaration.findAnnotation<Field<*>>()
         val methodAnnotation = classDeclaration.findAnnotation<Method<*>>()
         val constructorAnnotation = classDeclaration.findAnnotation<Constructor<*>>()
-        val accessAnnotation = classDeclaration.findAnnotation<Access>()
         val mappingNameAnnotation = classDeclaration.findAnnotation<MappingName>()
         val annotationTypeArgument = fieldAnnotation?.findTypeArgument("T")
             ?: methodAnnotation?.findTypeArgument("F")
@@ -157,10 +146,6 @@ class SymbolParser(
                 methodAnnotation?.getArgumentValue(Method<*>::static) == true,
             hasMappingNameAnnotation = mappingNameAnnotation != null,
             explicitMappingName = mappingNameAnnotation?.getArgumentValue(MappingName::name, explicit = true),
-            hasAccessAnnotation = accessAnnotation != null,
-            isAccessUnfinal = accessAnnotation?.getArgumentValue(Access::unfinal) == true,
-            accessFieldOps = accessAnnotation?.getArgumentValue(Access::field).orEmpty(),
-            accessStrategy = accessAnnotation?.getArgumentValue(Access::strategy),
             genericArgument = annotationTypeArgument?.let { parseDescriptorGenericArgument(it) },
         )
     }

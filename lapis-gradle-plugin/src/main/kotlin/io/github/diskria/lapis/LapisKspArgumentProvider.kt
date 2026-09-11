@@ -29,14 +29,6 @@ abstract class LapisKspArgumentProvider @Inject constructor(
 
     @Optional
     @Input
-    val enableFabricTweaks: Property<Boolean>,
-
-    @Optional
-    @Input
-    val enableForgeTweaks: Property<Boolean>,
-
-    @Optional
-    @Input
     val disableLCP: Property<Boolean>,
 
     @Optional
@@ -69,8 +61,6 @@ abstract class LapisKspArgumentProvider @Inject constructor(
             "uniqueModPrefix" to uniqueModPrefix,
             "mixinPackage" to normalizedMixinPackage,
             builtinsPackage.orNull?.let { "builtinsPackage" to it },
-            enableFabricTweaks.orNull?.let { "enableFabricTweaks" to it },
-            enableForgeTweaks.orNull?.let { "enableForgeTweaks" to it },
             disableLCP.orNull?.let { "disableLCP" to it },
             disableBuiltinsPackageIsolationWarning.orNull?.let { "disableBuiltinsPackageIsolationWarning" to it },
         ).map { (key, value) ->

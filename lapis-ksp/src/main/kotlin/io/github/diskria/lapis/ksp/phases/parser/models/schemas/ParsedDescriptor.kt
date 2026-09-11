@@ -2,8 +2,6 @@ package io.github.diskria.lapis.ksp.phases.parser.models.schemas
 
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSNode
-import io.github.diskria.lapis.annotations.AccessStrategy
-import io.github.diskria.lapis.annotations.Op
 import io.github.diskria.lapis.ksp.phases.parser.models.common.SymbolSource
 
 class ParsedDescriptor(
@@ -14,10 +12,6 @@ class ParsedDescriptor(
     val hasMethodAnnotation: Boolean,
     val hasConstructorAnnotation: Boolean,
     val isStatic: Boolean,
-    val hasAccessAnnotation: Boolean,
-    val isAccessUnfinal: Boolean,
-    val accessStrategy: AccessStrategy?,
-    val accessFieldOps: List<Op>,
     val hasMappingNameAnnotation: Boolean,
     val explicitMappingName: String?,
     val genericArgument: ParsedDescriptorGenericArgument?,

@@ -8,5 +8,4 @@ enum class GenInternalPrefix(val value: String) {
     LOCAL("local"),
     SHARE("share"),
     ARGUMENT("argument"),
-    ACCESS("access"),
 }

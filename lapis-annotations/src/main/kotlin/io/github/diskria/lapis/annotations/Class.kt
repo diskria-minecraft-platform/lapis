@@ -12,7 +12,6 @@ import kotlin.reflect.KClass
 annotation class Class(
     val type: KClass<*> = Unit::class,
     val name: String = "",
-    val side: Side = Side.Common,
 )
 
 @Target(CLASS)
@@ -21,7 +20,6 @@ annotation class InnerClass(
     val type: KClass<*> = Unit::class,
     val name: String = "",
     val delegate: KClass<*> = Any::class,
-    val side: Side = Side.Common,
 )
 
 @Target(CLASS)
@@ -30,7 +28,6 @@ annotation class LocalClass(
     val index: Int,
     val name: String,
     val delegate: KClass<*> = Any::class,
-    val side: Side = Side.Common,
 )
 
 @Target(CLASS)
@@ -38,7 +35,6 @@ annotation class LocalClass(
 annotation class AnonymousClass(
     val index: Int,
     val delegate: KClass<*>,
-    val side: Side = Side.Common,
 )
 
 @Target(CLASS)
@@ -56,13 +52,3 @@ annotation class Method<F : Function<*>>(
 @Target(CLASS, FUNCTION)
 @Retention(SOURCE)
 annotation class Constructor<F : Function<*>>
-
-@Target(CLASS)
-@Retention(SOURCE)
-annotation class Access(
-    val strategy: AccessStrategy = AccessStrategy.Mixin,
-    val field: Array<Op> = [Op.Get, Op.Set],
-    val unfinal: Boolean = false,
-)
-
-enum class AccessStrategy { Mixin, Tweak, Reflection }

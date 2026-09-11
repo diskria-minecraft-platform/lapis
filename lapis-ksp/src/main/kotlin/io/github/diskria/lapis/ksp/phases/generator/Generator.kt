@@ -15,8 +15,6 @@ import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.ksp.writeTo
 import io.github.diskria.lapis.annotations.InitStrategy
 import io.github.diskria.lapis.annotations.Op
-import io.github.diskria.lapis.ksp.common.JvmClassName
-import io.github.diskria.lapis.ksp.extensions.capitalize
 import io.github.diskria.lapis.ksp.extensions.common.Builder
 import io.github.diskria.lapis.ksp.extensions.common.lapisError
 import io.github.diskria.lapis.ksp.extensions.jp.*
@@ -32,7 +30,6 @@ import io.github.diskria.lapis.ksp.phases.generator.models.GenExtensionPack
 import io.github.diskria.lapis.ksp.phases.generator.models.GenExtensionPackAccumulator
 import io.github.diskria.lapis.ksp.phases.generator.models.GenInternalPrefix.*
 import io.github.diskria.lapis.ksp.phases.generator.models.GenMixinConfig
-import io.github.diskria.lapis.ksp.phases.generator.models.GenTweakAccessorConfig
 import io.github.diskria.lapis.ksp.phases.lowering.IrVisibilityModifier
 import io.github.diskria.lapis.ksp.phases.lowering.asIrClassName
 import io.github.diskria.lapis.ksp.phases.lowering.asIrParameterizedTypeName
@@ -48,8 +45,6 @@ import io.github.diskria.poetesse.kotlin.*
 import kotlinx.serialization.json.Json
 import org.objectweb.asm.Opcodes
 import org.spongepowered.asm.mixin.*
-import org.spongepowered.asm.mixin.gen.Accessor
-import org.spongepowered.asm.mixin.gen.Invoker
 import org.spongepowered.asm.mixin.injection.*
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable
@@ -79,7 +74,6 @@ class Generator(
                     }
                 }
             }
-            schema.mixinAccessor?.let { generateMixinAccessor(it, extensionPackAccumulator) }
             if (extensionPackAccumulator.isNotEmpty()) {
                 generateExtensionPack(schema.className, extensionPackAccumulator)
             }
@@ -93,11 +87,7 @@ class Generator(
                 generateExtensionPack(patch.className, extensionPackAccumulator)
             }
         }
-        generateMixinConfig(schemas.mapNotNull { it.mixinAccessor } + patches.map { it.mixin })
-        val tweakAccessors = schemas.mapNotNull { it.tweakAccessor }
-        if (tweakAccessors.isNotEmpty()) {
-            generateTweakAccessorConfigs(tweakAccessors)
-        }
+        generateMixinConfig(patches.map { it.mixin })
     }
 
     private fun <T : IrDescriptorWrapperImpl<T>> generateDescriptorWrapperImpl(
@@ -965,106 +955,6 @@ class Generator(
         extensionPackAccumulator.accumulate(extensionPackEntities, bridge.originatingFiles)
     }
 
-    private fun generateMixinAccessor(
-        accessor: IrMixinAccessor,
-        extensionPackAccumulator: GenExtensionPackAccumulator,
-    ) {
-        val extensionPackEntities = mutableListOf<GenKotlinEntity>()
-        generateJavaFile(accessor, aggregating = false) {
-            addAnnotation<Mixin> {
-                setArgumentValue(Mixin::targets, listOf(accessor.targetInternalName))
-            }
-            accessor.members.forEach { member ->
-                val isDelegated = !accessor.isAccessibleSchema && !member.isStatic
-                val delegateParameter = if (isDelegated) IrParameter("delegate", accessor.instanceTypeName) else null
-                val jvmNamespace = if (isDelegated) member.descriptorClassName else null
-                val isDescriptorExtension = member.isStatic || isDelegated
-                val extensionReceiverTypeName = if (isDescriptorExtension) {
-                    member.descriptorClassName
-                } else {
-                    accessor.instanceTypeName
-                }
-                val extensionName = if (isDescriptorExtension) "invoke" else member.name
-                val interfaceCodeBlock = if (delegateParameter != null) {
-                    buildKotlinCodeBlock("(%N as %T)") { +delegateParameter; +accessor.className }
-                } else {
-                    buildKotlinCodeBlock(if (member.isStatic) "%T" else "(this as %T)") { +accessor.className }
-                }
-                when (member) {
-                    is IrMixinAccessorFieldMember -> {
-                        member.ops.forEach { op ->
-                            val name = op.name.lowercase() + member.mappingName.capitalize()
-                            val parameters = when (op) {
-                                Op.Get -> emptyList()
-                                Op.Set -> listOf(IrSetterParameter(member.typeName))
-                            }
-                            val callable = buildJavaMethod(name) {
-                                addModifiers(if (member.isStatic) JPModifier.STATIC else JPModifier.ABSTRACT)
-                                if (op == Op.Set && member.removeFinal) {
-                                    addAnnotation<Mutable>()
-                                }
-                                addAnnotation<Accessor>()
-                                setParameters(parameters)
-                                if (op == Op.Get) {
-                                    setReturnType(member.typeName)
-                                }
-                                if (member.isStatic) setStubBody()
-                            }.also(::addMethod).let { GenJavaMethodEntity(it, parameters) }
-
-                            extensionPackEntities += buildKotlinFunction(extensionName) {
-                                delegateParameter?.let { setContextParameters(listOf(it)) }
-                                setReceiverType(extensionReceiverTypeName)
-                                addModifiers(KPModifier.INLINE)
-                                if (isDescriptorExtension) addModifiers(KPModifier.OPERATOR)
-                                setParameters(parameters)
-                                if (op == Op.Get) {
-                                    setReturnType(member.typeName)
-                                }
-                                setBody {
-                                    code_("%L.${callable.callFormat}", isReturn = op == Op.Get) {
-                                        +interfaceCodeBlock; callable()
-                                    }
-                                }
-                            }.let(::GenKotlinFunctionEntity)
-                        }
-                    }
-
-                    is IrMixinAccessorMethodMember -> {
-                        val name = if (member.isConstructor) "create" else "invoke" + member.mappingName.capitalize()
-                        val invokerMethod = buildJavaMethod(name) {
-                            addModifiers(if (member.isStatic) JPModifier.STATIC else JPModifier.ABSTRACT)
-                            addAnnotation<Invoker> {
-                                if (member.isConstructor) {
-                                    setArgumentValue(Invoker::value, member.mappingName)
-                                }
-                            }
-                            setParameters(member.parameters)
-                            setReturnType(member.returnTypeName)
-                            if (member.isStatic) setStubBody()
-                        }.also(::addMethod)
-                        extensionPackEntities += buildKotlinFunction(
-                            name = if (isDescriptorExtension) "invoke" else member.name,
-                            jvmNamespace = jvmNamespace
-                        ) {
-                            addModifiers(KPModifier.INLINE)
-                            if (isDescriptorExtension) addModifiers(KPModifier.OPERATOR)
-                            delegateParameter?.let { setContextParameters(listOf(it)) }
-                            setReceiverType(extensionReceiverTypeName)
-                            setParameters(member.parameters)
-                            setReturnType(member.returnTypeName)
-                            setBody {
-                                code_("%L.%N(${member.parameters.format})", isReturn = member.isReturn) {
-                                    +interfaceCodeBlock; +invokerMethod; member.parameters.forEach { +it }
-                                }
-                            }
-                        }.let(::GenKotlinFunctionEntity)
-                    }
-                }
-            }
-        }
-        extensionPackAccumulator.accumulate(extensionPackEntities, accessor.originatingFiles)
-    }
-
     private fun generateExtensionPack(sourceClassName: IrClassName, accumulator: GenExtensionPackAccumulator) {
         val extensionPack = GenExtensionPack(
             originatingFiles = accumulator.originatingFiles,
@@ -1126,35 +1016,6 @@ class Generator(
         generateResourceFile(mixinConfig, aggregating = true) {
             val qualifiedNames = mixinBlueprints.groupBy({ it.side }, { it.className })
             configJson.encodeToString(GeneratedMixinsJson.of(options.mixinPackage, qualifiedNames))
-        }
-    }
-
-    private fun generateTweakAccessorConfigs(tweakAccessors: List<IrTweakAccessor>) {
-        val originatingFiles = tweakAccessors.flatMap { it.originatingFiles }
-        if (options.enableFabricTweaks) {
-            val fabricTweaksConfig = GenTweakAccessorConfig(originatingFiles, "fabric-tweaks.config")
-            generateResourceFile(fabricTweaksConfig, aggregating = true) {
-                buildTweaksConfig(tweakAccessors, buildTweak = IrTweakAccessorEntry::buildWidenerTweak)
-            }
-        }
-        if (options.enableForgeTweaks) {
-            val forgeTweaksConfig = GenTweakAccessorConfig(originatingFiles, "forge-tweaks.config")
-            generateResourceFile(forgeTweaksConfig, aggregating = true) {
-                buildTweaksConfig(tweakAccessors, buildTweak = IrTweakAccessorEntry::buildTransformerTweak)
-            }
-        }
-    }
-
-    private fun buildTweaksConfig(
-        tweakAccessors: List<IrTweakAccessor>,
-        buildTweak: (IrTweakAccessorEntry, JvmClassName) -> String
-    ): String = buildString {
-        tweakAccessors.forEach { tweakAccessor ->
-            appendLine("# ${tweakAccessor.ownerJvmClassName.innerName}")
-            tweakAccessor.entries.forEach { entry ->
-                appendLine(buildTweak(entry, tweakAccessor.ownerJvmClassName))
-            }
-            appendLine()
         }
     }
 

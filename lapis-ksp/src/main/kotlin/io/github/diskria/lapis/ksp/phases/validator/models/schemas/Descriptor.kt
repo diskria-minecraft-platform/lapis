@@ -19,7 +19,6 @@ sealed class Descriptor(
     val functionTypeParameters: List<FunctionTypeParameter>,
     val returnType: KSType?,
     val isStatic: Boolean,
-    val accessRequest: AccessRequest?,
 ) : SourceFile(symbol, classDeclaration) {
     val receiverTypeName: IrTypeName = receiverType.asIrTypeName()
     val returnTypeName: IrTypeName? = returnType?.asIrTypeName()
@@ -36,7 +35,6 @@ class FieldDescriptor(
     val fieldType: KSType,
     val arrayComponentType: KSType?,
     isStatic: Boolean,
-    accessRequest: AccessRequest?,
 ) : Descriptor(
     symbol,
     classDeclaration,
@@ -47,7 +45,6 @@ class FieldDescriptor(
     emptyList(),
     fieldType,
     isStatic,
-    accessRequest,
 ) {
     val fieldTypeName: IrTypeName = fieldType.asIrTypeName()
 }
@@ -63,7 +60,6 @@ sealed class InvokableDescriptor(
     functionTypeParameters: List<FunctionTypeParameter>,
     returnType: KSType?,
     isStatic: Boolean,
-    accessRequest: AccessRequest?,
 ) : Descriptor(
     symbol,
     classDeclaration,
@@ -74,7 +70,6 @@ sealed class InvokableDescriptor(
     functionTypeParameters,
     returnType,
     isStatic,
-    accessRequest,
 )
 
 open class MethodDescriptor(
@@ -88,7 +83,6 @@ open class MethodDescriptor(
     returnType: KSType?,
     functionTypeParameters: List<FunctionTypeParameter>,
     isStatic: Boolean,
-    accessRequest: AccessRequest?,
 ) : InvokableDescriptor(
     symbol,
     name,
@@ -99,7 +93,6 @@ open class MethodDescriptor(
     functionTypeParameters,
     returnType,
     isStatic,
-    accessRequest,
 )
 
 class ConstructorDescriptor(
@@ -109,9 +102,8 @@ class ConstructorDescriptor(
     classDeclaration: KSClassDeclaration,
     returnType: KSType,
     functionTypeParameters: List<FunctionTypeParameter>,
-    accessRequest: AccessRequest?,
 ) : InvokableDescriptor(
-    symbol, name, "", classDeclaration, returnType, null, functionTypeParameters, returnType, false, accessRequest,
+    symbol, name, "", classDeclaration, returnType, null, functionTypeParameters, returnType, false,
 )
 
 class FunctionTypeParameter(val name: String?, val type: KSType) {

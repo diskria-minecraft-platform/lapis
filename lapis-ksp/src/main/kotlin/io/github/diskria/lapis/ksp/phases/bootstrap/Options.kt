@@ -8,8 +8,6 @@ data class Options(
     val mixinPackage: String,
     val builtinsPackage: String = mixinPackage.takeIf { "." in it }?.substringBeforeLast(".") ?: "",
     val mixinGeneratedSubpackage: String? = null,
-    val enableFabricTweaks: Boolean = false,
-    val enableForgeTweaks: Boolean = false,
     val disableLCP: Boolean = false,
     val disableBuiltinsPackageIsolationWarning: Boolean = false,
 ) {
