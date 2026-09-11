@@ -17,9 +17,10 @@ abstract class LapisKspArgumentProvider @Inject constructor(
     @Input
     val uniqueModPrefix: Property<String>,
 
+    @Optional
     @PathSensitive(PathSensitivity.RELATIVE)
-    @InputFile
-    val mixinConfigFile: Provider<RegularFile>,
+    @InputFiles
+    val mixinConfig: Provider<RegularFile>,
 
     @Optional
     @Input
@@ -46,14 +47,20 @@ abstract class LapisKspArgumentProvider @Inject constructor(
 ) : CommandLineArgumentProvider {
 
     override fun asArguments(): Iterable<String> {
-        val uniqueModPrefix = uniqueModPrefix.orNull ?: error("Property 'uniqueModPrefix' is required but not set.")
-        val configFile = mixinConfigFile.get().asFile
+        val uniqueModPrefix = uniqueModPrefix.orNull
+            ?: error("Property 'lapis.uniqueModPrefix' is required but not set.")
+        val mixinConfigFile = mixinConfig.orNull?.asFile
+            ?: error("Property 'lapis.mixinConfig' is required but not set.")
+        require(mixinConfigFile.isFile) {
+            val configPath = mixinConfigFile.getRootRelativePathString(layout)
+            "Mixin config ($configPath) does not exist."
+        }
         val mixinPackage = runCatching {
-            Json.parseToJsonElement(configFile.readText()).jsonObject["package"]?.jsonPrimitive?.contentOrNull
+            Json.parseToJsonElement(mixinConfigFile.readText()).jsonObject["package"]?.jsonPrimitive?.contentOrNull
         }.getOrNull() ?: run {
-            val configPath = configFile.getRootRelativePathString(layout)
+            val configPath = mixinConfigFile.getRootRelativePathString(layout)
             error(
-                "Invalid or unparseable JSON in mixin config '${configFile.name}' ($configPath). " +
+                "Invalid or unparseable mixin config ($configPath). " +
                     "Ensure the file is valid JSON and contains a 'package' field."
             )
         }
