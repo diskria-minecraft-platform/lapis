@@ -55,13 +55,11 @@ abstract class LapisKspArgumentProvider @Inject constructor(
         if (!mixinConfigFile.isFile) {
             error("Mixin config file (${mixinConfigFile.relativePath()}) does not exist.")
         }
-        val jsonObject = runCatching {
-            Json.parseToJsonElement(mixinConfigFile.readText()).jsonObject
-        }.getOrElse {
+        val jsonObject = runCatching { Json.parseToJsonElement(mixinConfigFile.readText()).jsonObject }.getOrElse {
             error("Cannot parse mixin config (${mixinConfigFile.relativePath()}). Ensure the file contains valid JSON.")
         }
-        val mixinPackage = jsonObject["package"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-            ?: error("Missing or empty 'package' field in mixin config (${mixinConfigFile.relativePath()}).")
+        val mixinPackage = jsonObject["package"]?.jsonPrimitive?.contentOrNull?.removeSuffix(".")
+            ?: error("Missing 'package' field in mixin config (${mixinConfigFile.relativePath()}).")
         return listOfNotNull(
             "uniqueModPrefix" to uniqueModPrefix,
             "mixinPackage" to mixinPackage,
