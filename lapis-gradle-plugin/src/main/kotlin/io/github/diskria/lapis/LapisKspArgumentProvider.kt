@@ -37,6 +37,10 @@ abstract class LapisKspArgumentProvider @Inject constructor(
     @Input
     val disableLCP: Property<Boolean>,
 
+    @Optional
+    @Input
+    val disableBuiltinsPackageIsolationWarning: Property<Boolean>,
+
     @Internal
     val layout: ProjectLayout,
 ) : CommandLineArgumentProvider {
@@ -60,6 +64,7 @@ abstract class LapisKspArgumentProvider @Inject constructor(
             enableFabricTweaks.orNull?.let { "enableFabricTweaks" to it },
             enableForgeTweaks.orNull?.let { "enableForgeTweaks" to it },
             disableLCP.orNull?.let { "disableLCP" to it },
+            disableBuiltinsPackageIsolationWarning.orNull?.let { "disableBuiltinsPackageIsolationWarning" to it },
         ).map { (key, value) -> "lapis.$key=$value" }
     }
 }

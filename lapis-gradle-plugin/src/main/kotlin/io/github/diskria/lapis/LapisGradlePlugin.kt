@@ -70,6 +70,7 @@ class LapisGradlePlugin : Plugin<Project> {
                             lapisExtension.enableFabricTweaks,
                             lapisExtension.enableForgeTweaks,
                             lapisExtension.disableLCP,
+                            lapisExtension.disableBuiltinsPackageIsolationWarning,
                         )
                     )
                 }

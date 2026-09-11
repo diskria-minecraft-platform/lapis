@@ -11,6 +11,7 @@ abstract class LapisExtension @Inject internal constructor(objects: ObjectFactor
     val enableFabricTweaks = objects.property<Boolean>()
     val enableForgeTweaks = objects.property<Boolean>()
     val disableLCP = objects.property<Boolean>()
+    val disableBuiltinsPackageIsolationWarning = objects.property<Boolean>()
     val sourceSets = objects.domainObjectContainer(LapisSourceSetSpec::class.java)
 
     fun sourceSets(configure: NamedDomainObjectContainer<LapisSourceSetSpec>.() -> Unit) {
