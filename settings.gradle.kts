@@ -3,7 +3,7 @@ plugins {
 }
 
 projektor {
-    version = "0.9.1"
+    version = "0.10.0"
     license { mit() }
     monorepo {
         gradlePlugin(":lapis-gradle-plugin", "lapis")
