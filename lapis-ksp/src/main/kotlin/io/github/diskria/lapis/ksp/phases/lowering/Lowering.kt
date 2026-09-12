@@ -8,7 +8,7 @@ import com.squareup.kotlinpoet.ksp.toTypeName
 import io.github.diskria.lapis.ksp.common.JavaModifiers
 import io.github.diskria.lapis.ksp.extensions.withInternalPrefix
 import io.github.diskria.lapis.ksp.logging.Logger
-import io.github.diskria.lapis.ksp.phases.bootstrap.Options
+import io.github.diskria.lapis.ksp.logging.KspArguments
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
 import io.github.diskria.lapis.ksp.phases.lowering.models.common.*
 import io.github.diskria.lapis.ksp.phases.lowering.types.*
@@ -20,13 +20,13 @@ import io.github.diskria.poetesse.kotlin.*
 import kotlin.reflect.KClass
 
 class Lowering(
-    private val options: Options,
+    private val kspArguments: KspArguments,
     @Suppress("unused") private val logger: Logger,
 ) {
     private val patches: MutableList<IrPatch> = mutableListOf()
 
     fun lower(result: ValidatorResult): IrResult {
-        val mixinSourcePackageLCP = if (options.disableLCP) null else {
+        val mixinSourcePackageLCP = if (kspArguments.disableLCP) null else {
             findMixinSourcePackageLCP(result.patches)
         }
         patches += result.patches.map { lowerPatch(it, mixinSourcePackageLCP) }
@@ -187,8 +187,8 @@ class Lowering(
     ): IrClassName {
         val sourcePackageName = sourceClassName.packageName
         val mixinPackageName = buildString {
-            append(options.mixinPackage)
-            options.mixinGeneratedSubpackage?.let { append(".$it") }
+            append(kspArguments.mixinPackage)
+            kspArguments.mixinGeneratedSubpackage?.let { append(".$it") }
             if (sourcePackageName != null && sourcePackageLCP != null && sourcePackageName != sourcePackageLCP) {
                 append(".${sourcePackageName.removePrefix("$sourcePackageLCP.")}")
             }
@@ -234,7 +234,7 @@ class Lowering(
         }.orEmpty()
 
     private fun String.withUniqueModPrefix(): String =
-        withInternalPrefix(options.uniqueModPrefix)
+        withInternalPrefix(kspArguments.uniqueModPrefix)
 }
 
 fun KClass<*>.asIrTypeName(): IrTypeName =

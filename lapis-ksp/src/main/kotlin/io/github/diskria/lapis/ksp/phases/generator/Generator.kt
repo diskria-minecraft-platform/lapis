@@ -12,7 +12,7 @@ import io.github.diskria.lapis.ksp.extensions.jp.*
 import io.github.diskria.lapis.ksp.extensions.kp.*
 import io.github.diskria.lapis.ksp.extensions.withInternalPrefix
 import io.github.diskria.lapis.ksp.logging.Logger
-import io.github.diskria.lapis.ksp.phases.bootstrap.Options
+import io.github.diskria.lapis.ksp.logging.KspArguments
 import io.github.diskria.lapis.ksp.phases.generator.builders.*
 import io.github.diskria.lapis.ksp.phases.generator.models.GenExtensionPack
 import io.github.diskria.lapis.ksp.phases.generator.models.GenExtensionPackAccumulator
@@ -31,7 +31,7 @@ import kotlinx.serialization.json.Json
 import org.spongepowered.asm.mixin.*
 
 class Generator(
-    private val options: Options,
+    private val kspArguments: KspArguments,
     private val codeGenerator: CodeGenerator,
     @Suppress("unused") private val logger: Logger,
 ) {
@@ -657,7 +657,7 @@ class Generator(
         val mixinConfig = GenMixinConfig(mixinBlueprints.flatMap { it.originatingFiles }, "mixins.json")
         generateResourceFile(mixinConfig, aggregating = true) {
             val qualifiedNames = mixinBlueprints.groupBy({ it.env }, { it.className })
-            configJson.encodeToString(GeneratedMixinsJson.of(options.mixinPackage, qualifiedNames))
+            configJson.encodeToString(GeneratedMixinsJson.of(kspArguments.mixinPackage, qualifiedNames))
         }
     }
 

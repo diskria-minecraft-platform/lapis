@@ -1,8 +1,7 @@
 package io.github.diskria.lapis.ksp.phases
 
-enum class LapisPhase {
+enum class ProcessingPhase {
     BOOTSTRAP,
-    BUILTINS,
     PARSING,
     VALIDATION,
     TRANSFORMATION,

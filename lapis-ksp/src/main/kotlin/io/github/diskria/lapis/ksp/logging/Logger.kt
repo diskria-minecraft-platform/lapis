@@ -4,11 +4,11 @@ import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.symbol.FileLocation
 import com.google.devtools.ksp.symbol.KSNode
 import com.google.devtools.ksp.symbol.NonExistLocation
-import io.github.diskria.lapis.ksp.phases.LapisPhase
+import io.github.diskria.lapis.ksp.phases.ProcessingPhase
 
 class Logger(private val logger: KSPLogger) {
 
-    private var currentPhase: LapisPhase = LapisPhase.entries.first()
+    private var currentPhase: ProcessingPhase = ProcessingPhase.BOOTSTRAP
 
     fun info(message: String, symbol: KSNode? = null) {
         logger.info(buildFullMessage(message, symbol))
@@ -27,7 +27,7 @@ class Logger(private val logger: KSPLogger) {
         throw LapisException(message)
     }
 
-    fun setPhase(phase: LapisPhase) {
+    fun setPhase(phase: ProcessingPhase) {
         currentPhase = phase
     }
 

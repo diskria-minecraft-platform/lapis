@@ -1,9 +1,9 @@
-package io.github.diskria.lapis.ksp.phases.bootstrap
+package io.github.diskria.lapis.ksp.logging
 
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class Options(
+data class KspArguments(
     val uniqueModPrefix: String,
     val mixinPackage: String,
     val builtinsPackage: String = mixinPackage.takeIf { "." in it }?.substringBeforeLast(".") ?: "",

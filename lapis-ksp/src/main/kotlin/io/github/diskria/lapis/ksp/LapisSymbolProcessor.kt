@@ -4,9 +4,9 @@ import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.symbol.KSAnnotated
+import io.github.diskria.lapis.ksp.logging.KspArguments
 import io.github.diskria.lapis.ksp.logging.Logger
-import io.github.diskria.lapis.ksp.phases.LapisPhase
-import io.github.diskria.lapis.ksp.phases.bootstrap.Options
+import io.github.diskria.lapis.ksp.phases.ProcessingPhase
 import io.github.diskria.lapis.ksp.phases.generator.Generator
 import io.github.diskria.lapis.ksp.phases.lowering.Lowering
 import io.github.diskria.lapis.ksp.phases.lowering.models.IrPatch
@@ -14,24 +14,24 @@ import io.github.diskria.lapis.ksp.phases.parser.SymbolParser
 import io.github.diskria.lapis.ksp.phases.validator.FrontendValidator
 import java.util.*
 
-class CoreProcessor(
-    private val options: Options,
+class LapisSymbolProcessor(
+    private val kspArguments: KspArguments,
     private val codeGenerator: CodeGenerator,
     private val logger: Logger,
 ) : SymbolProcessor {
 
-    private val lowering: Lowering = Lowering(options, logger)
+    private val lowering: Lowering = Lowering(kspArguments, logger)
     private val patches: SortedMap<String, IrPatch> = sortedMapOf()
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
         val parser = SymbolParser(resolver, logger)
-        logger.setPhase(LapisPhase.PARSING)
+        logger.setPhase(ProcessingPhase.PARSING)
         val parserResult = parser.parse()
 
-        logger.setPhase(LapisPhase.VALIDATION)
+        logger.setPhase(ProcessingPhase.VALIDATION)
         val validatorResult = FrontendValidator(logger).validate(parserResult)
 
-        logger.setPhase(LapisPhase.TRANSFORMATION)
+        logger.setPhase(ProcessingPhase.TRANSFORMATION)
         val irResult = lowering.lower(validatorResult)
         irResult.patches.forEach { patches[it.className.qualifiedName] = it }
 
@@ -47,7 +47,7 @@ class CoreProcessor(
     }
 
     private fun generate() {
-        logger.setPhase(LapisPhase.GENERATION)
-        Generator(options, codeGenerator, logger).generate(patches.values.toList())
+        logger.setPhase(ProcessingPhase.GENERATION)
+        Generator(kspArguments, codeGenerator, logger).generate(patches.values.toList())
     }
 }
