@@ -1,10 +1,8 @@
 package io.github.diskria.lapis.ksp.phases.parser.helpers
 
-import com.google.devtools.ksp.symbol.KSAnnotation
+import com.google.devtools.ksp.processing.KSBuiltIns
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSType
-import io.github.diskria.lapis.ksp.common.KSBaseTypes
-import io.github.diskria.lapis.ksp.common.isUnit
 import io.github.diskria.lapis.ksp.extensions.common.castOrNull
 import io.github.diskria.lapis.ksp.extensions.ks.name
 import kotlin.enums.enumEntries
@@ -13,34 +11,16 @@ class AnnotationArgumentValue(
     val rawValue: Any,
     private val keepDefault: Boolean = false,
 ) {
-    fun asBoolean(): Boolean? =
-        rawValue.castOrNull<Boolean>()?.filterDefault { !it }
-
-    fun asInt(): Int? =
-        rawValue.castOrNull<Int>()?.filterDefault { it == -1 }
-
-    fun asLong(): Long? =
-        rawValue.castOrNull<Long>()?.filterDefault { it == -1L }
-
-    fun asFloat(): Float? =
-        rawValue.castOrNull<Float>()?.filterDefault { it == -1f }
-
-    fun asDouble(): Double? =
-        rawValue.castOrNull<Double>()?.filterDefault { it == -1.0 }
-
     fun asString(): String? =
         rawValue.castOrNull<String>()?.filterDefault { it.isEmpty() }
 
-    fun asClassType(baseTypes: KSBaseTypes): KSType? =
-        rawValue.castOrNull<KSType>()?.filterDefault { it.isUnit(baseTypes) }
+    fun asClassType(builtIns: KSBuiltIns): KSType? =
+        rawValue.castOrNull<KSType>()?.filterDefault { it == builtIns.unitType }
 
     inline fun <reified E : Enum<E>> asEnum(default: E? = null): E? {
         val entryName = rawValue.castOrNull<KSClassDeclaration>()?.name?.filterDefault { it == default?.name }
         return enumEntries<E>().find { it.name == entryName }
     }
-
-    fun asAnnotation(): KSAnnotation? =
-        rawValue.castOrNull<KSAnnotation>()
 
     fun asArray(): Iterable<AnnotationArgumentValue>? {
         val items = when (rawValue) {

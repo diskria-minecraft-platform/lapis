@@ -3,9 +3,6 @@ package io.github.diskria.lapis.ksp.extensions.ks
 import com.google.devtools.ksp.*
 import com.google.devtools.ksp.symbol.*
 
-val KSClassDeclaration.starProjectedType: KSType
-    get() = asStarProjectedType()
-
 val KSClassDeclaration.type: KSType
     get() = asType(emptyList())
 

@@ -177,5 +177,3 @@ fun GenJavaEntity.toCodeBlock(asCall: Boolean = true): JPCodeBlock = buildJavaCo
     if (asCall) this@toCodeBlock()
     else +this@toCodeBlock
 }
-
-val nullJavaCodeBlock: JPCodeBlock = buildJavaCodeBlock("null")

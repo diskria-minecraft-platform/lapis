@@ -12,8 +12,6 @@ import io.github.diskria.lapis.ksp.phases.lowering.types.IrClassName
 import io.github.diskria.lapis.ksp.phases.lowering.types.IrTypeName
 import io.github.diskria.poetesse.kotlin.*
 
-val KPNothing: KPClassName = NOTHING
-
 val KPString: KPClassName = STRING
 val KPList: KPClassName = LIST
 val KPSet: KPClassName = SET
@@ -153,17 +151,6 @@ fun buildKotlinObject(
     builder: Builder<KPTypeBuilder> = {}
 ): KPType =
     KPType.objectBuilder(name).apply {
-        addModifiers(visibility.kotlin)
-        builder()
-    }.build()
-
-fun buildKotlinTypeAlias(
-    name: String,
-    typeName: IrTypeName,
-    visibility: IrVisibilityModifier = IrVisibilityModifier.PUBLIC,
-    builder: Builder<KPTypeAliasBuilder> = {}
-): KPTypeAlias =
-    KPTypeAlias.builder(name, typeName.kotlin).apply {
         addModifiers(visibility.kotlin)
         builder()
     }.build()

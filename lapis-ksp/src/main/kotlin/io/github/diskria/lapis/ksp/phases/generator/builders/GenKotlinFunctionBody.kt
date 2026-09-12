@@ -30,11 +30,4 @@ value class GenKotlinFunctionBody(private val builder: KPFunctionBuilder) {
             code_(buildKotlinCodeBlock(format, argumentsBuilder))
         }
     }
-
-    fun GenKotlinFunctionBody.throw_(
-        format: String,
-        argumentsBuilder: Builder<IrKotlinCodeBlock.Arguments> = {}
-    ) {
-        code_(buildKotlinCodeBlock("throw $format", argumentsBuilder))
-    }
 }

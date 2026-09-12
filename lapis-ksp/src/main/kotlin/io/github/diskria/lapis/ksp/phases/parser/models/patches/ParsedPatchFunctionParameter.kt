@@ -9,7 +9,5 @@ class ParsedPatchFunctionParameter(
     override val symbol: KSNode,
     val name: String?,
     val type: KSType?,
-    val typeArguments: List<KSType?>,
-    val hasDefaultArgument: Boolean,
     val annotations: List<ParsedAnnotation>,
 ) : SymbolSource

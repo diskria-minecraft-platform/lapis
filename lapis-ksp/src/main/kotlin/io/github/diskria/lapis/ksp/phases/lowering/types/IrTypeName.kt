@@ -1,7 +1,5 @@
 package io.github.diskria.lapis.ksp.phases.lowering.types
 
-import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
-import io.github.diskria.lapis.ksp.extensions.common.lapisError
 import io.github.diskria.lapis.ksp.extensions.kp.*
 import io.github.diskria.lapis.ksp.phases.lowering.*
 import io.github.diskria.poetesse.java.*
@@ -39,15 +37,6 @@ open class IrTypeName(
         }
     }
 
-    val is64bit: Boolean by lazy {
-        if (boxed) {
-            false
-        } else {
-            val primitiveType = getJavaPrimitiveType()
-            primitiveType == JPLong || primitiveType == JPDouble
-        }
-    }
-
     private val javaArrayType: JPArrayTypeName? by lazy {
         val arrayComponentType = when (val kotlin = kotlin) {
             KPBooleanArray -> JPBoolean
@@ -69,30 +58,9 @@ open class IrTypeName(
         JPArrayTypeName.of(arrayComponentType)
     }
 
-    val rawClassName: IrClassName
-        get() = when (val kotlin = this.kotlin) {
-            is KPClassName -> kotlin.asIrClassName()
-            is KPParameterizedTypeName -> kotlin.rawType.asIrClassName()
-            else -> lapisError("Cannot get raw class")
-        }
-
-    fun parameterizedBy(vararg typeArguments: IrTypeName): IrParameterizedTypeName =
-        rawClassName.kotlin.parameterizedBy(typeArguments.map { it.kotlin }).asIrParameterizedTypeName()
-
-    fun parameterizedByStar(): IrParameterizedTypeName =
-        parameterizedBy(KPStar.asIrWildcardTypeName())
-
     fun box(): IrTypeName =
         if (boxed) this
         else IrTypeName(kotlin, true)
-
-    fun unbox(): IrTypeName =
-        if (boxed) IrTypeName(kotlin, false)
-        else this
-
-    fun makeNullable(): IrTypeName =
-        if (kotlin.isNullable) this
-        else IrTypeName(kotlin.copy(nullable = true))
 
     fun makeNotNullable(): IrTypeName =
         if (kotlin.isNullable) IrTypeName(kotlin.copy(nullable = false))
@@ -118,11 +86,4 @@ open class IrTypeName(
 
     override fun hashCode(): Int =
         kotlin.hashCode()
-
-    companion object {
-        val VOID: IrTypeName = Void::class.asIrTypeName()
-    }
 }
-
-fun IrTypeName?.orVoid(): IrTypeName =
-    this ?: IrTypeName.VOID

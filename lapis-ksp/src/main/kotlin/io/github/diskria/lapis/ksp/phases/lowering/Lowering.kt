@@ -240,11 +240,6 @@ class Lowering(
 fun KClass<*>.asIrTypeName(): IrTypeName =
     asTypeName().asIrTypeName()
 
-fun KClass<*>.asIrParameterizedTypeName(
-    vararg typeArguments: IrTypeName = arrayOf(KPStar.asIrWildcardTypeName())
-): IrParameterizedTypeName =
-    asIrTypeName().parameterizedBy(*typeArguments)
-
 fun KPTypeName.asIrTypeName(): IrTypeName =
     IrTypeName(this)
 

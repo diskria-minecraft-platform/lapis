@@ -1,7 +1,5 @@
 package io.github.diskria.lapis.ksp.extensions
 
-import io.github.diskria.lapis.ksp.phases.generator.models.GenInternalPrefix
-
 fun String.capitalize(): String =
     replaceFirstChar {
         if (it.isLowerCase()) it.titlecase()
@@ -11,11 +9,5 @@ fun String.capitalize(): String =
 fun String.quoted(): String =
     "'$this'"
 
-fun String.doubleQuoted(): String =
-    "\"$this\""
-
-fun String.withInternalPrefix(prefix: String): String =
+fun String.withInternalPrefix(prefix: String = "lapis"): String =
     "_${prefix}_$this"
-
-fun String.withInternalPrefix(prefix: GenInternalPrefix = GenInternalPrefix.BUILTIN): String =
-    withInternalPrefix(prefix.value)

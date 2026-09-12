@@ -109,7 +109,4 @@ value class IrKotlinCodeBlock(private val builder: KPCodeBlockBuilder) {
     }
 }
 
-fun Boolean.toKotlinCodeBlock(): KPCodeBlock = buildKotlinCodeBlock("%L") { +this@toKotlinCodeBlock }
 fun IrParameter.toKotlinCodeBlock(): KPCodeBlock = buildKotlinCodeBlock("%N") { +this@toKotlinCodeBlock }
-
-val nullKotlinCodeBlock: KPCodeBlock = buildKotlinCodeBlock("null")

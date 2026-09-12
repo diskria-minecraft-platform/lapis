@@ -1,6 +1,9 @@
 package io.github.diskria.lapis.ksp.phases.lowering.types
 
-import io.github.diskria.lapis.ksp.extensions.jp.*
+import io.github.diskria.lapis.ksp.extensions.jp.JPList
+import io.github.diskria.lapis.ksp.extensions.jp.JPMap
+import io.github.diskria.lapis.ksp.extensions.jp.JPSet
+import io.github.diskria.lapis.ksp.extensions.jp.JPString
 import io.github.diskria.lapis.ksp.extensions.kp.KPList
 import io.github.diskria.lapis.ksp.extensions.kp.KPMap
 import io.github.diskria.lapis.ksp.extensions.kp.KPSet
@@ -17,8 +20,6 @@ class IrClassName(override val kotlin: KPClassName) : IrTypeName(kotlin) {
     val simpleName: String = kotlin.simpleName
     val nestedName: String = kotlin.simpleNames.joinToString(".")
     val qualifiedName: String = listOfNotNull(packageName, nestedName).joinToString(".")
-    val binaryName: String get() = java.binaryName
-    val internalName: String get() = java.internalName
 
     override val java: JPClassName by lazy {
         box().getJavaPrimitiveType(allowVoid = false) as? JPClassName ?: when (kotlin) {

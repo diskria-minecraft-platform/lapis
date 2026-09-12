@@ -4,7 +4,6 @@ import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.symbol.FileLocation
 import com.google.devtools.ksp.symbol.KSNode
 import com.google.devtools.ksp.symbol.NonExistLocation
-import io.github.diskria.lapis.ksp.Lapis
 import io.github.diskria.lapis.ksp.phases.LapisPhase
 
 class Logger(private val logger: KSPLogger) {
@@ -33,7 +32,7 @@ class Logger(private val logger: KSPLogger) {
     }
 
     private fun buildFullMessage(message: String, symbol: KSNode?): String = buildString {
-        appendLine("[${Lapis.NAME}] [Phase: $currentPhase]")
+        appendLine("[Lapis] [Phase: $currentPhase]")
         appendLine(message.trimEnd())
         symbol?.let {
             val locationText = when (val location = it.location) {

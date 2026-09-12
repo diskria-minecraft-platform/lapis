@@ -4,7 +4,6 @@ import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.symbol.KSAnnotated
-import io.github.diskria.lapis.ksp.common.KSBaseTypes
 import io.github.diskria.lapis.ksp.logging.Logger
 import io.github.diskria.lapis.ksp.phases.LapisPhase
 import io.github.diskria.lapis.ksp.phases.bootstrap.Options
@@ -25,13 +24,12 @@ class CoreProcessor(
     private val patches: SortedMap<String, IrPatch> = sortedMapOf()
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
-        val baseTypes = KSBaseTypes(resolver.builtIns)
-        val parser = SymbolParser(resolver, baseTypes, logger)
+        val parser = SymbolParser(resolver, logger)
         logger.setPhase(LapisPhase.PARSING)
         val parserResult = parser.parse()
 
         logger.setPhase(LapisPhase.VALIDATION)
-        val validatorResult = FrontendValidator(logger, options).validate(parserResult)
+        val validatorResult = FrontendValidator(logger).validate(parserResult)
 
         logger.setPhase(LapisPhase.TRANSFORMATION)
         val irResult = lowering.lower(validatorResult)

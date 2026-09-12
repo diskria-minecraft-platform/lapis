@@ -1,8 +1,8 @@
 package io.github.diskria.lapis.ksp.phases.lowering.models
 
 import com.google.devtools.ksp.symbol.KSFile
-import io.github.diskria.lapis.annotations.InitStrategy
 import io.github.diskria.lapis.annotations.Env
+import io.github.diskria.lapis.annotations.InitStrategy
 import io.github.diskria.lapis.ksp.phases.lowering.models.common.IrMixinAnnotation
 import io.github.diskria.lapis.ksp.phases.lowering.types.IrClassName
 import io.github.diskria.poetesse.java.JPTypeKind

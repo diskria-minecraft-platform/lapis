@@ -6,8 +6,6 @@ import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.symbol.*
 import io.github.diskria.lapis.annotations.*
 import io.github.diskria.lapis.annotations.Origin
-import io.github.diskria.lapis.ksp.common.KSBaseTypes
-import io.github.diskria.lapis.ksp.common.isUnit
 import io.github.diskria.lapis.ksp.extensions.common.castOrNull
 import io.github.diskria.lapis.ksp.extensions.common.lapisError
 import io.github.diskria.lapis.ksp.extensions.ks.*
@@ -24,7 +22,6 @@ import kotlin.reflect.KProperty1
 
 class SymbolParser(
     private val resolver: Resolver,
-    private val baseTypes: KSBaseTypes,
     @Suppress("unused") private val logger: Logger,
 ) {
     fun prepare(): ParserPrepareResult =
@@ -151,8 +148,6 @@ class SymbolParser(
             symbol = parameter,
             name = name?.asString(),
             type = type,
-            typeArguments = type.typeArguments,
-            hasDefaultArgument = hasDefault,
             annotations = annotations.map(::parseAnnotation).toList(),
         )
     }
@@ -209,8 +204,8 @@ class SymbolParser(
         property: KProperty1<A, KClass<*>>,
         explicit: Boolean = false,
     ): KSType? =
-        getArgumentValue(property, baseTypes, explicit)
+        getArgumentValue(property, resolver.builtIns, explicit)
 
     private fun KSFunctionDeclaration.getReturnTypeOrNull(): KSType? =
-        returnType?.resolve()?.takeIf { !it.isUnit(baseTypes) }
+        returnType?.resolve()?.takeIf { it != resolver.builtIns.unitType }
 }

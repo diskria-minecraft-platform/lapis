@@ -1,8 +1,6 @@
 package io.github.diskria.lapis.ksp.extensions.kp
 
 import com.squareup.kotlinpoet.AnnotationSpec.UseSiteTarget
-import com.squareup.kotlinpoet.ContextParameter
-import com.squareup.kotlinpoet.ExperimentalKotlinPoetApi
 import io.github.diskria.lapis.ksp.extensions.common.Builder
 import io.github.diskria.lapis.ksp.phases.generator.builders.GenKotlinFunctionBody
 import io.github.diskria.lapis.ksp.phases.lowering.models.IrParameter
@@ -39,9 +37,4 @@ fun KPFunctionBuilder.addParameter(parameter: IrParameter) {
 
 fun KPFunctionBuilder.setParameters(parameters: List<IrParameter>) {
     parameters.forEach(::addParameter)
-}
-
-@OptIn(ExperimentalKotlinPoetApi::class)
-fun KPFunctionBuilder.setContextParameters(parameters: List<IrParameter>) {
-    contextParameters(parameters.map { ContextParameter(it.name, it.typeName.kotlin) })
 }

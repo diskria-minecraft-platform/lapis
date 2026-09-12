@@ -3,8 +3,8 @@ package io.github.diskria.lapis.ksp.phases.validator.models.patches
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import io.github.diskria.lapis.ksp.phases.lowering.asIrTypeName
+import io.github.diskria.lapis.ksp.phases.lowering.models.IrParameter
 import io.github.diskria.lapis.ksp.phases.lowering.types.IrTypeName
-import io.github.diskria.lapis.ksp.phases.validator.models.common.FunctionParameter
 import io.github.diskria.lapis.ksp.phases.validator.models.common.MixinAnnotation
 import io.github.diskria.poetesse.java.JPModifier
 
@@ -70,3 +70,7 @@ class ShadowFunction(
     val mixinAnnotations: List<MixinAnnotation>,
     override val modifiers: Set<JPModifier>,
 ) : BridgeSourceFunction(name, jvmName, parameters, returnType), PatchShadowSource
+
+class FunctionParameter(val name: String, private val type: KSType) {
+    fun asIrParameter(): IrParameter = IrParameter(name, type.asIrTypeName())
+}

@@ -2,7 +2,6 @@ package io.github.diskria.lapis.ksp.phases.generator.builders
 
 import io.github.diskria.lapis.ksp.extensions.common.Builder
 import io.github.diskria.lapis.ksp.extensions.jp.buildJavaCodeBlock
-import io.github.diskria.lapis.ksp.phases.lowering.types.IrClassName
 import io.github.diskria.poetesse.java.JPCodeBlock
 import io.github.diskria.poetesse.java.JPMethodBuilder
 
@@ -45,26 +44,6 @@ value class GenJavaMethodBody(private val builder: JPMethodBuilder) {
         argumentsBuilder: Builder<IrJavaCodeBlock.Arguments> = {}
     ) {
         code_(buildJavaCodeBlock("throw $format", argumentsBuilder))
-    }
-
-    @Suppress("LocalVariableName")
-    fun GenJavaMethodBody.try_(
-        block_: Builder<IrJavaCodeBlock>,
-        catchingClassName: IrClassName,
-        catch_: Builder<IrJavaCodeBlock>? = null,
-        finally_: Builder<IrJavaCodeBlock>? = null,
-    ) {
-        builder.beginControlFlow(buildJavaCodeBlock("try"))
-        buildJavaCodeBlock(block_)
-        builder.nextControlFlow(buildJavaCodeBlock("catch (%T %L)") {
-            +catchingClassName; +(if (catch_ == null) "ignored" else "e")
-        })
-        catch_?.let(::buildJavaCodeBlock)
-        finally_?.let {
-            builder.nextControlFlow(buildJavaCodeBlock("finally"))
-            buildJavaCodeBlock(it)
-        }
-        builder.endControlFlow()
     }
 
     fun GenJavaMethodBody.synchronized_(lock: JPCodeBlock, body: Builder<IrJavaCodeBlock>) {

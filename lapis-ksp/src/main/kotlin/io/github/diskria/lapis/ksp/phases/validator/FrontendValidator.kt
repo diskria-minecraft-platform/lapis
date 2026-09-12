@@ -8,7 +8,6 @@ import io.github.diskria.lapis.ksp.extensions.common.lapisError
 import io.github.diskria.lapis.ksp.extensions.ks.isValid
 import io.github.diskria.lapis.ksp.extensions.ks.toClassDeclaration
 import io.github.diskria.lapis.ksp.logging.Logger
-import io.github.diskria.lapis.ksp.phases.bootstrap.Options
 import io.github.diskria.lapis.ksp.phases.parser.models.ParserResult
 import io.github.diskria.lapis.ksp.phases.parser.models.common.*
 import io.github.diskria.lapis.ksp.phases.parser.models.patches.*
@@ -20,10 +19,8 @@ import javax.lang.model.element.Modifier
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.contract
 
-class FrontendValidator(
-    private val logger: Logger,
-    private val options: Options,
-) {
+class FrontendValidator(private val logger: Logger) {
+
     fun validate(result: ParserResult): ValidatorResult =
         ValidatorResult(
             patches = result.patches.mapNotNull {

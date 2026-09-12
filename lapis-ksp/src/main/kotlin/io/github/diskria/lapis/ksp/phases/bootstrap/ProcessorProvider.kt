@@ -5,7 +5,6 @@ import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.processing.SymbolProcessorEnvironment
 import com.google.devtools.ksp.processing.SymbolProcessorProvider
 import io.github.diskria.lapis.ksp.CoreProcessor
-import io.github.diskria.lapis.ksp.Lapis
 import io.github.diskria.lapis.ksp.extensions.elements
 import io.github.diskria.lapis.ksp.extensions.quoted
 import io.github.diskria.lapis.ksp.logging.Logger
@@ -90,7 +89,7 @@ class ProcessorProvider : SymbolProcessorProvider {
         removePrefix(ARGUMENT_PREFIX)
 
     companion object {
-        private val ARGUMENT_PREFIX: String = Lapis.NAME.lowercase() + "."
+        private const val ARGUMENT_PREFIX: String = "lapis."
     }
 }
 

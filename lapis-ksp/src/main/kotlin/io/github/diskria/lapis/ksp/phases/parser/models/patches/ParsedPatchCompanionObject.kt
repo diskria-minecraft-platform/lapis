@@ -5,7 +5,6 @@ import io.github.diskria.lapis.ksp.phases.parser.models.common.SymbolSource
 
 class ParsedPatchCompanionObject(
     override val symbol: KSNode,
-
     val isPublic: Boolean,
     val functions: List<ParsedPatchFunction>,
 ) : SymbolSource
