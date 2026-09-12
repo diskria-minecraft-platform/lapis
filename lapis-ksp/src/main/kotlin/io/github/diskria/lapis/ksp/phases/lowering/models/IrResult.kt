@@ -9,16 +9,10 @@ import io.github.diskria.poetesse.java.JPTypeKind
 import io.github.diskria.poetesse.kotlin.KPTypeKind
 
 class IrResult(
-    val schemas: List<IrSchema>,
     val patches: List<IrPatch>,
 )
 
 sealed class IrSourceFile(val className: IrClassName)
-
-class IrSchema(
-    className: IrClassName,
-    val descriptors: List<IrDescriptor>,
-) : IrSourceFile(className)
 
 abstract class IrMixinRelatedBlueprint(typeKind: JPTypeKind) : IrJavaFileBlueprint(typeKind) {
     abstract val side: Side

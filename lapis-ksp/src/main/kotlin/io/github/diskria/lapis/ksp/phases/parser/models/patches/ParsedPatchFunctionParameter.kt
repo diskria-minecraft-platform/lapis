@@ -7,26 +7,9 @@ import io.github.diskria.lapis.ksp.phases.parser.models.common.SymbolSource
 
 class ParsedPatchFunctionParameter(
     override val symbol: KSNode,
-
     val name: String?,
     val type: KSType?,
     val typeArguments: List<KSType?>,
     val hasDefaultArgument: Boolean,
-
-    val hasOriginAnnotation: Boolean,
-    val hasCancelAnnotation: Boolean,
-    val hasOrdinalAnnotation: Boolean,
-
-    val hasParamAnnotation: Boolean,
-    val explicitParamName: String?,
-
-    val hasLocalAnnotation: Boolean,
-    val explicitLocalName: String?,
-    val explicitLocalOrdinal: Int?,
-
-    val hasShareAnnotation: Boolean,
-    val explicitShareKey: String?,
-    val isShareExported: Boolean,
-
     val annotations: List<ParsedAnnotation>,
 ) : SymbolSource

@@ -6,7 +6,6 @@ import io.github.diskria.lapis.annotations.InitStrategy
 import io.github.diskria.lapis.annotations.Side
 import io.github.diskria.lapis.ksp.phases.validator.models.common.MixinAnnotation
 import io.github.diskria.lapis.ksp.phases.validator.models.common.SourceFile
-import io.github.diskria.lapis.ksp.phases.validator.models.patches.hooks.PatchInjection
 
 class Patch(
     symbol: KSNode,
