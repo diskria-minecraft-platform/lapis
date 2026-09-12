@@ -6,7 +6,6 @@ import com.squareup.kotlinpoet.asTypeName
 import com.squareup.kotlinpoet.ksp.toClassName
 import com.squareup.kotlinpoet.ksp.toTypeName
 import io.github.diskria.lapis.ksp.common.JavaModifiers
-import io.github.diskria.lapis.ksp.extensions.withInternalPrefix
 import io.github.diskria.lapis.ksp.logging.KspArguments
 import io.github.diskria.lapis.ksp.logging.Logger
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
@@ -232,7 +231,7 @@ class Lowering(
         }.orEmpty()
 
     private fun String.withUniqueModPrefix(): String =
-        withInternalPrefix(kspArguments.uniqueModPrefix)
+        kspArguments.uniqueModPrefix + this
 }
 
 fun KClass<*>.asIrTypeName(): IrTypeName =
