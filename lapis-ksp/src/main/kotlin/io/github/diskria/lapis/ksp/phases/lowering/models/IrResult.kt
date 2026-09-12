@@ -30,7 +30,7 @@ class IrMixin(
     override val className: IrClassName,
     override val env: Env,
     val injections: List<IrInjection>,
-    val bridge: IrMixinBridge?,
+    val duckInterface: IrMixinDuckInterface?,
     val targetClassName: IrClassName?,
     val mixinAnnotations: List<IrMixinAnnotation>,
 ) : IrMixinRelatedBlueprint(JPTypeKind.CLASS)
@@ -47,4 +47,4 @@ class IrPatchImpl(
 
 sealed interface IrPatchImplConstructorParameter
 class IrPatchImplConstructorInstanceParameter(val className: IrClassName) : IrPatchImplConstructorParameter
-object IrPatchImplConstructorInternalBridgeParameter : IrPatchImplConstructorParameter
+object IrPatchImplConstructorDuckInterfaceParameter : IrPatchImplConstructorParameter

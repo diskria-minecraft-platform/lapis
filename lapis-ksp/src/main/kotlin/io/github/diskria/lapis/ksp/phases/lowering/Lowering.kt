@@ -7,8 +7,8 @@ import com.squareup.kotlinpoet.ksp.toClassName
 import com.squareup.kotlinpoet.ksp.toTypeName
 import io.github.diskria.lapis.ksp.common.JavaModifiers
 import io.github.diskria.lapis.ksp.extensions.withInternalPrefix
-import io.github.diskria.lapis.ksp.logging.Logger
 import io.github.diskria.lapis.ksp.logging.KspArguments
+import io.github.diskria.lapis.ksp.logging.Logger
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
 import io.github.diskria.lapis.ksp.phases.lowering.models.common.*
 import io.github.diskria.lapis.ksp.phases.lowering.types.*
@@ -62,7 +62,7 @@ class Lowering(
                         add(IrPatchImplConstructorInstanceParameter(it.className))
                     }
                     if (patch.shadowSources.isNotEmpty()) {
-                        add(IrPatchImplConstructorInternalBridgeParameter)
+                        add(IrPatchImplConstructorDuckInterfaceParameter)
                     }
                 },
                 initStrategy = patch.initStrategy,
@@ -75,27 +75,27 @@ class Lowering(
             className = resolveMixinClassName(patch.className, sourcePackageLCP),
             env = patch.env,
             injections = patch.injections.flatMap(::lowerInjections),
-            bridge = lowerMixinBridge(patch),
+            duckInterface = lowerMixinDuckInterface(patch),
             targetClassName = patch.targetClassDeclaration?.asIrClassName(),
             mixinAnnotations = patch.mixinAnnotations.map(::lowerMixinAnnotation),
         )
 
-    private fun lowerMixinBridge(patch: Patch): IrMixinBridge? {
-        val entries = patch.extensionSources.map(::lowerMixinExternalBridgeEntry) +
-            patch.shadowSources.map(::lowerMixinInternalBridgeEntry)
+    private fun lowerMixinDuckInterface(patch: Patch): IrMixinDuckInterface? {
+        val entries = patch.extensionSources.map(::lowerMixinDuckExtensionEntry) +
+            patch.shadowSources.map(::lowerMixinDuckShadowEntry)
         return if (entries.isNotEmpty()) {
-            IrMixinBridge(
+            IrMixinDuckInterface(
                 originatingFiles = listOfNotNull(patch.containingFile),
-                className = patch.className.derived("Bridge"),
+                className = patch.className.derived("Duck"),
                 entries = entries,
             )
         } else null
     }
 
-    private fun lowerMixinExternalBridgeEntry(source: PatchExtensionSource): IrMixinBridgeExtensionEntry =
+    private fun lowerMixinDuckExtensionEntry(source: PatchExtensionSource): IrMixinDuckExtensionEntry =
         when (source) {
             is ExtensionProperty -> with(source) {
-                IrMixinBridgeExtensionProperty(
+                IrMixinDuckExtensionProperty(
                     typeName = typeName,
                     sourceName = name,
                     sourceGetterJvmName = getterJvmName,
@@ -107,7 +107,7 @@ class Lowering(
             }
 
             is ExtensionFunction -> with(source) {
-                IrMixinBridgeExtensionFunction(
+                IrMixinDuckExtensionFunction(
                     sourceName = name,
                     sourceJvmName = jvmName,
                     name = jvmName.withUniqueModPrefix(),
@@ -118,10 +118,10 @@ class Lowering(
             }
         }
 
-    private fun lowerMixinInternalBridgeEntry(source: PatchShadowSource): IrMixinBridgeShadowEntry =
+    private fun lowerMixinDuckShadowEntry(source: PatchShadowSource): IrMixinShadowEntry =
         when (source) {
             is ShadowProperty -> with(source) {
-                IrMixinBridgeShadow(
+                IrMixinShadowProperty(
                     typeName = typeName,
                     sourceName = name,
                     sourceGetterJvmName = getterJvmName,
@@ -136,7 +136,7 @@ class Lowering(
             }
 
             is ShadowFunction -> with(source) {
-                IrMixinBridgeShadowFunction(
+                IrMixinShadowFunction(
                     sourceName = name,
                     sourceJvmName = jvmName,
                     name = jvmName.withUniqueModPrefix(),

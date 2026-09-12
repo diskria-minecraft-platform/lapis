@@ -11,11 +11,11 @@ data class GeneratedMixinsJson(
     val server: List<String>? = null,
 ) {
     companion object {
-        fun of(basePackage: String, qualifiedNames: Map<Env, List<IrClassName>>): GeneratedMixinsJson =
+        fun of(basePackage: String, envClassNames: Map<Env, List<IrClassName>>): GeneratedMixinsJson =
             GeneratedMixinsJson(
-                mixins = qualifiedNames.getRelativeNames(Env.Common, basePackage),
-                client = qualifiedNames.getRelativeNames(Env.Client, basePackage),
-                server = qualifiedNames.getRelativeNames(Env.Server, basePackage),
+                mixins = envClassNames.getRelativeNames(Env.Common, basePackage),
+                client = envClassNames.getRelativeNames(Env.Client, basePackage),
+                server = envClassNames.getRelativeNames(Env.Server, basePackage),
             )
 
         private fun Map<Env, List<IrClassName>>.getRelativeNames(env: Env, basePackage: String): List<String>? =

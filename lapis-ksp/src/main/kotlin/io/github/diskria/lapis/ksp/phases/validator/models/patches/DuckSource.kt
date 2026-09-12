@@ -8,22 +8,22 @@ import io.github.diskria.lapis.ksp.phases.lowering.types.IrTypeName
 import io.github.diskria.lapis.ksp.phases.validator.models.common.MixinAnnotation
 import io.github.diskria.poetesse.java.JPModifier
 
-sealed interface BridgeSource
-sealed class BridgeSourceProperty(
+sealed interface DuckSource
+sealed class DuckSourceProperty(
     val name: String,
     val getterJvmName: String,
     val setterJvmName: String?,
     type: KSType,
-) : BridgeSource {
+) : DuckSource {
     val typeName: IrTypeName = type.asIrTypeName()
 }
 
-sealed class BridgeSourceFunction(
+sealed class DuckSourceFunction(
     val name: String,
     val jvmName: String,
     val parameters: List<FunctionParameter>,
     returnType: KSType?,
-) : BridgeSource {
+) : DuckSource {
     val returnTypeName: IrTypeName? = returnType?.asIrTypeName()
 }
 
@@ -37,7 +37,7 @@ class ExtensionProperty(
     setterJvmName: String?,
     type: KSType,
     override val receiverClassDeclaration: KSClassDeclaration,
-) : BridgeSourceProperty(name, getterJvmName, setterJvmName, type), PatchExtensionSource
+) : DuckSourceProperty(name, getterJvmName, setterJvmName, type), PatchExtensionSource
 
 class ExtensionFunction(
     name: String,
@@ -45,7 +45,7 @@ class ExtensionFunction(
     parameters: List<FunctionParameter>,
     returnType: KSType?,
     override val receiverClassDeclaration: KSClassDeclaration,
-) : BridgeSourceFunction(name, jvmName, parameters, returnType), PatchExtensionSource
+) : DuckSourceFunction(name, jvmName, parameters, returnType), PatchExtensionSource
 
 sealed interface PatchShadowSource {
     val modifiers: Set<JPModifier>
@@ -59,7 +59,7 @@ class ShadowProperty(
     val mappingName: String,
     val mixinAnnotations: List<MixinAnnotation>,
     override val modifiers: Set<JPModifier>,
-) : BridgeSourceProperty(name, getterJvmName, setterJvmName, type), PatchShadowSource
+) : DuckSourceProperty(name, getterJvmName, setterJvmName, type), PatchShadowSource
 
 class ShadowFunction(
     name: String,
@@ -69,7 +69,7 @@ class ShadowFunction(
     val mappingName: String,
     val mixinAnnotations: List<MixinAnnotation>,
     override val modifiers: Set<JPModifier>,
-) : BridgeSourceFunction(name, jvmName, parameters, returnType), PatchShadowSource
+) : DuckSourceFunction(name, jvmName, parameters, returnType), PatchShadowSource
 
 class FunctionParameter(val name: String, private val type: KSType) {
     fun asIrParameter(): IrParameter = IrParameter(name, type.asIrTypeName())
