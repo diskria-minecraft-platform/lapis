@@ -411,22 +411,15 @@ class Generator(
             if (injection.isStatic) {
                 addModifiers(JPModifier.STATIC)
             }
-            val (annotations, parameters, argumentCodeBlocks) = when (injection) {
-                else -> {
-                    val parameters = injection.parameters.map { parameter ->
-                        buildJavaParameter(parameter.name, parameter.typeName) {
-                            addAnnotations(parameter.mixinAnnotations.map { buildMixinAnnotation(it) })
-                        }
-                    }
-                    Triple(
-                        injection.mixinAnnotations.map { buildMixinAnnotation(it) },
-                        parameters,
-                        buildList {
-                            injection.extensionReceiverClassName?.let { add(buildDoubleCastJavaCodeBlock(it)) }
-                            addAll(parameters.map { it.toCodeBlock() })
-                        },
-                    )
+            val annotations = injection.mixinAnnotations.map { buildMixinAnnotation(it) }
+            val parameters = injection.parameters.map { parameter ->
+                buildJavaParameter(parameter.name, parameter.typeName) {
+                    addAnnotations(parameter.mixinAnnotations.map { buildMixinAnnotation(it) })
                 }
+            }
+            val argumentCodeBlocks = buildList {
+                injection.extensionReceiverClassName?.let { add(buildDoubleCastJavaCodeBlock(it)) }
+                addAll(parameters.map { it.toCodeBlock() })
             }
             addAnnotations(annotations)
             addParameters(parameters)
@@ -456,10 +449,10 @@ class Generator(
         duckInterface: IrMixinDuckInterface,
         extensionPackAccumulator: GenExtensionPackAccumulator,
     ) {
-        generateKotlinFile(duckInterface, aggregating = false) {
-            addFunctions(duckInterface.entries.flatMap { it.kinds }.map { kind ->
-                buildKotlinFunction(kind.name) {
-                    addModifiers(KPModifier.ABSTRACT)
+        generateJavaFile(duckInterface, aggregating = false) {
+            addMethods(duckInterface.entries.flatMap { it.kinds }.map { kind ->
+                buildJavaMethod(kind.name) {
+                    addModifiers(JPModifier.ABSTRACT)
                     setParameters(kind.parameters)
                     setReturnType(kind.returnTypeName)
                 }

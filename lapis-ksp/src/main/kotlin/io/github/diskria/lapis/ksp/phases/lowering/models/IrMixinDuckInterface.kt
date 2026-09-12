@@ -5,13 +5,13 @@ import io.github.diskria.lapis.ksp.phases.lowering.models.common.IrMixinAnnotati
 import io.github.diskria.lapis.ksp.phases.lowering.types.IrClassName
 import io.github.diskria.lapis.ksp.phases.lowering.types.IrTypeName
 import io.github.diskria.poetesse.java.JPModifier
-import io.github.diskria.poetesse.kotlin.KPTypeKind
+import io.github.diskria.poetesse.java.JPTypeKind
 
 class IrMixinDuckInterface(
     override val originatingFiles: List<KSFile>,
     override val className: IrClassName,
     val entries: List<IrMixinDuckEntry>,
-) : IrKotlinClassBlueprint(KPTypeKind.INTERFACE)
+) : IrJavaFileBlueprint(JPTypeKind.INTERFACE)
 
 sealed interface IrMixinDuckEntry {
     val sourceName: String
