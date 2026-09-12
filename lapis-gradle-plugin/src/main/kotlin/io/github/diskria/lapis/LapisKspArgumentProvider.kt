@@ -25,15 +25,7 @@ abstract class LapisKspArgumentProvider @Inject constructor(
 
     @Optional
     @Input
-    val builtinsPackage: Property<String>,
-
-    @Optional
-    @Input
     val disableLCP: Property<Boolean>,
-
-    @Optional
-    @Input
-    val disableBuiltinsPackageIsolationWarning: Property<Boolean>,
 
     @Internal
     val layout: ProjectLayout,
@@ -60,9 +52,7 @@ abstract class LapisKspArgumentProvider @Inject constructor(
         return listOfNotNull(
             "uniqueModPrefix" to uniqueModPrefix,
             "mixinPackage" to normalizedMixinPackage,
-            builtinsPackage.orNull?.let { "builtinsPackage" to it },
             disableLCP.orNull?.let { "disableLCP" to it },
-            disableBuiltinsPackageIsolationWarning.orNull?.let { "disableBuiltinsPackageIsolationWarning" to it },
         ).map { (key, value) ->
             val valueStr = value.toString()
             if (valueStr.isBlank()) {

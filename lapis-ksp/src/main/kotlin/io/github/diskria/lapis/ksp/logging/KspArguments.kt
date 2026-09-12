@@ -6,10 +6,8 @@ import kotlinx.serialization.Serializable
 data class KspArguments(
     val uniqueModPrefix: String,
     val mixinPackage: String,
-    val builtinsPackage: String = mixinPackage.takeIf { "." in it }?.substringBeforeLast(".") ?: "",
     val mixinGeneratedSubpackage: String? = null,
     val disableLCP: Boolean = false,
-    val disableBuiltinsPackageIsolationWarning: Boolean = false,
 ) {
     init {
         require(IDENTIFIER_REGEX.matches(uniqueModPrefix)) {
@@ -17,13 +15,6 @@ data class KspArguments(
         }
         require(PACKAGE_REGEX.matches(mixinPackage)) {
             "Invalid 'mixinPackage': '$mixinPackage'. Must be a valid Java package name."
-        }
-        require(builtinsPackage.isEmpty() || PACKAGE_REGEX.matches(builtinsPackage)) {
-            "Invalid 'builtinsPackage': '$builtinsPackage'. Must be a valid package name or empty for root package."
-        }
-        require(builtinsPackage != mixinPackage && !builtinsPackage.startsWith("$mixinPackage.")) {
-            "Invalid 'builtinsPackage': '$builtinsPackage'. " +
-                "Cannot be equal to or inside 'mixinPackage' ($mixinPackage)."
         }
         mixinGeneratedSubpackage?.let { subpackage ->
             require(PACKAGE_REGEX.matches(subpackage)) {

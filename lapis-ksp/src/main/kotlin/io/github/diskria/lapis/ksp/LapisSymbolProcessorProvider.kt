@@ -56,25 +56,11 @@ class ProcessorProvider : SymbolProcessorProvider {
                 put(key, JsonPrimitive(value))
             }
         }
-        val kspArguments = runCatching<KspArguments> {
+        return runCatching<KspArguments> {
             argumentsJson.decodeFromJsonElement(jsonObject)
         }.getOrElse { error ->
             logger.fatal("Failed to parse Lapis KSP arguments: ${error.message}")
         }
-        if (!kspArguments.disableBuiltinsPackageIsolationWarning) {
-            val uniqueModPrefix = kspArguments.uniqueModPrefix.lowercase().filter { it.isLetterOrDigit() }
-            val builtinsPackage = kspArguments.builtinsPackage.lowercase().filter { it.isLetterOrDigit() }
-            if (uniqueModPrefix !in builtinsPackage) {
-                logger.warn(
-                    "For better isolation between mods, " +
-                        "it is recommended that 'builtinsPackage' (${kspArguments.builtinsPackage}) " +
-                        "contains the 'uniqueModPrefix' ('${kspArguments.uniqueModPrefix}') " +
-                        "to prevent class package collisions with other mods. " +
-                        "To disable this warning, pass 'disableBuiltinsPackageIsolationWarning = true'."
-                )
-            }
-        }
-        return kspArguments
     }
 
     private fun String.withArgumentPrefix(): String =

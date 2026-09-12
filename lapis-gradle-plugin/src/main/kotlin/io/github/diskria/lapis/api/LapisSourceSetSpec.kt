@@ -6,5 +6,4 @@ import javax.inject.Inject
 
 abstract class LapisSourceSetSpec @Inject constructor(val name: String, objects: ObjectFactory) {
     val mixinConfig = objects.fileProperty()
-    val builtinsPackage = objects.property<String>()
 }
