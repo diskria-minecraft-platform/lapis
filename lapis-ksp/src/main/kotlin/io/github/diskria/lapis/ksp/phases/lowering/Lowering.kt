@@ -72,7 +72,7 @@ class Lowering(
     private fun lowerMixin(patch: Patch, sourcePackageLCP: String?): IrMixin =
         IrMixin(
             originatingFiles = listOfNotNull(patch.containingFile),
-            className = resolveMixinRelatedClassName(patch.className, sourcePackageLCP, "Mixin"),
+            className = resolveMixinClassName(patch.className, sourcePackageLCP),
             env = patch.env,
             injections = patch.injections.flatMap(::lowerInjections),
             bridge = lowerMixinBridge(patch),
@@ -182,9 +182,7 @@ class Lowering(
             }
         }
 
-    private fun resolveMixinRelatedClassName(
-        sourceClassName: IrClassName, sourcePackageLCP: String?, suffix: String,
-    ): IrClassName {
+    private fun resolveMixinClassName(sourceClassName: IrClassName, sourcePackageLCP: String?): IrClassName {
         val sourcePackageName = sourceClassName.packageName
         val mixinPackageName = buildString {
             append(kspArguments.mixinPackage)
@@ -193,7 +191,7 @@ class Lowering(
                 append(".${sourcePackageName.removePrefix("$sourcePackageLCP.")}")
             }
         }
-        return IrClassName.of(mixinPackageName, sourceClassName.simpleName).derived(suffix)
+        return IrClassName.of(mixinPackageName, sourceClassName.simpleName).derived("Generated")
     }
 
     private fun lowerMixinAnnotation(annotation: MixinAnnotation): IrMixinAnnotation {
