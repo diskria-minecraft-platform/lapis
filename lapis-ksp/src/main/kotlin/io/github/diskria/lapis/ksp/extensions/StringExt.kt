@@ -8,6 +8,3 @@ fun String.capitalize(): String =
 
 fun String.quoted(): String =
     "'$this'"
-
-fun String.withInternalPrefix(prefix: String = "lapis"): String =
-    "_${prefix}_$this"

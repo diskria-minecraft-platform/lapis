@@ -10,7 +10,6 @@ import io.github.diskria.lapis.ksp.extensions.common.Builder
 import io.github.diskria.lapis.ksp.extensions.common.lapisError
 import io.github.diskria.lapis.ksp.extensions.jp.*
 import io.github.diskria.lapis.ksp.extensions.kp.*
-import io.github.diskria.lapis.ksp.extensions.withInternalPrefix
 import io.github.diskria.lapis.ksp.logging.KspArguments
 import io.github.diskria.lapis.ksp.logging.Logger
 import io.github.diskria.lapis.ksp.phases.generator.builders.*
@@ -172,7 +171,7 @@ class Generator(
                     entries = staticBridgeSync.map { it.first },
                 )
                 generateStaticBridge(staticBridge, patchClassName.nested("Companion"), extensionPackAccumulator)
-                buildJavaMethod("syncStaticBridge".withInternalPrefix(), visibility = IrVisibilityModifier.PRIVATE) {
+                buildJavaMethod("syncStaticBridge", visibility = IrVisibilityModifier.PRIVATE) {
                     addAnnotation<Unique>()
                     addModifiers(JPModifier.STATIC)
                     setBody {
@@ -322,7 +321,7 @@ class Generator(
         val isSynchronizedStrategy = impl.initStrategy == InitStrategy.Synchronized
         val isThreadSafeStrategy = impl.initStrategy == InitStrategy.Volatile || isSynchronizedStrategy
         val patchField = buildJavaField(
-            name = "patch".withInternalPrefix(),
+            name = "patch",
             typeName = impl.className,
             visibility = IrVisibilityModifier.PRIVATE,
         ) {
@@ -338,7 +337,7 @@ class Generator(
         }
         val synchronizedLockField = if (isSynchronizedStrategy) {
             buildJavaField(
-                name = "patchLock".withInternalPrefix(),
+                name = "patchLock",
                 typeName = Object::class.asIrTypeName(),
                 visibility = IrVisibilityModifier.PRIVATE,
             ) {
@@ -348,7 +347,7 @@ class Generator(
             }.also(destination::addField)
         } else null
         val getOrInitPatchMethod = buildJavaMethod(
-            name = "getOrInitPatch".withInternalPrefix(),
+            name = "getOrInitPatch",
             visibility = IrVisibilityModifier.PRIVATE
         ) {
             addAnnotation<Unique>()
