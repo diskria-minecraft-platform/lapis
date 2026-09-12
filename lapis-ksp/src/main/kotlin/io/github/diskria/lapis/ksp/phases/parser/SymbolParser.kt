@@ -43,7 +43,7 @@ class SymbolParser(
         val kMixinAnnotation = findAnnotation<KMixin>()
         ParsedPatch(
             name = name,
-            side = kMixinAnnotation?.getArgumentValue(KMixin::side) ?: Side.Common,
+            env = kMixinAnnotation?.getArgumentValue(KMixin::env) ?: Env.Common,
             isClass = isClass,
             isObject = isObject,
             isOpen = isExplicitlyOpen,

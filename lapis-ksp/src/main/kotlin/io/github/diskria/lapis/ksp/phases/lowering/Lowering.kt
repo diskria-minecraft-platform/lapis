@@ -73,7 +73,7 @@ class Lowering(
         IrMixin(
             originatingFiles = listOfNotNull(patch.containingFile),
             className = resolveMixinRelatedClassName(patch.className, sourcePackageLCP, "Mixin"),
-            side = patch.side,
+            env = patch.env,
             injections = patch.injections.flatMap(::lowerInjections),
             bridge = lowerMixinBridge(patch),
             targetClassName = patch.targetClassDeclaration?.asIrClassName(),

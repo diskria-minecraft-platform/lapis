@@ -11,11 +11,16 @@ import kotlin.reflect.KClass
 @Retention(SOURCE)
 annotation class KMixin(
     val target: KClass<*> = Unit::class,
-    val side: Side = Side.Common,
+    val env: Env = Env.Common,
     val initStrategy: InitStrategy = InitStrategy.Lazy,
 )
 
+enum class Env { Common, Client, Server }
 enum class InitStrategy { Eager, Lazy, Volatile, Synchronized }
+
+@Target(VALUE_PARAMETER)
+@Retention(SOURCE)
+annotation class Origin
 
 @Target(PROPERTY, FUNCTION)
 @Retention(SOURCE)
@@ -23,10 +28,8 @@ annotation class Extension
 
 @Target(PROPERTY, FUNCTION)
 @Retention(SOURCE)
-annotation class KShadow(
-    vararg val modifiers: Modifier = []
-)
+annotation class KShadow(vararg val modifiers: Modifier = [])
 
-@Target(VALUE_PARAMETER)
+@Target(FUNCTION, PROPERTY)
 @Retention(SOURCE)
-annotation class Origin
+annotation class MappingName(val name: String)

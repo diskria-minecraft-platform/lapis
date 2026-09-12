@@ -3,7 +3,7 @@ package io.github.diskria.lapis.ksp.phases.validator.models.patches
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSNode
 import io.github.diskria.lapis.annotations.InitStrategy
-import io.github.diskria.lapis.annotations.Side
+import io.github.diskria.lapis.annotations.Env
 import io.github.diskria.lapis.ksp.phases.validator.models.common.MixinAnnotation
 import io.github.diskria.lapis.ksp.phases.validator.models.common.SourceFile
 
@@ -11,7 +11,7 @@ class Patch(
     symbol: KSNode,
     classDeclaration: KSClassDeclaration,
     val name: String,
-    val side: Side,
+    val env: Env,
     val initStrategy: InitStrategy,
     val isImplRequired: Boolean,
     val constructorParameters: List<PatchConstructorParameter>,

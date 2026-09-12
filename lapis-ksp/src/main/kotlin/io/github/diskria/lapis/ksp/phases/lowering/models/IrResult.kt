@@ -2,7 +2,7 @@ package io.github.diskria.lapis.ksp.phases.lowering.models
 
 import com.google.devtools.ksp.symbol.KSFile
 import io.github.diskria.lapis.annotations.InitStrategy
-import io.github.diskria.lapis.annotations.Side
+import io.github.diskria.lapis.annotations.Env
 import io.github.diskria.lapis.ksp.phases.lowering.models.common.IrMixinAnnotation
 import io.github.diskria.lapis.ksp.phases.lowering.types.IrClassName
 import io.github.diskria.poetesse.java.JPTypeKind
@@ -15,7 +15,7 @@ class IrResult(
 sealed class IrSourceFile(val className: IrClassName)
 
 abstract class IrMixinRelatedBlueprint(typeKind: JPTypeKind) : IrJavaFileBlueprint(typeKind) {
-    abstract val side: Side
+    abstract val env: Env
 }
 
 class IrPatch(
@@ -28,7 +28,7 @@ class IrPatch(
 class IrMixin(
     override val originatingFiles: List<KSFile>,
     override val className: IrClassName,
-    override val side: Side,
+    override val env: Env,
     val injections: List<IrInjection>,
     val bridge: IrMixinBridge?,
     val targetClassName: IrClassName?,

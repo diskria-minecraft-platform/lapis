@@ -656,7 +656,7 @@ class Generator(
     private fun generateMixinConfig(mixinBlueprints: List<IrMixinRelatedBlueprint>) {
         val mixinConfig = GenMixinConfig(mixinBlueprints.flatMap { it.originatingFiles }, "mixins.json")
         generateResourceFile(mixinConfig, aggregating = true) {
-            val qualifiedNames = mixinBlueprints.groupBy({ it.side }, { it.className })
+            val qualifiedNames = mixinBlueprints.groupBy({ it.env }, { it.className })
             configJson.encodeToString(GeneratedMixinsJson.of(options.mixinPackage, qualifiedNames))
         }
     }

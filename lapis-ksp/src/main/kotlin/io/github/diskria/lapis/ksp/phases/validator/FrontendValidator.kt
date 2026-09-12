@@ -87,7 +87,7 @@ class FrontendValidator(
             classDeclaration = classDeclaration,
 
             name = name,
-            side = side,
+            env = env,
             initStrategy = initStrategy,
             isImplRequired = !hasStaticHooksOnly,
             targetClassDeclaration = targetClassDeclaration,
