@@ -4,8 +4,8 @@ import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import io.github.diskria.lapis.ksp.phases.lowering.asIrTypeName
 import io.github.diskria.lapis.ksp.phases.lowering.models.IrParameter
-import io.github.diskria.lapis.ksp.phases.lowering.types.IrTypeName
 import io.github.diskria.lapis.ksp.phases.validator.models.common.MixinAnnotation
+import io.github.diskria.poetesse.interop.XTypeName
 import io.github.diskria.poetesse.java.JPModifier
 
 sealed interface DuckSource
@@ -15,7 +15,7 @@ sealed class DuckSourceProperty(
     val setterJvmName: String?,
     type: KSType,
 ) : DuckSource {
-    val typeName: IrTypeName = type.asIrTypeName()
+    val type: XTypeName = type.asIrTypeName()
 }
 
 sealed class DuckSourceFunction(
@@ -24,7 +24,7 @@ sealed class DuckSourceFunction(
     val parameters: List<FunctionParameter>,
     returnType: KSType?,
 ) : DuckSource {
-    val returnTypeName: IrTypeName? = returnType?.asIrTypeName()
+    val returnType: XTypeName? = returnType?.asIrTypeName()
 }
 
 sealed interface PatchExtensionSource {

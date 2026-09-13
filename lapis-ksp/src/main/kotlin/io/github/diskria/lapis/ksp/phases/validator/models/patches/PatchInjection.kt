@@ -3,15 +3,15 @@ package io.github.diskria.lapis.ksp.phases.validator.models.patches
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import io.github.diskria.lapis.ksp.phases.lowering.asIrClassName
-import io.github.diskria.lapis.ksp.phases.lowering.types.IrClassName
 import io.github.diskria.lapis.ksp.phases.validator.models.common.MixinAnnotation
+import io.github.diskria.poetesse.interop.XClassName
 
 sealed class PatchInjection {
     abstract val jvmName: String
     protected abstract val extensionReceiverClassDeclaration: KSClassDeclaration?
     abstract val isStatic: Boolean
 
-    val extensionReceiverClassName: IrClassName?
+    val extensionReceiverClassName: XClassName?
         get() = extensionReceiverClassDeclaration?.asIrClassName()
 }
 

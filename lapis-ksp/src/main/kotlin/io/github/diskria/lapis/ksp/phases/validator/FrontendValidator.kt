@@ -296,7 +296,7 @@ class FrontendValidator(private val logger: Logger) {
             is ParsedAnnotationStringArgumentValue -> MixinAnnotationStringArgumentValue(string)
             is ParsedAnnotationClassTypeArgumentValue -> MixinAnnotationClassTypeArgumentValue(validateType(type))
             is ParsedAnnotationEnumArgumentValue -> {
-                MixinAnnotationEnumArgumentValue(validateClassDeclaration(entryClassDeclaration))
+                MixinAnnotationEnumArgumentValue(validateClassDeclaration(enumClassDeclaration), entryName)
             }
 
             is ParsedAnnotationEmbeddedAnnotationArgumentValue -> {
@@ -383,3 +383,5 @@ class FrontendValidator(private val logger: Logger) {
 
     private class SkipSymbolSignal : Exception()
 }
+
+// todo user-friendly errors

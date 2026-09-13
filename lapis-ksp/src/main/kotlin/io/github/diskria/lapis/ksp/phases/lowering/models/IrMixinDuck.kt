@@ -2,64 +2,64 @@ package io.github.diskria.lapis.ksp.phases.lowering.models
 
 import com.google.devtools.ksp.symbol.KSFile
 import io.github.diskria.lapis.ksp.phases.lowering.models.common.IrMixinAnnotation
-import io.github.diskria.lapis.ksp.phases.lowering.types.IrClassName
-import io.github.diskria.lapis.ksp.phases.lowering.types.IrTypeName
+import io.github.diskria.poetesse.interop.XClassName
+import io.github.diskria.poetesse.interop.XTypeName
 import io.github.diskria.poetesse.java.JPModifier
-import io.github.diskria.poetesse.java.JPTypeKind
 
-class IrMixinDuckInterface(
-    override val originatingFiles: List<KSFile>,
-    override val className: IrClassName,
+class IrMixinDuck(
+    val originatingFiles: List<KSFile>,
+    val className: XClassName,
     val entries: List<IrMixinDuckEntry>,
-) : IrJavaFileBlueprint(JPTypeKind.INTERFACE)
+) {
+    val shadowEntries: List<IrMixinShadowEntry> get() = entries.filterIsInstance<IrMixinShadowEntry>()
+}
 
 sealed interface IrMixinDuckEntry {
     val sourceName: String
     val kinds: List<IrMixinDuckEntryKind>
 }
 
-sealed interface IrMixinDuckEntryKind : IrReturnable {
+sealed interface IrMixinDuckEntryKind {
     val name: String
     val sourceJvmName: String
     val parameters: List<IrParameter>
-    override val returnTypeName: IrTypeName?
-
-    val hasBigArity: Boolean
-        get() = parameters.size >= 23
+    val returnType: XTypeName?
 }
+
+sealed interface IrMixinDuckEntryAccessorKind : IrMixinDuckEntryKind
 
 sealed class IrMixinDuckPropertyEntry(
     override val sourceName: String,
-    val typeName: IrTypeName,
+    val type: XTypeName,
     getterName: String,
     sourceGetterJvmName: String,
     setterName: String?,
     sourceSetterJvmName: String?,
 ) : IrMixinDuckEntry {
-    val getter: Getter = Getter(getterName, sourceGetterJvmName, typeName)
+    val getter: Getter = Getter(getterName, sourceGetterJvmName, type)
     val setter: Setter? = if (setterName != null && sourceSetterJvmName != null) {
-        Setter(setterName, sourceSetterJvmName, typeName)
+        Setter(setterName, sourceSetterJvmName, type)
     } else null
 
-    override val kinds: List<IrMixinDuckEntryKind> = listOfNotNull(getter, setter)
+    override val kinds: List<IrMixinDuckEntryAccessorKind> = listOfNotNull(getter, setter)
 
     class Getter(
         override val name: String,
         override val sourceJvmName: String,
-        val typeName: IrTypeName,
-    ) : IrMixinDuckEntryKind {
+        type: XTypeName,
+    ) : IrMixinDuckEntryAccessorKind {
         override val parameters: List<IrParameter> = emptyList()
-        override val returnTypeName: IrTypeName = typeName
+        override val returnType: XTypeName = type
     }
 
     class Setter(
         override val name: String,
         override val sourceJvmName: String,
-        val typeName: IrTypeName,
-    ) : IrMixinDuckEntryKind {
-        val parameter: IrParameter = IrSetterParameter(typeName)
+        type: XTypeName,
+    ) : IrMixinDuckEntryAccessorKind {
+        val parameter: IrParameter = IrSetterParameter(type)
         override val parameters: List<IrParameter> = listOf(parameter)
-        override val returnTypeName: IrTypeName? = null
+        override val returnType: XTypeName? = null
     }
 }
 
@@ -68,26 +68,26 @@ sealed class IrMixinDuckFunctionEntry(
     override val name: String,
     override val sourceJvmName: String,
     override val parameters: List<IrParameter>,
-    override val returnTypeName: IrTypeName?,
+    override val returnType: XTypeName?,
 ) : IrMixinDuckEntry, IrMixinDuckEntryKind {
     override val kinds: List<IrMixinDuckEntryKind> = listOf(this)
 }
 
 sealed interface IrMixinDuckExtensionEntry : IrMixinDuckEntry {
-    val receiverTypeName: IrTypeName
+    val receiverType: XTypeName
 }
 
 class IrMixinDuckExtensionProperty(
     sourceName: String,
-    typeName: IrTypeName,
+    type: XTypeName,
     sourceGetterJvmName: String,
     sourceSetterJvmName: String?,
     getterName: String,
     setterName: String?,
-    override val receiverTypeName: IrTypeName,
+    override val receiverType: XTypeName,
 ) : IrMixinDuckPropertyEntry(
     sourceName,
-    typeName,
+    type,
     getterName,
     sourceGetterJvmName,
     setterName,
@@ -99,9 +99,9 @@ class IrMixinDuckExtensionFunction(
     name: String,
     sourceJvmName: String,
     parameters: List<IrParameter>,
-    returnTypeName: IrTypeName?,
-    override val receiverTypeName: IrTypeName,
-) : IrMixinDuckFunctionEntry(sourceName, name, sourceJvmName, parameters, returnTypeName),
+    returnType: XTypeName?,
+    override val receiverType: XTypeName,
+) : IrMixinDuckFunctionEntry(sourceName, name, sourceJvmName, parameters, returnType),
     IrMixinDuckExtensionEntry
 
 sealed interface IrMixinShadowEntry : IrMixinDuckEntry {
@@ -111,7 +111,7 @@ sealed interface IrMixinShadowEntry : IrMixinDuckEntry {
 
 class IrMixinShadowProperty(
     sourceName: String,
-    typeName: IrTypeName,
+    type: XTypeName,
     getterName: String,
     sourceGetterJvmName: String,
     setterName: String?,
@@ -122,7 +122,7 @@ class IrMixinShadowProperty(
     val mixinAnnotations: List<IrMixinAnnotation>,
 ) : IrMixinDuckPropertyEntry(
     sourceName,
-    typeName,
+    type,
     getterName,
     sourceGetterJvmName,
     setterName,
@@ -134,9 +134,9 @@ class IrMixinShadowFunction(
     name: String,
     sourceJvmName: String,
     parameters: List<IrParameter>,
-    returnTypeName: IrTypeName?,
+    returnType: XTypeName?,
     val mappingName: String,
     val mixinAnnotations: List<IrMixinAnnotation>,
     override val modifiers: Set<JPModifier>,
-) : IrMixinDuckFunctionEntry(sourceName, name, sourceJvmName, parameters, returnTypeName),
+) : IrMixinDuckFunctionEntry(sourceName, name, sourceJvmName, parameters, returnType),
     IrMixinShadowEntry

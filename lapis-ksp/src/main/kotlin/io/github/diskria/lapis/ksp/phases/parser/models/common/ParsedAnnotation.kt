@@ -68,7 +68,8 @@ class ParsedAnnotationClassTypeArgumentValue(
 ) : ParsedAnnotationArgumentValue
 
 class ParsedAnnotationEnumArgumentValue(
-    val entryClassDeclaration: KSClassDeclaration,
+    val enumClassDeclaration: KSClassDeclaration?,
+    val entryName: String,
 ) : ParsedAnnotationArgumentValue
 
 class ParsedAnnotationEmbeddedAnnotationArgumentValue(

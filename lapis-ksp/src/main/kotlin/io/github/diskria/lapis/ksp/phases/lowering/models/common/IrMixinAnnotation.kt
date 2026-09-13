@@ -1,10 +1,10 @@
 package io.github.diskria.lapis.ksp.phases.lowering.models.common
 
-import io.github.diskria.lapis.ksp.phases.lowering.types.IrClassName
-import io.github.diskria.lapis.ksp.phases.lowering.types.IrTypeName
+import io.github.diskria.poetesse.interop.XClassName
+import io.github.diskria.poetesse.interop.XTypeName
 
 class IrMixinAnnotation(
-    val className: IrClassName,
+    val className: XClassName,
     val arguments: List<IrMixinAnnotationArgument>,
 )
 
@@ -60,11 +60,12 @@ class IrMixinAnnotationStringArgumentValue(
 ) : IrMixinAnnotationArgumentValue
 
 class IrMixinAnnotationClassTypeArgumentValue(
-    val typeName: IrTypeName
+    val type: XTypeName
 ) : IrMixinAnnotationArgumentValue
 
 class IrMixinAnnotationEnumArgumentValue(
-    val entryClassName: IrClassName,
+    val enumClassName: XClassName,
+    val entryName: String,
 ) : IrMixinAnnotationArgumentValue
 
 class IrMixinAnnotationEmbeddedAnnotationArgumentValue(

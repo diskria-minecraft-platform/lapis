@@ -1,7 +1,5 @@
 package io.github.diskria.lapis.ksp.extensions.common
 
-typealias Builder<T> = T.() -> Unit
-
 fun lapisError(message: String): Nothing =
     error(
         "$message. " +

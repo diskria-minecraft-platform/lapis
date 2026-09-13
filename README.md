@@ -95,7 +95,8 @@ Processor on runtime, Lapis decouples the responsibility across three layers:
 ```
 
 1. Your Kotlin Patch (`@KMixin`): Holds pure business logic, extension properties, and custom OOP inheritance.
-2. KSP Layer: Reads your Kotlin code and generates a rock-solid Java Duck Interface and a thin Java Mixin inside your build directory (build/generated/ksp).
+2. KSP Layer: Reads your Kotlin code and generates a rock-solid Java Duck Interface and a thin Java Mixin inside your
+   build directory (build/generated/ksp).
 3. Compiler Plugin (FIR/IR): Exposes synthetic methods to your IDE during editing and inlines calls at compile-time
    directly into zero-cost interface casts `((Duck) instance).method()`.
 
@@ -108,28 +109,6 @@ Processor on runtime, Lapis decouples the responsibility across three layers:
 - **Automated Type Interop Layer:** Lapis builds a seamless bridge between Kotlin and Java types under the hood. You
   write idiomatic Kotlin types and nullability, and Lapis automatically translates them into valid Java Mixin
   signatures, `@Override` rules, and Duck interface casts without any manual glue code.
-
-## F.A.Q
-
-#### Where is `@Unique` and how are members isolated?
-
-You no longer need `@Unique`. Since your `@KMixin` is a standalone Kotlin patch class, all of its properties, methods, and state are isolated by default. Non-annotated code remains in your patch class and never touches the target Minecraft class directly. The generated Java Mixin contains only the minimal bridge code required by Sponge.
-
-#### How clean is the exported bytecode (Mixin Export)?
-
-Target Minecraft classes remain lightweight and readable. Unlike standard Mixin, where custom state and unique methods inflate the target class at runtime, Lapis routes logic through your patch instance. The resulting class contains zero unneeded fields or unique methods from your patch.
-
-#### Will Lapis break when new Sponge Mixin or Mixin Extras annotations are introduced?
-
-No. By default, Lapis automatically identifies and transfers all runtime annotations (such as `@Inject`, `@Redirect`, or `@WrapOperation`) from your patch to the generated Java Mixin. If a new annotation is released or you use a custom framework, you can explicitly configure the target annotation list in the Gradle DSL via `lapis.mixinAnnotations.add("com.example.CustomMixinAnnotation")`.
-
-#### What if I need custom Sponge features or want to bypass the automated code generation (Escape Hatch)?
-
-If you need specific Sponge attributes (such as priority, remap, ⁠aliases⁠, ⁠prefix⁠, or custom annotation parameters) that are not exposed by Lapis annotations, or if the automatic generation does not fit a specific edge case, you can simply attach standard Sponge annotations (like ⁠`@Shadow`⁠ or ⁠`@Mixin`⁠) directly alongside their Lapis equivalents (`⁠@KShadow`⁠, ⁠`@KMixin`⁠). When Lapis detects a standard Sponge annotation on a declaration, KSP copies it as-is without applying automatic defaults, while all other framework features continue to apply based on what is passed into the ⁠`@K⁠`-annotation.
-
-#### What is Lapis doing behind the scenes?
-
-Lapis automates the exact patterns you would otherwise write by hand—generating standard Duck interfaces, Java-compatible Mixin bridges, performing target casts, and updating JSON configs. All generated code is placed directly in your project's `⁠build/generated/ksp/`⁠ directory, where you can inspect it at any time to verify that it produces clean, standard Mixin architecture without any hidden runtime magic.
 
 ### Roadmap / Coming Soon
 

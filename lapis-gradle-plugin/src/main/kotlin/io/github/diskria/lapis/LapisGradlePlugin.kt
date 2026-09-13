@@ -57,30 +57,33 @@ class LapisGradlePlugin : Plugin<Project> {
                     ?.invariantSeparatorsPathString
                     ?: userConfigPath.fileName.toString()
             }
-            with(project.tasks) {
-                val kspTaskName = "${kspConfigurationName}Kotlin"
-                val mergeMixinConfigsTaskName = "merge${sourceSetNamePart}MixinConfigs"
-                val processResourcesTaskName = "process${sourceSetNamePart}Resources"
-                withType<KspAATask>().matching { it.name == kspTaskName }.configureEach { task ->
-                    task.commandLineArgumentProviders.add(
-                        project.objects.newInstance<LapisKspArgumentProvider>(
-                            lapisExtension.uniqueModPrefix,
-                            sourceSetSpec.mixinConfig,
-                            lapisExtension.disableLCP,
-                        )
+            val kspTaskName = "${kspConfigurationName}Kotlin"
+            val mergeMixinConfigsTaskName = "merge${sourceSetNamePart}MixinConfigs"
+            val processResourcesTaskName = "process${sourceSetNamePart}Resources"
+            project.tasks.withType<KspAATask>().matching { it.name == kspTaskName }.configureEach { task ->
+                task.commandLineArgumentProviders.add(
+                    project.objects.newInstance<LapisKspArgumentProvider>(
+                        lapisExtension.uniqueModPrefix,
+                        sourceSetSpec.mixinConfig,
+                        lapisExtension.disableLCP,
                     )
-                }
-                val mergeMixinConfigsTask = register<MergeMixinConfigsTask>(name = mergeMixinConfigsTaskName) { task ->
-                    task.dependsOn(kspTaskName)
-                    task.userConfig.set(sourceSetSpec.mixinConfig)
-                    task.generatedConfig.set(kspResourcesDirectory.get().file("lapis-intermediates/mixins.json"))
-                    task.mergedConfig.set(
-                        relativePathProvider.flatMap { relativePath ->
-                            mergedResourcesDirectory.map { it.file(relativePath) }
-                        }
-                    )
-                }
-                withType<ProcessResources>().matching { it.name == processResourcesTaskName }.configureEach { task ->
+                )
+            }
+            val mergeMixinConfigsTask = project.tasks.register<MergeMixinConfigsTask>(
+                name = mergeMixinConfigsTaskName
+            ) { task ->
+                task.dependsOn(kspTaskName)
+                task.userConfig.set(sourceSetSpec.mixinConfig)
+                task.generatedConfig.set(kspResourcesDirectory.get().file("lapis-intermediates/mixins.json"))
+                task.mergedConfig.set(
+                    relativePathProvider.flatMap { relativePath ->
+                        mergedResourcesDirectory.map { it.file(relativePath) }
+                    }
+                )
+            }
+            project.tasks.withType<ProcessResources>()
+                .matching { it.name == processResourcesTaskName }
+                .configureEach { task ->
                     val kspResourcesDirectoryFile = kspResourcesDirectory.get().asFile
                     val mergedResourcesDirectoryFile = mergedResourcesDirectory.get().asFile
                     task.exclude { element ->
@@ -98,7 +101,6 @@ class LapisGradlePlugin : Plugin<Project> {
                         }
                     )
                 }
-            }
         }
     }
 

@@ -4,14 +4,11 @@ import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import io.github.diskria.lapis.ksp.phases.lowering.asIrClassName
 import io.github.diskria.lapis.ksp.phases.lowering.asIrTypeName
-import io.github.diskria.lapis.ksp.phases.lowering.types.IrClassName
-import io.github.diskria.lapis.ksp.phases.lowering.types.IrTypeName
+import io.github.diskria.poetesse.interop.XClassName
+import io.github.diskria.poetesse.interop.XTypeName
 
-class MixinAnnotation(
-    typeClassDeclaration: KSClassDeclaration,
-    val arguments: List<MixinAnnotationArgument>,
-) {
-    val className: IrClassName = typeClassDeclaration.asIrClassName()
+class MixinAnnotation(typeClassDeclaration: KSClassDeclaration, val arguments: List<MixinAnnotationArgument>) {
+    val className: XClassName = typeClassDeclaration.asIrClassName()
 }
 
 sealed interface MixinAnnotationArgument {
@@ -29,50 +26,24 @@ class MixinAnnotationArrayArgument(
 ) : MixinAnnotationArgument
 
 sealed interface MixinAnnotationArgumentValue
-class MixinAnnotationBooleanArgumentValue(
-    val boolean: Boolean
-) : MixinAnnotationArgumentValue
-
-class MixinAnnotationByteArgumentValue(
-    val byte: Byte
-) : MixinAnnotationArgumentValue
-
-class MixinAnnotationShortArgumentValue(
-    val short: Short
-) : MixinAnnotationArgumentValue
-
-class MixinAnnotationIntArgumentValue(
-    val int: Int
-) : MixinAnnotationArgumentValue
-
-class MixinAnnotationLongArgumentValue(
-    val long: Long
-) : MixinAnnotationArgumentValue
-
-class MixinAnnotationCharArgumentValue(
-    val char: Char
-) : MixinAnnotationArgumentValue
-
-class MixinAnnotationFloatArgumentValue(
-    val float: Float
-) : MixinAnnotationArgumentValue
-
-class MixinAnnotationDoubleArgumentValue(
-    val double: Double
-) : MixinAnnotationArgumentValue
-
-class MixinAnnotationStringArgumentValue(
-    val string: String
-) : MixinAnnotationArgumentValue
-
+class MixinAnnotationBooleanArgumentValue(val boolean: Boolean) : MixinAnnotationArgumentValue
+class MixinAnnotationByteArgumentValue(val byte: Byte) : MixinAnnotationArgumentValue
+class MixinAnnotationShortArgumentValue(val short: Short) : MixinAnnotationArgumentValue
+class MixinAnnotationIntArgumentValue(val int: Int) : MixinAnnotationArgumentValue
+class MixinAnnotationLongArgumentValue(val long: Long) : MixinAnnotationArgumentValue
+class MixinAnnotationCharArgumentValue(val char: Char) : MixinAnnotationArgumentValue
+class MixinAnnotationFloatArgumentValue(val float: Float) : MixinAnnotationArgumentValue
+class MixinAnnotationDoubleArgumentValue(val double: Double) : MixinAnnotationArgumentValue
+class MixinAnnotationStringArgumentValue(val string: String) : MixinAnnotationArgumentValue
 class MixinAnnotationClassTypeArgumentValue(type: KSType) : MixinAnnotationArgumentValue {
-    val typeName: IrTypeName = type.asIrTypeName()
+    val type: XTypeName = type.asIrTypeName()
 }
 
 class MixinAnnotationEnumArgumentValue(
-    entryClassDeclaration: KSClassDeclaration,
+    enumClassDeclaration: KSClassDeclaration,
+    val entryName: String,
 ) : MixinAnnotationArgumentValue {
-    val entryClassName: IrClassName = entryClassDeclaration.asIrClassName()
+    val enumClassName: XClassName = enumClassDeclaration.asIrClassName()
 }
 
 class MixinAnnotationEmbeddedAnnotationArgumentValue(
