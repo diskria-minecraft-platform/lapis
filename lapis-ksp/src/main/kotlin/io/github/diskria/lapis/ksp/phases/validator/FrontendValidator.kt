@@ -4,16 +4,13 @@ import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.Variance
 import io.github.diskria.lapis.ksp.common.JavaModifiers
-import io.github.diskria.lapis.ksp.extensions.common.lapisError
 import io.github.diskria.lapis.ksp.extensions.ks.isValid
 import io.github.diskria.lapis.ksp.extensions.ks.toClassDeclaration
+import io.github.diskria.lapis.ksp.extensions.lapisError
 import io.github.diskria.lapis.ksp.logging.Logger
 import io.github.diskria.lapis.ksp.phases.parser.models.ParserResult
-import io.github.diskria.lapis.ksp.phases.parser.models.common.*
 import io.github.diskria.lapis.ksp.phases.parser.models.patches.*
-import io.github.diskria.lapis.ksp.phases.validator.models.ValidatorResult
-import io.github.diskria.lapis.ksp.phases.validator.models.common.*
-import io.github.diskria.lapis.ksp.phases.validator.models.patches.*
+import io.github.diskria.lapis.ksp.phases.validator.models.*
 import io.github.diskria.poetesse.java.JPModifier
 import javax.lang.model.element.Modifier
 import kotlin.contracts.ExperimentalContracts
@@ -217,7 +214,7 @@ class FrontendValidator(private val logger: Logger) {
         } else if (extensionReceiverClassDeclaration != null) {
             kspRequire(extensionReceiverClassDeclaration == validateClassDeclaration(targetClassDeclaration)) { "441" }
         }
-        return PatchNativeInjection(
+        return PatchInjection(
             jvmName = jvmName,
             extensionReceiverClassDeclaration = extensionReceiverClassDeclaration,
             mixinAnnotations = mixinAnnotations,

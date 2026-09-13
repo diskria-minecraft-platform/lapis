@@ -1,10 +1,9 @@
-package io.github.diskria.lapis.ksp.phases.validator.models.patches
+package io.github.diskria.lapis.ksp.phases.validator.models
 
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSType
-import io.github.diskria.lapis.ksp.phases.lowering.asIrTypeName
 import io.github.diskria.lapis.ksp.phases.lowering.models.IrParameter
-import io.github.diskria.lapis.ksp.phases.validator.models.common.MixinAnnotation
+import io.github.diskria.lapis.ksp.phases.lowering.toXTypeName
 import io.github.diskria.poetesse.interop.XTypeName
 import io.github.diskria.poetesse.java.JPModifier
 
@@ -15,7 +14,7 @@ sealed class DuckSourceProperty(
     val setterJvmName: String?,
     type: KSType,
 ) : DuckSource {
-    val type: XTypeName = type.asIrTypeName()
+    val typeName: XTypeName = type.toXTypeName()
 }
 
 sealed class DuckSourceFunction(
@@ -24,7 +23,7 @@ sealed class DuckSourceFunction(
     val parameters: List<FunctionParameter>,
     returnType: KSType?,
 ) : DuckSource {
-    val returnType: XTypeName? = returnType?.asIrTypeName()
+    val returnTypeName: XTypeName? = returnType?.toXTypeName()
 }
 
 sealed interface PatchExtensionSource {
@@ -72,5 +71,5 @@ class ShadowFunction(
 ) : DuckSourceFunction(name, jvmName, parameters, returnType), PatchShadowSource
 
 class FunctionParameter(val name: String, private val type: KSType) {
-    fun asIrParameter(): IrParameter = IrParameter(name, type.asIrTypeName())
+    fun asIrParameter(): IrParameter = IrParameter(name, type.toXTypeName())
 }

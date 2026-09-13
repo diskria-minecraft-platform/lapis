@@ -1,4 +1,4 @@
-package io.github.diskria.lapis.ksp.phases.validator.models.patches
+package io.github.diskria.lapis.ksp.phases.validator.models
 
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 

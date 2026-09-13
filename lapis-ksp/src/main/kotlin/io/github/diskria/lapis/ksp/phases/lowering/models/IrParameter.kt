@@ -4,10 +4,7 @@ import io.github.diskria.poetesse.interop.XTypeName
 
 open class IrParameter(
     val name: String,
-    val type: XTypeName,
+    val typeName: XTypeName,
 )
 
-class IrSetterParameter(type: XTypeName) : IrParameter("newValue", type)
-
-val List<IrParameter>.format: String
-    get() = joinToString { "%N" }
+class IrSetterParameter(typeName: XTypeName) : IrParameter("newValue", typeName)

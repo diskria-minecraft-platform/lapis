@@ -3,7 +3,7 @@ package io.github.diskria.lapis.ksp.extensions.ks
 import com.google.devtools.ksp.processing.KSBuiltIns
 import com.google.devtools.ksp.symbol.KSAnnotation
 import com.google.devtools.ksp.symbol.KSType
-import io.github.diskria.lapis.ksp.extensions.common.requireQualifiedName
+import io.github.diskria.lapis.ksp.extensions.requireQualifiedName
 import io.github.diskria.lapis.ksp.phases.parser.helpers.AnnotationArgumentValue
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1

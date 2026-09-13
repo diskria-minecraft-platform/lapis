@@ -8,7 +8,6 @@ import io.github.diskria.lapis.ksp.kspPoetesse
 import io.github.diskria.lapis.ksp.logging.KspArguments
 import io.github.diskria.lapis.ksp.logging.Logger
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
-import io.github.diskria.lapis.ksp.phases.lowering.models.common.*
 import io.github.diskria.poetesse.PoetesseFile
 import io.github.diskria.poetesse.interop.XClassName
 import io.github.diskria.poetesse.interop.XTypeName
@@ -67,7 +66,7 @@ class Generator(
                     patch.mixin.duck?.shadowEntries?.forEach { entry ->
                         when (entry) {
                             is IrMixinDuckPropertyEntry -> {
-                                property(entry.sourceName, entry.type) {
+                                property(entry.sourceName, entry.typeName) {
                                     override()
                                     getter {
                                         expression {
@@ -87,10 +86,10 @@ class Generator(
                             is IrMixinDuckFunctionEntry -> {
                                 function(entry.sourceName) {
                                     override()
-                                    entry.parameters.forEach { parameter(it.name, it.type) }
-                                    entry.returnType?.let { returns(it) }
+                                    entry.parameters.forEach { parameter(it.name, it.typeName) }
+                                    entry.returnTypeName?.let { returns(it) }
                                     body {
-                                        val maybeReturn = if (entry.returnType != null) "return " else ""
+                                        val maybeReturn = if (entry.returnTypeName != null) "return " else ""
                                         val parameters = code {
                                             entry.parameters.joinToString(", ") { N(it.name) }
                                         }
@@ -128,10 +127,10 @@ class Generator(
                                         method(kind.name) {
                                             public()
                                             annotation<Override>()
-                                            kind.parameters.forEach { parameter(it.name, it.type) }
-                                            kind.returnType?.let { returns(it) }
+                                            kind.parameters.forEach { parameter(it.name, it.typeName) }
+                                            kind.returnTypeName?.let { returns(it) }
                                             body {
-                                                val maybeReturn = if (kind.returnType != null) "return " else ""
+                                                val maybeReturn = if (kind.returnTypeName != null) "return " else ""
                                                 val parameters = code {
                                                     kind.parameters.joinToString(", ") { it.name }
                                                 }
@@ -146,7 +145,7 @@ class Generator(
 
                                 is IrMixinShadowEntry -> when (entry) {
                                     is IrMixinShadowProperty -> {
-                                        val shadowField = field(entry.mappingName, entry.type) {
+                                        val shadowField = field(entry.mappingName, entry.typeName) {
                                             if (entry.mixinAnnotations.isNotEmpty()) {
                                                 mixinAnnotations(entry.mixinAnnotations)
                                             } else {
@@ -160,8 +159,8 @@ class Generator(
                                             method(kind.name) {
                                                 public()
                                                 annotation<Override>()
-                                                kind.parameters.forEach { parameter(it.name, it.type) }
-                                                kind.returnType?.let { returns(it) }
+                                                kind.parameters.forEach { parameter(it.name, it.typeName) }
+                                                kind.returnTypeName?.let { returns(it) }
                                                 body {
                                                     when (kind) {
                                                         is IrMixinDuckPropertyEntry.Getter -> {
@@ -186,8 +185,8 @@ class Generator(
                                                 annotation<Shadow>()
                                             }
                                             entry.modifiers.forEach { modifier(it) }
-                                            entry.parameters.forEach { parameter(it.name, it.type) }
-                                            entry.returnType?.let { returns(it) }
+                                            entry.parameters.forEach { parameter(it.name, it.typeName) }
+                                            entry.returnTypeName?.let { returns(it) }
                                             if (entry.isStatic) {
                                                 body {
                                                     line { "throw ${T<AssertionError>()}(${S("Stub!")})" }
@@ -197,10 +196,10 @@ class Generator(
                                         method(entry.name) {
                                             public()
                                             annotation<Override>()
-                                            entry.parameters.forEach { parameter(it.name, it.type) }
-                                            entry.returnType?.let { returns(it) }
+                                            entry.parameters.forEach { parameter(it.name, it.typeName) }
+                                            entry.returnTypeName?.let { returns(it) }
                                             body {
-                                                val maybeReturn = if (entry.returnType != null) "return " else ""
+                                                val maybeReturn = if (entry.returnTypeName != null) "return " else ""
                                                 val parameters = code {
                                                     entry.parameters.joinToString(", ") { it.name }
                                                 }
@@ -235,15 +234,16 @@ class Generator(
             is IrMixinAnnotationDoubleArgumentValue -> L(value.double)
             is IrMixinAnnotationStringArgumentValue -> S(value.string)
             is IrMixinAnnotationEnumArgumentValue -> "${T(value.enumClassName)}.${value.entryName}"
-            is IrMixinAnnotationClassTypeArgumentValue -> "${T(value.type)}.class"
+            is IrMixinAnnotationClassTypeArgumentValue -> "${T(value.typeName)}.class"
             is IrMixinAnnotationEmbeddedAnnotationArgumentValue -> {
-                L(kspPoetesse.java.annotation<Annotation>(value.embeddedAnnotation.className) {
-                    applyMixinAnnotationArguments(value.embeddedAnnotation.arguments)
-                })
+                val embeddedAnnotation = kspPoetesse.java.annotation<Annotation>(value.embeddedAnnotation.className) {
+                    mixinAnnotationArguments(value.embeddedAnnotation.arguments)
+                }
+                L(embeddedAnnotation)
             }
         }
 
-    private fun JavaAnnotationScope<*>.applyMixinAnnotationArguments(arguments: List<IrMixinAnnotationArgument>) {
+    private fun JavaAnnotationScope<*>.mixinAnnotationArguments(arguments: List<IrMixinAnnotationArgument>) {
         arguments.forEach { argument ->
             member(argument.name) {
                 when (argument) {
@@ -264,7 +264,7 @@ class Generator(
     private fun JavaAnnotationTrait.mixinAnnotations(mixinAnnotations: List<IrMixinAnnotation>) {
         mixinAnnotations.forEach { annotation ->
             annotation<Annotation>(annotation.className) {
-                applyMixinAnnotationArguments(annotation.arguments)
+                mixinAnnotationArguments(annotation.arguments)
             }
         }
     }
@@ -273,64 +273,64 @@ class Generator(
         val isEager = impl.initStrategy == InitStrategy.Eager
         val isSynchronized = impl.initStrategy == InitStrategy.Synchronized
         val isThreadSafe = impl.initStrategy == InitStrategy.Volatile || isSynchronized
-        val field = field("patch", impl.className) {
+        val patchField = field("patch", impl.className) {
             private()
             annotation<Unique>()
             if (isEager) {
-                modifier(JPModifier.FINAL)
+                final()
                 initializer { patchImplInitializer(impl) }
             } else if (isThreadSafe) {
-                modifier(JPModifier.VOLATILE)
+                volatile()
             }
         }
-        if (isEager) return field
-        val lockField = if (isSynchronized) {
+        if (isEager) return patchField
+        val patchLockField = if (isSynchronized) {
             field<Any>("patchLock") {
                 private()
-                modifier(JPModifier.FINAL)
+                final()
                 annotation<Unique>()
                 initializer { "new ${T<Any>()}()" }
             }
         } else null
-        val method = method("getOrInitPatch") {
+        val getOrInitPatchMethod = method("getOrInitPatch") {
             private()
             annotation<Unique>()
             body {
                 if (isThreadSafe) {
-                    val local by var_(impl.className) { "this.$field" }
+                    val local by var_(impl.className) { "this.$patchField" }
                     controlFlow {
                         branch("if ($local == null)") {
-                            if (isSynchronized && lockField != null) {
+                            if (isSynchronized && patchLockField != null) {
                                 controlFlow {
-                                    branch("synchronized (this.$lockField)") {
-                                        line { "$local = this.$field" }
+                                    branch("synchronized (this.$patchLockField)") {
+                                        line { "$local = this.$patchField" }
                                         controlFlow {
                                             branch("if ($local == null)") {
                                                 line { "$local = ${L { patchImplInitializer(impl) }}" }
-                                                line { "this.$field = $local" }
+                                                line { "this.$patchField = $local" }
                                             }
                                         }
                                     }
                                 }
                             } else {
                                 line { "$local = ${L { patchImplInitializer(impl) }}" }
-                                line { "this.$field = $local" }
+                                line { "this.$patchField = $local" }
                             }
                         }
                     }
                     line { "return $local" }
                 } else {
                     controlFlow {
-                        branch("if (this.$field == null)") {
-                            line { "this.$field = ${L { patchImplInitializer(impl) }}" }
+                        branch("if (this.$patchField == null)") {
+                            line { "this.$patchField = ${L { patchImplInitializer(impl) }}" }
                         }
                     }
-                    line { "return this.$field" }
+                    line { "return this.$patchField" }
                 }
             }
             returns(impl.className)
         }
-        return "$method()"
+        return "$getOrInitPatchMethod()"
     }
 
     fun JavaCodeScope.patchImplInitializer(impl: IrPatchImpl): String {
@@ -345,7 +345,7 @@ class Generator(
         return "new ${T(impl.className)}(${L(constructorArguments)})"
     }
 
-    fun JavaCodeScope.doubleCastTo(targetType: XTypeName): String = "(${T(targetType)}) (${T<Any>()}) this"
+    fun JavaCodeScope.doubleCastTo(targetTypeName: XTypeName): String = "(${T(targetTypeName)}) (${T<Any>()}) this"
 
     private fun JavaTypeScope.mixinInjection(injection: IrInjection, patchReceiver: JavaCodeScope.() -> String) {
         method(injection.jvmName) {
@@ -353,11 +353,11 @@ class Generator(
             if (injection.isStatic) static()
             mixinAnnotations(injection.mixinAnnotations)
             injection.parameters.forEach { parameter ->
-                parameter(parameter.name, parameter.type) {
+                parameter(parameter.name, parameter.typeName) {
                     mixinAnnotations(parameter.mixinAnnotations)
                 }
             }
-            injection.returnType?.let { returns(it) }
+            injection.returnTypeName?.let { returns(it) }
             body {
                 val functionArguments = code {
                     buildList {
@@ -365,7 +365,7 @@ class Generator(
                         addAll(injection.parameters.map { it.name })
                     }.joinToString(", ")
                 }
-                val maybeReturn = if (injection.returnType != null) "return " else ""
+                val maybeReturn = if (injection.returnTypeName != null) "return " else ""
                 line { "$maybeReturn${L(patchReceiver)}.${L(injection.jvmName)}(${L(functionArguments)})" }
             }
         }
@@ -381,8 +381,8 @@ class Generator(
                         method(kind.name) {
                             public()
                             abstract()
-                            kind.parameters.forEach { parameter(it.name, it.type) }
-                            kind.returnType?.let { returns(it) }
+                            kind.parameters.forEach { parameter(it.name, it.typeName) }
+                            kind.returnTypeName?.let { returns(it) }
                         }
                     }
                 }

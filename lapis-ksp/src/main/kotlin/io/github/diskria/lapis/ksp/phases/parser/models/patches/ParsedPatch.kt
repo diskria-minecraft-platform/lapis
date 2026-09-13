@@ -4,8 +4,6 @@ import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSNode
 import io.github.diskria.lapis.annotations.Env
 import io.github.diskria.lapis.annotations.InitStrategy
-import io.github.diskria.lapis.ksp.phases.parser.models.common.ParsedAnnotation
-import io.github.diskria.lapis.ksp.phases.parser.models.common.SymbolSource
 
 class ParsedPatch(
     val name: String?,

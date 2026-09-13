@@ -6,14 +6,13 @@ import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.symbol.*
 import io.github.diskria.lapis.annotations.*
 import io.github.diskria.lapis.annotations.Origin
-import io.github.diskria.lapis.ksp.extensions.common.castOrNull
-import io.github.diskria.lapis.ksp.extensions.common.lapisError
+import io.github.diskria.lapis.ksp.extensions.castOrNull
 import io.github.diskria.lapis.ksp.extensions.ks.*
 import io.github.diskria.lapis.ksp.extensions.ksp.KSPOrigin
 import io.github.diskria.lapis.ksp.extensions.ksp.getSymbolsAnnotatedWith
+import io.github.diskria.lapis.ksp.extensions.lapisError
 import io.github.diskria.lapis.ksp.logging.Logger
 import io.github.diskria.lapis.ksp.phases.parser.models.ParserResult
-import io.github.diskria.lapis.ksp.phases.parser.models.common.*
 import io.github.diskria.lapis.ksp.phases.parser.models.patches.*
 import java.lang.annotation.RetentionPolicy
 import kotlin.reflect.KClass

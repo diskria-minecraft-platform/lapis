@@ -3,7 +3,7 @@ package io.github.diskria.lapis.ksp.phases.parser.helpers
 import com.google.devtools.ksp.processing.KSBuiltIns
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSType
-import io.github.diskria.lapis.ksp.extensions.common.castOrNull
+import io.github.diskria.lapis.ksp.extensions.castOrNull
 import io.github.diskria.lapis.ksp.extensions.ks.name
 import kotlin.enums.enumEntries
 

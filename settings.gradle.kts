@@ -3,7 +3,7 @@ plugins {
 }
 
 projektor {
-    version = "0.10.0"
+    version = "0.10.0-SNAPSHOT"
     license { mit() }
     monorepo {
         gradlePlugin(":lapis-gradle-plugin", "lapis")
@@ -14,6 +14,7 @@ projektor {
 
 dependencyResolutionManagement {
     repositories {
+        mavenLocal()
         maven("https://repo.spongepowered.org/repository/maven-public") {
             name = "SpongePublic"
             content { includeGroup("org.spongepowered") }

@@ -105,6 +105,6 @@ class LapisGradlePlugin : Plugin<Project> {
     }
 
     private companion object {
-        const val PLUGIN_VERSION = "0.10.0"
+        const val PLUGIN_VERSION = "0.10.0-SNAPSHOT"
     }
 }

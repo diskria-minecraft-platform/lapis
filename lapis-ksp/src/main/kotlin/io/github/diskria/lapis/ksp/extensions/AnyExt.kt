@@ -1,4 +1,4 @@
-package io.github.diskria.lapis.ksp.extensions.common
+package io.github.diskria.lapis.ksp.extensions
 
 import kotlin.reflect.KClass
 

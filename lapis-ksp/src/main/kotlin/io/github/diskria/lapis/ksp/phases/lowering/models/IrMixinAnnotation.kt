@@ -1,4 +1,4 @@
-package io.github.diskria.lapis.ksp.phases.lowering.models.common
+package io.github.diskria.lapis.ksp.phases.lowering.models
 
 import io.github.diskria.poetesse.interop.XClassName
 import io.github.diskria.poetesse.interop.XTypeName
@@ -60,7 +60,7 @@ class IrMixinAnnotationStringArgumentValue(
 ) : IrMixinAnnotationArgumentValue
 
 class IrMixinAnnotationClassTypeArgumentValue(
-    val type: XTypeName
+    val typeName: XTypeName
 ) : IrMixinAnnotationArgumentValue
 
 class IrMixinAnnotationEnumArgumentValue(
