@@ -3,7 +3,7 @@ package io.github.diskria.lapis.ksp.logging
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class KspArguments(
+data class KspOptions(
     val uniqueModPrefix: String,
     val mixinPackage: String,
     val mixinGeneratedSubpackage: String? = null,

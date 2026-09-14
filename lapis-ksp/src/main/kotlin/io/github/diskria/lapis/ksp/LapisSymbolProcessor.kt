@@ -4,7 +4,7 @@ import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.symbol.KSAnnotated
-import io.github.diskria.lapis.ksp.logging.KspArguments
+import io.github.diskria.lapis.ksp.logging.KspOptions
 import io.github.diskria.lapis.ksp.logging.Logger
 import io.github.diskria.lapis.ksp.phases.ProcessingPhase
 import io.github.diskria.lapis.ksp.phases.generator.Generator
@@ -16,12 +16,12 @@ import io.github.diskria.poetesse.Poetesse
 import java.util.*
 
 class LapisSymbolProcessor(
-    private val kspArguments: KspArguments,
+    private val kspOptions: KspOptions,
     private val codeGenerator: CodeGenerator,
     private val logger: Logger,
 ) : SymbolProcessor {
 
-    private val lowering: Lowering = Lowering(kspArguments, logger)
+    private val lowering: Lowering = Lowering(kspOptions, logger)
     private val patches: SortedMap<String, IrPatch> = sortedMapOf()
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
@@ -49,7 +49,7 @@ class LapisSymbolProcessor(
 
     private fun generate() {
         logger.setPhase(ProcessingPhase.GENERATION)
-        Generator(kspArguments, codeGenerator, logger).generate(patches.values.toList())
+        Generator(kspOptions, codeGenerator, logger).generate(patches.values.toList())
     }
 }
 

@@ -62,7 +62,7 @@ class LapisGradlePlugin : Plugin<Project> {
             val processResourcesTaskName = "process${sourceSetNamePart}Resources"
             project.tasks.withType<KspAATask>().matching { it.name == kspTaskName }.configureEach { task ->
                 task.commandLineArgumentProviders.add(
-                    project.objects.newInstance<LapisKspArgumentProvider>(
+                    project.objects.newInstance<KspArgumentProvider>(
                         lapisExtension.uniqueModPrefix,
                         sourceSetSpec.mixinConfig,
                         lapisExtension.disableLCP,

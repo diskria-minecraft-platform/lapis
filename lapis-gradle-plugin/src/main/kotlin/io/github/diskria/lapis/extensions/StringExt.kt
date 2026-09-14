@@ -5,3 +5,6 @@ fun String.capitalized(): String =
 
 fun String.decapitalized(): String =
     replaceFirstChar { it.lowercase() }
+
+fun String.doubleQuoted(): String =
+    "\"$this\""

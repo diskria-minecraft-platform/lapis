@@ -5,7 +5,7 @@ import com.google.devtools.ksp.processing.Dependencies
 import com.google.devtools.ksp.symbol.KSFile
 import io.github.diskria.lapis.annotations.InitStrategy
 import io.github.diskria.lapis.ksp.kspPoetesse
-import io.github.diskria.lapis.ksp.logging.KspArguments
+import io.github.diskria.lapis.ksp.logging.KspOptions
 import io.github.diskria.lapis.ksp.logging.Logger
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
 import io.github.diskria.poetesse.PoetesseFile
@@ -17,7 +17,7 @@ import kotlinx.serialization.json.Json
 import org.spongepowered.asm.mixin.*
 
 class Generator(
-    private val kspArguments: KspArguments,
+    private val kspOptions: KspOptions,
     private val codeGenerator: CodeGenerator,
     @Suppress("unused") private val logger: Logger,
 ) {
@@ -31,15 +31,15 @@ class Generator(
         // todo pass extensions to fir via gen res
     }
 
-    private fun generatePatchImpl(impl: IrPatchImpl, patch: IrPatch) {
+    private fun generatePatchImpl(patchImpl: IrPatchImpl, patch: IrPatch) {
         kspPoetesse {
-            kotlin.file(impl.className) {
+            kotlin.file(patchImpl.className) {
                 class_(fileName) {
                     public()
-                    if (impl.constructorParameters.isNotEmpty()) {
+                    if (patchImpl.constructorParameters.isNotEmpty()) {
                         constructor(primary = true) {
                             public()
-                            impl.constructorParameters.forEach { parameter ->
+                            patchImpl.constructorParameters.forEach { parameter ->
                                 when (parameter) {
                                     is IrPatchImplConstructorInstanceParameter -> {
                                         parameter("instance", parameter.className)
@@ -91,7 +91,7 @@ class Generator(
                                     body {
                                         val maybeReturn = if (entry.returnTypeName != null) "return " else ""
                                         val parameters = code {
-                                            entry.parameters.joinToString(", ") { N(it.name) }
+                                            entry.parameters.joinToString { N(it.name) }
                                         }
                                         line { "$maybeReturn${N("duck")}.${N(entry.name)}(${L(parameters)})" }
                                     }
@@ -101,7 +101,7 @@ class Generator(
                     }
                 }
             }
-        }.writeWith(codeGenerator, aggregating = false, impl.originatingFiles)
+        }.writeWith(codeGenerator, aggregating = false, patchImpl.originatingFiles)
     }
 
     private fun generateMixin(mixin: IrMixin, patchClassName: XClassName, patchImpl: IrPatchImpl?) {
@@ -132,7 +132,7 @@ class Generator(
                                             body {
                                                 val maybeReturn = if (kind.returnTypeName != null) "return " else ""
                                                 val parameters = code {
-                                                    kind.parameters.joinToString(", ") { it.name }
+                                                    kind.parameters.joinToString { it.name }
                                                 }
                                                 line {
                                                     "$maybeReturn$patchImplMember.${L(kind.sourceJvmName)}" +
@@ -201,7 +201,7 @@ class Generator(
                                             body {
                                                 val maybeReturn = if (entry.returnTypeName != null) "return " else ""
                                                 val parameters = code {
-                                                    entry.parameters.joinToString(", ") { it.name }
+                                                    entry.parameters.joinToString { it.name }
                                                 }
                                                 line { "$maybeReturn$shadowMethod(${L(parameters)})" }
                                             }
@@ -269,16 +269,16 @@ class Generator(
         }
     }
 
-    private fun JavaTypeScope.patchImplMember(impl: IrPatchImpl): String {
-        val isEager = impl.initStrategy == InitStrategy.Eager
-        val isSynchronized = impl.initStrategy == InitStrategy.Synchronized
-        val isThreadSafe = impl.initStrategy == InitStrategy.Volatile || isSynchronized
-        val patchField = field("patch", impl.className) {
+    private fun JavaTypeScope.patchImplMember(patchImpl: IrPatchImpl): String {
+        val isEager = patchImpl.initStrategy == InitStrategy.Eager
+        val isSynchronized = patchImpl.initStrategy == InitStrategy.Synchronized
+        val isThreadSafe = patchImpl.initStrategy == InitStrategy.Volatile || isSynchronized
+        val patchField = field("patch", patchImpl.className) {
             private()
             annotation<Unique>()
             if (isEager) {
                 final()
-                initializer { patchImplInitializer(impl) }
+                initializer { patchImplInitializer(patchImpl) }
             } else if (isThreadSafe) {
                 volatile()
             }
@@ -297,7 +297,7 @@ class Generator(
             annotation<Unique>()
             body {
                 if (isThreadSafe) {
-                    val local by var_(impl.className) { "this.$patchField" }
+                    val local by var_(patchImpl.className) { "this.$patchField" }
                     controlFlow {
                         branch("if ($local == null)") {
                             if (isSynchronized && patchLockField != null) {
@@ -306,14 +306,14 @@ class Generator(
                                         line { "$local = this.$patchField" }
                                         controlFlow {
                                             branch("if ($local == null)") {
-                                                line { "$local = ${L { patchImplInitializer(impl) }}" }
+                                                line { "$local = ${L { patchImplInitializer(patchImpl) }}" }
                                                 line { "this.$patchField = $local" }
                                             }
                                         }
                                     }
                                 }
                             } else {
-                                line { "$local = ${L { patchImplInitializer(impl) }}" }
+                                line { "$local = ${L { patchImplInitializer(patchImpl) }}" }
                                 line { "this.$patchField = $local" }
                             }
                         }
@@ -322,27 +322,27 @@ class Generator(
                 } else {
                     controlFlow {
                         branch("if (this.$patchField == null)") {
-                            line { "this.$patchField = ${L { patchImplInitializer(impl) }}" }
+                            line { "this.$patchField = ${L { patchImplInitializer(patchImpl) }}" }
                         }
                     }
                     line { "return this.$patchField" }
                 }
             }
-            returns(impl.className)
+            returns(patchImpl.className)
         }
         return "$getOrInitPatchMethod()"
     }
 
-    fun JavaCodeScope.patchImplInitializer(impl: IrPatchImpl): String {
+    fun JavaCodeScope.patchImplInitializer(patchImpl: IrPatchImpl): String {
         val constructorArguments = code {
-            impl.constructorParameters.joinToString(", ") { parameter ->
+            patchImpl.constructorParameters.joinToString { parameter ->
                 when (parameter) {
                     is IrPatchImplConstructorInstanceParameter -> doubleCastTo(parameter.className)
                     is IrPatchImplConstructorDuckParameter -> "this"
                 }
             }
         }
-        return "new ${T(impl.className)}(${L(constructorArguments)})"
+        return "new ${T(patchImpl.className)}(${L(constructorArguments)})"
     }
 
     fun JavaCodeScope.doubleCastTo(targetTypeName: XTypeName): String = "(${T(targetTypeName)}) (${T<Any>()}) this"
@@ -363,7 +363,7 @@ class Generator(
                     buildList {
                         injection.extensionReceiverClassName?.let { add(doubleCastTo(it)) }
                         addAll(injection.parameters.map { it.name })
-                    }.joinToString(", ")
+                    }.joinToString()
                 }
                 val maybeReturn = if (injection.returnTypeName != null) "return " else ""
                 line { "$maybeReturn${L(patchReceiver)}.${L(injection.jvmName)}(${L(functionArguments)})" }
@@ -393,7 +393,7 @@ class Generator(
     private fun generateMixinConfig(mixinBlueprints: List<IrMixin>) {
         generateResourceFile("mixins.json", mixinBlueprints.flatMap { it.originatingFiles }, aggregating = true) {
             val envClassNames = mixinBlueprints.groupBy({ it.env }, { it.className })
-            Json.encodeToString(GeneratedMixinsJson.of(kspArguments.mixinPackage, envClassNames))
+            Json.encodeToString(GeneratedMixinsJson.of(kspOptions.mixinPackage, envClassNames))
         }
     }
 
@@ -411,11 +411,7 @@ class Generator(
     }
 }
 
-fun PoetesseFile.writeWith(
-    codeGenerator: CodeGenerator,
-    aggregating: Boolean,
-    originatingKSFiles: Iterable<KSFile>,
-) {
+fun PoetesseFile.writeWith(codeGenerator: CodeGenerator, aggregating: Boolean, originatingKSFiles: Iterable<KSFile>) {
     codeGenerator.createNewFile(
         dependencies = Dependencies(aggregating, *originatingKSFiles.toList().toTypedArray()),
         packageName = packageName.orEmpty(),

@@ -22,20 +22,20 @@ abstract class MergeMixinConfigsTask : DefaultTask() {
 
     @TaskAction
     fun merge() {
-        val userFile = userConfig.get().asFile
-        val genFile = generatedConfig.orNull?.asFile
-        val mergedFile = mergedConfig.get().asFile
-        if (genFile == null || !genFile.exists()) {
-            userFile.copyTo(mergedFile, overwrite = true)
+        val userConfigFile = userConfig.get().asFile
+        val genConfigFile = generatedConfig.orNull?.asFile
+        val mergedConfigFile = mergedConfig.get().asFile
+        if (genConfigFile == null || !genConfigFile.exists()) {
+            userConfigFile.copyTo(mergedConfigFile, overwrite = true)
             return
         }
-        val genFileText = genFile.readText()
+        val genFileText = genConfigFile.readText()
         val genJson = Json.parseToJsonElement(genFileText).jsonObject
         if (genJson.isEmpty()) {
-            userFile.copyTo(mergedFile, overwrite = true)
+            userConfigFile.copyTo(mergedConfigFile, overwrite = true)
             return
         }
-        val userFileText = userFile.readText()
+        val userFileText = userConfigFile.readText()
         val indent = userFileText.lineSequence()
             .map { line -> line.takeWhile { it.isWhitespace() } }
             .firstOrNull { it.isNotEmpty() }
@@ -48,8 +48,8 @@ abstract class MergeMixinConfigsTask : DefaultTask() {
             prettyPrintIndent = indent
         }
         val mergedFileText = jsonForOutput.encodeToString(JsonElement.serializer(), mergedJson)
-        mergedFile.parentFile.mkdirs()
-        mergedFile.writeText(mergedFileText + trailingWhitespaces)
+        mergedConfigFile.parentFile.mkdirs()
+        mergedConfigFile.writeText(mergedFileText + trailingWhitespaces)
     }
 
     private fun mergeJsonObjects(userJson: JsonObject, genJson: JsonObject): JsonObject = buildJsonObject {

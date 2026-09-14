@@ -6,7 +6,7 @@ import com.squareup.kotlinpoet.ksp.toClassName
 import com.squareup.kotlinpoet.ksp.toTypeName
 import io.github.diskria.lapis.ksp.common.JavaModifiers
 import io.github.diskria.lapis.ksp.kspPoetesse
-import io.github.diskria.lapis.ksp.logging.KspArguments
+import io.github.diskria.lapis.ksp.logging.KspOptions
 import io.github.diskria.lapis.ksp.logging.Logger
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
 import io.github.diskria.lapis.ksp.phases.validator.models.*
@@ -17,11 +17,11 @@ import io.github.diskria.poetesse.interop.xType
 import io.github.diskria.poetesse.java.JPModifier
 
 class Lowering(
-    private val kspArguments: KspArguments,
+    private val kspOptions: KspOptions,
     @Suppress("unused") private val logger: Logger,
 ) {
     fun lower(result: ValidatorResult): IrResult {
-        val mixinSourcePackageLCP = if (kspArguments.disableLCP) null else {
+        val mixinSourcePackageLCP = if (kspOptions.disableLCP) null else {
             findMixinSourcePackageLCP(result.patches)
         }
         return IrResult(result.patches.map { lowerPatch(it, mixinSourcePackageLCP) })
@@ -176,8 +176,8 @@ class Lowering(
     private fun resolveMixinClassName(sourceClassName: XClassName, sourcePackageLCP: String?): XClassName {
         val sourcePackageName = sourceClassName.packageName
         val mixinPackageName = buildString {
-            append(kspArguments.mixinPackage)
-            kspArguments.mixinGeneratedSubpackage?.let { append(".$it") }
+            append(kspOptions.mixinPackage)
+            kspOptions.mixinGeneratedSubpackage?.let { append(".$it") }
             if (sourcePackageName != null && sourcePackageLCP != null && sourcePackageName != sourcePackageLCP) {
                 append(".${sourcePackageName.removePrefix("$sourcePackageLCP.")}")
             }
@@ -223,7 +223,7 @@ class Lowering(
         }.orEmpty()
 
     private fun String.withUniqueModPrefix(): String =
-        kspArguments.uniqueModPrefix + this
+        kspOptions.uniqueModPrefix + this
 }
 
 fun KSType.toXTypeName(): XTypeName =
