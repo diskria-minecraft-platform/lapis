@@ -1,14 +1,13 @@
-package io.github.diskria.lapis.ksp.logging
+package io.github.diskria.lapis.ksp
 
 import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.symbol.FileLocation
 import com.google.devtools.ksp.symbol.KSNode
 import com.google.devtools.ksp.symbol.NonExistLocation
-import io.github.diskria.lapis.ksp.phases.ProcessingPhase
 
 class Logger(private val logger: KSPLogger) {
 
-    private var currentPhase: ProcessingPhase = ProcessingPhase.BOOTSTRAP
+    private var currentPhase: Phase = Phase.BOOTSTRAP
 
     fun info(message: String, symbol: KSNode? = null) {
         logger.info(buildFullMessage(message, symbol))
@@ -27,7 +26,7 @@ class Logger(private val logger: KSPLogger) {
         throw LapisException(message)
     }
 
-    fun setPhase(phase: ProcessingPhase) {
+    fun setPhase(phase: Phase) {
         currentPhase = phase
     }
 
@@ -42,6 +41,14 @@ class Logger(private val logger: KSPLogger) {
             appendLine("├── symbol: $symbol")
             appendLine("└── at $locationText")
         }
+    }
+
+    enum class Phase {
+        BOOTSTRAP,
+        PARSING,
+        VALIDATION,
+        TRANSFORMATION,
+        GENERATION,
     }
 }
 

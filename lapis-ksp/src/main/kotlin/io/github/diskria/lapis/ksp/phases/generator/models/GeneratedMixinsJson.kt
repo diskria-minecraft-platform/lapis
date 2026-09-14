@@ -1,4 +1,4 @@
-package io.github.diskria.lapis.ksp.phases.generator
+package io.github.diskria.lapis.ksp.phases.generator.models
 
 import io.github.diskria.lapis.annotations.Env
 import io.github.diskria.poetesse.interop.XClassName

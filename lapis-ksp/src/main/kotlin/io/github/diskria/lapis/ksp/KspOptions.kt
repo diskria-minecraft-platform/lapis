@@ -1,4 +1,4 @@
-package io.github.diskria.lapis.ksp.logging
+package io.github.diskria.lapis.ksp
 
 import io.github.diskria.lapis.ksp.extensions.quoted
 import io.github.diskria.poetesse.extensions.doubleQuoted

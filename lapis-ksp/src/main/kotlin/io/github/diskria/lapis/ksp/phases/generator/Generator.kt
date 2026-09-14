@@ -4,9 +4,10 @@ import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.Dependencies
 import com.google.devtools.ksp.symbol.KSFile
 import io.github.diskria.lapis.annotations.InitStrategy
+import io.github.diskria.lapis.ksp.KspOptions
+import io.github.diskria.lapis.ksp.Logger
 import io.github.diskria.lapis.ksp.kspPoetesse
-import io.github.diskria.lapis.ksp.logging.KspOptions
-import io.github.diskria.lapis.ksp.logging.Logger
+import io.github.diskria.lapis.ksp.phases.generator.models.GeneratedMixinsJson
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
 import io.github.diskria.poetesse.PoetesseFile
 import io.github.diskria.poetesse.interop.XClassName
@@ -41,12 +42,12 @@ class Generator(
                             public()
                             patchImpl.constructorParameters.forEach { parameter ->
                                 when (parameter) {
-                                    is IrPatchImplConstructorInstanceParameter -> {
+                                    is IrPatchImpl.ConstructorParameter.Instance -> {
                                         parameter("instance", parameter.className)
                                             .property { private() }
                                     }
 
-                                    is IrPatchImplConstructorDuckParameter -> {
+                                    is IrPatchImpl.ConstructorParameter.Duck -> {
                                         parameter("duck", requireNotNull(patch.mixin.duck?.className))
                                             .property { private() }
                                     }
@@ -57,15 +58,15 @@ class Generator(
                     superclass(patch.className) {
                         patch.constructorArguments.forEach { argument ->
                             when (argument) {
-                                is IrPatchConstructorOriginArgument -> {
+                                is IrPatch.ConstructorArgument.Origin -> {
                                     argument { N("instance") }
                                 }
                             }
                         }
                     }
-                    patch.mixin.duck?.shadowEntries?.forEach { entry ->
+                    patch.mixin.duck?.entries?.filterIsInstance<IrMixinDuck.Shadow>()?.forEach { entry ->
                         when (entry) {
-                            is IrMixinDuckPropertyEntry -> {
+                            is IrMixinDuck.Property -> {
                                 property(entry.sourceName, entry.typeName) {
                                     override()
                                     getter {
@@ -83,7 +84,7 @@ class Generator(
                                 }
                             }
 
-                            is IrMixinDuckFunctionEntry -> {
+                            is IrMixinDuck.Function -> {
                                 function(entry.sourceName) {
                                     override()
                                     entry.parameters.forEach { parameter(it.name, it.typeName) }
@@ -122,7 +123,7 @@ class Generator(
                         superinterface(duck.className)
                         duck.entries.forEach { entry ->
                             when (entry) {
-                                is IrMixinDuckExtensionEntry -> {
+                                is IrMixinDuck.Extension -> {
                                     entry.kinds.forEach { kind ->
                                         method(kind.name) {
                                             public()
@@ -143,8 +144,8 @@ class Generator(
                                     }
                                 }
 
-                                is IrMixinShadowEntry -> when (entry) {
-                                    is IrMixinShadowProperty -> {
+                                is IrMixinDuck.Shadow -> when (entry) {
+                                    is IrMixinDuck.Shadow.Property -> {
                                         val shadowField = field(entry.mappingName, entry.typeName) {
                                             if (entry.mixinAnnotations.isNotEmpty()) {
                                                 mixinAnnotations(entry.mixinAnnotations)
@@ -163,11 +164,11 @@ class Generator(
                                                 kind.returnTypeName?.let { returns(it) }
                                                 body {
                                                     when (kind) {
-                                                        is IrMixinDuckPropertyEntry.Getter -> {
+                                                        is IrMixinDuck.Property.Getter -> {
                                                             line { "return $shadowField" }
                                                         }
 
-                                                        is IrMixinDuckPropertyEntry.Setter -> {
+                                                        is IrMixinDuck.Property.Setter -> {
                                                             line { "$shadowField = ${kind.name}" }
                                                         }
                                                     }
@@ -176,9 +177,10 @@ class Generator(
                                         }
                                     }
 
-                                    is IrMixinShadowFunction -> {
+                                    is IrMixinDuck.Shadow.Function -> {
                                         val shadowMethod = method(entry.mappingName) {
-                                            if (entry.isStatic) public()
+                                            val isStatic = JPModifier.STATIC in entry.modifiers
+                                            if (isStatic) public()
                                             if (entry.mixinAnnotations.isNotEmpty()) {
                                                 mixinAnnotations(entry.mixinAnnotations)
                                             } else {
@@ -187,7 +189,7 @@ class Generator(
                                             entry.modifiers.forEach { modifier(it) }
                                             entry.parameters.forEach { parameter(it.name, it.typeName) }
                                             entry.returnTypeName?.let { returns(it) }
-                                            if (entry.isStatic) {
+                                            if (isStatic) {
                                                 body {
                                                     line { "throw ${T<AssertionError>()}(${S("Stub!")})" }
                                                 }
@@ -222,52 +224,39 @@ class Generator(
         }.writeWith(codeGenerator, aggregating = false, mixin.originatingFiles)
     }
 
-    private fun JavaCodeScope.mixinAnnotationArgumentValue(value: IrMixinAnnotationArgumentValue): String =
-        when (value) {
-            is IrMixinAnnotationBooleanArgumentValue -> L(value.boolean)
-            is IrMixinAnnotationByteArgumentValue -> L(value.byte)
-            is IrMixinAnnotationShortArgumentValue -> L(value.short)
-            is IrMixinAnnotationIntArgumentValue -> L(value.int)
-            is IrMixinAnnotationLongArgumentValue -> L(value.long)
-            is IrMixinAnnotationCharArgumentValue -> L(value.char)
-            is IrMixinAnnotationFloatArgumentValue -> L(value.float)
-            is IrMixinAnnotationDoubleArgumentValue -> L(value.double)
-            is IrMixinAnnotationStringArgumentValue -> S(value.string)
-            is IrMixinAnnotationEnumArgumentValue -> "${T(value.enumClassName)}.${value.entryName}"
-            is IrMixinAnnotationClassTypeArgumentValue -> "${T(value.typeName)}.class"
-            is IrMixinAnnotationEmbeddedAnnotationArgumentValue -> {
-                val embeddedAnnotation = kspPoetesse.java.annotation<Annotation>(value.embeddedAnnotation.className) {
-                    mixinAnnotationArguments(value.embeddedAnnotation.arguments)
-                }
-                L(embeddedAnnotation)
-            }
-        }
-
-    private fun JavaAnnotationScope<*>.mixinAnnotationArguments(arguments: List<IrMixinAnnotationArgument>) {
-        arguments.forEach { argument ->
-            member(argument.name) {
-                when (argument) {
-                    is IrMixinAnnotationSingleArgument -> {
-                        mixinAnnotationArgumentValue(argument.value)
-                    }
-
-                    is IrMixinAnnotationArrayArgument -> {
-                        argument.values.joinToString(prefix = "{", postfix = "}") {
-                            mixinAnnotationArgumentValue(it)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     private fun JavaAnnotationTrait.mixinAnnotations(mixinAnnotations: List<IrMixinAnnotation>) {
-        mixinAnnotations.forEach { annotation ->
-            annotation<Annotation>(annotation.className) {
-                mixinAnnotationArguments(annotation.arguments)
+        mixinAnnotations.forEach { +mixinAnnotation(it) }
+    }
+
+    private fun mixinAnnotation(annotation: IrMixinAnnotation): JavaTypedAnnotationRef<Annotation> =
+        kspPoetesse.java.annotation(annotation.className) {
+            annotation.arguments.forEach { argument ->
+                member(argument.name) {
+                    val scalarValue = argument.takeIf { !it.isArray }?.values?.singleOrNull()
+                    if (scalarValue != null) {
+                        mixinAnnotationArgumentValue(scalarValue)
+                    } else {
+                        argument.values.joinToString(prefix = "{", postfix = "}") { mixinAnnotationArgumentValue(it) }
+                    }
+                }
             }
         }
-    }
+
+    private fun JavaCodeScope.mixinAnnotationArgumentValue(value: IrMixinAnnotation.Argument.Value): String =
+        when (value) {
+            is IrMixinAnnotation.Argument.BooleanValue -> L(value.boolean)
+            is IrMixinAnnotation.Argument.ByteValue -> L(value.byte)
+            is IrMixinAnnotation.Argument.ShortValue -> L(value.short)
+            is IrMixinAnnotation.Argument.IntValue -> L(value.int)
+            is IrMixinAnnotation.Argument.LongValue -> L(value.long)
+            is IrMixinAnnotation.Argument.CharValue -> L(value.char)
+            is IrMixinAnnotation.Argument.FloatValue -> L(value.float)
+            is IrMixinAnnotation.Argument.DoubleValue -> L(value.double)
+            is IrMixinAnnotation.Argument.StringValue -> S(value.string)
+            is IrMixinAnnotation.Argument.EnumValue -> "${T(value.className)}.${L(value.entryName)}"
+            is IrMixinAnnotation.Argument.ClassValue -> "${T(value.typeName)}.class"
+            is IrMixinAnnotation.Argument.AnnotationValue -> L(mixinAnnotation(value.annotation))
+        }
 
     private fun JavaTypeScope.patchImplMember(patchImpl: IrPatchImpl): String {
         val isEager = patchImpl.initStrategy == InitStrategy.Eager
@@ -337,8 +326,8 @@ class Generator(
         val constructorArguments = code {
             patchImpl.constructorParameters.joinToString { parameter ->
                 when (parameter) {
-                    is IrPatchImplConstructorInstanceParameter -> doubleCastTo(parameter.className)
-                    is IrPatchImplConstructorDuckParameter -> "this"
+                    is IrPatchImpl.ConstructorParameter.Instance -> doubleCastTo(parameter.className)
+                    is IrPatchImpl.ConstructorParameter.Duck -> "this"
                 }
             }
         }
@@ -347,7 +336,7 @@ class Generator(
 
     fun JavaCodeScope.doubleCastTo(targetTypeName: XTypeName): String = "(${T(targetTypeName)}) (${T<Any>()}) this"
 
-    private fun JavaTypeScope.mixinInjection(injection: IrInjection, patchReceiver: JavaCodeScope.() -> String) {
+    private fun JavaTypeScope.mixinInjection(injection: IrMixin.Injection, patchReceiver: JavaCodeScope.() -> String) {
         method(injection.jvmName) {
             private()
             if (injection.isStatic) static()
@@ -391,7 +380,11 @@ class Generator(
     }
 
     private fun generateMixinConfig(mixinBlueprints: List<IrMixin>) {
-        generateResourceFile("mixins.json", mixinBlueprints.flatMap { it.originatingFiles }, aggregating = true) {
+        generateResourceFile(
+            "generated-mixins.json",
+            mixinBlueprints.flatMap { it.originatingFiles },
+            aggregating = true,
+        ) {
             val envClassNames = mixinBlueprints.groupBy({ it.env }, { it.className })
             Json.encodeToString(GeneratedMixinsJson.of(kspOptions.mixinPackage, envClassNames))
         }

@@ -4,7 +4,7 @@ import com.google.devtools.ksp.processing.KSBuiltIns
 import com.google.devtools.ksp.symbol.KSAnnotation
 import com.google.devtools.ksp.symbol.KSType
 import io.github.diskria.lapis.ksp.extensions.requireQualifiedName
-import io.github.diskria.lapis.ksp.phases.parser.helpers.AnnotationArgumentValue
+import io.github.diskria.lapis.ksp.phases.parser.AnnotationArgumentValue
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 
@@ -26,31 +26,26 @@ inline fun <reified A : Annotation> KSAnnotation.findArgumentValue(
 inline fun <reified A : Annotation> KSAnnotation.getArgumentValue(
     property: KProperty1<A, String>,
     explicit: Boolean = false,
-): String? =
-    findArgumentValue(property, explicit)?.asString()
+): String? = findArgumentValue(property, explicit)?.asString()
 
 inline fun <reified A : Annotation> KSAnnotation.getArgumentValue(
     property: KProperty1<A, KClass<*>>,
     builtIns: KSBuiltIns,
     explicit: Boolean = false,
-): KSType? =
-    findArgumentValue(property, explicit)?.asClassType(builtIns)
+): KSType? = findArgumentValue(property, explicit)?.asClassType(builtIns)
 
 inline fun <reified A : Annotation, reified E : Enum<E>> KSAnnotation.getArgumentValue(
     property: KProperty1<A, E>,
     explicit: Boolean = false,
-): E? =
-    findArgumentValue(property, explicit)?.asEnum()
+): E? = findArgumentValue(property, explicit)?.asEnum()
 
 inline fun <reified A : Annotation> KSAnnotation.getArrayArgumentValue(
     property: KProperty1<A, *>,
     explicit: Boolean = false,
-): Iterable<AnnotationArgumentValue>? =
-    findArgumentValue(property, explicit)?.asArray()
+): Iterable<AnnotationArgumentValue>? = findArgumentValue(property, explicit)?.asArray()
 
 @JvmName("getEnumArrayArgumentValue")
 inline fun <reified A : Annotation, reified E : Enum<E>> KSAnnotation.getArgumentValue(
     property: KProperty1<A, Array<out E>>,
     explicit: Boolean = false,
-): List<E>? =
-    getArrayArgumentValue(property, explicit)?.mapNotNull { it.asEnum() }
+): List<E>? = getArrayArgumentValue(property, explicit)?.mapNotNull { it.asEnum() }

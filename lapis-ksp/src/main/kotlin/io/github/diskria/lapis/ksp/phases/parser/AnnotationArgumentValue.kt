@@ -1,4 +1,4 @@
-package io.github.diskria.lapis.ksp.phases.parser.helpers
+package io.github.diskria.lapis.ksp.phases.parser
 
 import com.google.devtools.ksp.processing.KSBuiltIns
 import com.google.devtools.ksp.symbol.KSClassDeclaration
@@ -7,15 +7,10 @@ import io.github.diskria.lapis.ksp.extensions.castOrNull
 import io.github.diskria.lapis.ksp.extensions.ks.name
 import kotlin.enums.enumEntries
 
-class AnnotationArgumentValue(
-    val rawValue: Any,
-    private val keepDefault: Boolean = false,
-) {
-    fun asString(): String? =
-        rawValue.castOrNull<String>()?.filterDefault { it.isEmpty() }
+class AnnotationArgumentValue(val rawValue: Any, private val keepDefault: Boolean = false) {
 
-    fun asClassType(builtIns: KSBuiltIns): KSType? =
-        rawValue.castOrNull<KSType>()?.filterDefault { it == builtIns.unitType }
+    fun asString(): String? = (rawValue as? String)?.filterDefault { it.isEmpty() }
+    fun asClassType(builtIns: KSBuiltIns): KSType? = (rawValue as? KSType)?.filterDefault { it == builtIns.unitType }
 
     inline fun <reified E : Enum<E>> asEnum(default: E? = null): E? {
         val entryName = rawValue.castOrNull<KSClassDeclaration>()?.name?.filterDefault { it == default?.name }

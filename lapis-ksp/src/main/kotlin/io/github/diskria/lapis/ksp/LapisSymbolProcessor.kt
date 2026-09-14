@@ -4,9 +4,6 @@ import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.symbol.KSAnnotated
-import io.github.diskria.lapis.ksp.logging.KspOptions
-import io.github.diskria.lapis.ksp.logging.Logger
-import io.github.diskria.lapis.ksp.phases.ProcessingPhase
 import io.github.diskria.lapis.ksp.phases.generator.Generator
 import io.github.diskria.lapis.ksp.phases.lowering.Lowering
 import io.github.diskria.lapis.ksp.phases.lowering.models.IrPatch
@@ -26,15 +23,15 @@ class LapisSymbolProcessor(
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
         val parser = SymbolParser(resolver, logger)
-        logger.setPhase(ProcessingPhase.PARSING)
-        val parserResult = parser.parse()
+        logger.setPhase(Logger.Phase.PARSING)
+        val parsedPatches = parser.parse()
 
-        logger.setPhase(ProcessingPhase.VALIDATION)
-        val validatorResult = FrontendValidator(logger).validate(parserResult)
+        logger.setPhase(Logger.Phase.VALIDATION)
+        val validatedPatches = FrontendValidator(logger).validate(parsedPatches)
 
-        logger.setPhase(ProcessingPhase.TRANSFORMATION)
-        val irResult = lowering.lower(validatorResult)
-        irResult.patches.forEach { patches[it.className.qualifiedName] = it }
+        logger.setPhase(Logger.Phase.TRANSFORMATION)
+        val irPatches = lowering.lower(validatedPatches)
+        irPatches.forEach { patches[it.className.qualifiedName] = it }
 
         return emptyList()
     }
@@ -48,7 +45,7 @@ class LapisSymbolProcessor(
     }
 
     private fun generate() {
-        logger.setPhase(ProcessingPhase.GENERATION)
+        logger.setPhase(Logger.Phase.GENERATION)
         Generator(kspOptions, codeGenerator, logger).generate(patches.values.toList())
     }
 }

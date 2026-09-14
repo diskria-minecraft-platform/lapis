@@ -3,14 +3,17 @@ package io.github.diskria.lapis.ksp.phases.validator
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.Variance
-import io.github.diskria.lapis.ksp.common.JavaModifiers
+import io.github.diskria.lapis.ksp.Logger
 import io.github.diskria.lapis.ksp.extensions.internalError
 import io.github.diskria.lapis.ksp.extensions.ks.isValid
 import io.github.diskria.lapis.ksp.extensions.ks.toClassDeclaration
-import io.github.diskria.lapis.ksp.logging.Logger
-import io.github.diskria.lapis.ksp.phases.parser.models.ParserResult
-import io.github.diskria.lapis.ksp.phases.parser.models.patches.*
-import io.github.diskria.lapis.ksp.phases.validator.models.*
+import io.github.diskria.lapis.ksp.phases.parser.models.ParsedAnnotation
+import io.github.diskria.lapis.ksp.phases.parser.models.ParsedPatch
+import io.github.diskria.lapis.ksp.phases.parser.models.SymbolSource
+import io.github.diskria.lapis.ksp.phases.validator.models.FunctionParameter
+import io.github.diskria.lapis.ksp.phases.validator.models.MixinAnnotation
+import io.github.diskria.lapis.ksp.phases.validator.models.Patch
+import io.github.diskria.lapis.ksp.utils.JavaModifiers
 import io.github.diskria.poetesse.java.JPModifier
 import javax.lang.model.element.Modifier
 import kotlin.contracts.ExperimentalContracts
@@ -18,22 +21,19 @@ import kotlin.contracts.contract
 
 class FrontendValidator(private val logger: Logger) {
 
-    fun validate(result: ParserResult): ValidatorResult =
-        ValidatorResult(
-            patches = result.patches.mapNotNull {
-                runOrNullOnSkip { it.validate() }
-            },
-        )
+    fun validate(patches: List<ParsedPatch>): List<Patch> =
+        patches.mapNotNull { runOrNullOnSkip { it.validate() } }
 
     private fun ParsedPatch.validate(): Patch {
         kspRequireNotNull(name) { "213" }
+        kspRequireNotNull(env) { "214" }
         kspRequireNotNull(initStrategy) { "214" }
         validateClassDeclaration(classDeclaration)
         kspRequire(classDeclaration.typeParameters.isEmpty()) { "216" }
         kspRequire(isTopLevel) { "217" }
         kspRequire(hasPackageName) { "218" }
         kspRequire(isPublic) { "219" }
-        val mixinAnnotations = resolveMixinAnnotations(annotations)
+        val mixinAnnotations = validateMixinAnnotations(annotations)
         kspRequire(isClass) { "235" }
         kspRequire(!isObject) { "236" }
         kspRequire(!isSealed) { "237" }
@@ -44,7 +44,7 @@ class FrontendValidator(private val logger: Logger) {
             runOrNullOnSkip { it.validate(targetClassDeclaration) }
         }
         val (parsedInjectionFunctions, parsedRegularFunctions) = functions.partition {
-            resolveMixinAnnotations(it.annotations).isNotEmpty()
+            validateMixinAnnotations(it.annotations).isNotEmpty()
         }
         val extensionProperties = bodyProperties.filter { it.hasExtensionAnnotation }.mapNotNull {
             runOrNullOnSkip { it.validateAsExtension(targetClassDeclaration) }
@@ -79,29 +79,31 @@ class FrontendValidator(private val logger: Logger) {
         return Patch(
             symbol = symbol,
             classDeclaration = classDeclaration,
-
             name = name,
             env = env,
             initStrategy = initStrategy,
             isImplRequired = !hasStaticHooksOnly,
             targetClassDeclaration = targetClassDeclaration,
-
             constructorParameters = constructorParameters,
-            extensionSources = extensionProperties + extensionFunctions,
-            shadowSources = shadowProperties + shadowFunctions,
+            duckSources = buildList {
+                addAll(extensionProperties)
+                addAll(extensionFunctions)
+                addAll(shadowProperties)
+                addAll(shadowFunctions)
+            },
             injections = injections + companionObjectInjections,
             mixinAnnotations = mixinAnnotations,
         )
     }
 
-    private fun ParsedPatchCompanionObject.validate(): ParsedPatchCompanionObject {
+    private fun ParsedPatch.CompanionObject.validate(): ParsedPatch.CompanionObject {
         kspRequire(isPublic) { "296" }
         return this
     }
 
-    private fun ParsedPatchConstructorParameter.validate(
+    private fun ParsedPatch.Constructor.Parameter.validate(
         targetClassDeclaration: KSClassDeclaration?
-    ): PatchConstructorParameter {
+    ): Patch.ConstructorParameter {
         validateType(type)
         return when {
             hasOriginAnnotation -> {
@@ -110,23 +112,23 @@ class FrontendValidator(private val logger: Logger) {
                     validateClassDeclaration(typeClassDeclaration) == validateClassDeclaration(targetClassDeclaration)
                 ) { "308" }
                 kspRequire(type.arguments.none { it.variance != Variance.STAR }) { "309" }
-                PatchConstructorOriginParameter(typeClassDeclaration)
+                Patch.ConstructorParameter.Origin(typeClassDeclaration)
             }
 
             else -> kspError { "313" }
         }
     }
 
-    private fun ParsedPatchProperty.validateAsExtension(
+    private fun ParsedPatch.Property.validateAsExtension(
         targetClassDeclaration: KSClassDeclaration?,
-    ): ExtensionProperty {
+    ): Patch.Extension.Property {
         validateType(type)
         kspRequireNotNull(getter) { "322" }
         kspRequireNotNull(getter.jvmName) { "323" }
         kspRequire(isPublic) { "324" }
         kspRequire(!hasExtensionReceiver) { "325" }
         kspRequire(!isOpen && !isAbstract) { "327" }
-        return ExtensionProperty(
+        return Patch.Extension.Property(
             name = name,
             getterJvmName = getter.jvmName,
             setterJvmName = if (setter != null) kspRequireNotNull(setter.jvmName) { "332" } else null,
@@ -135,9 +137,9 @@ class FrontendValidator(private val logger: Logger) {
         )
     }
 
-    private fun ParsedPatchFunction.validateAsExtension(
+    private fun ParsedPatch.Function.validateAsExtension(
         targetClassDeclaration: KSClassDeclaration?,
-    ): ExtensionFunction {
+    ): Patch.Extension.Function {
         kspRequire(isPublic) { "342" }
         kspRequireNotNull(jvmName) { "343" }
         kspRequire(extensionReceiverClassDeclaration == null) { "361" }
@@ -148,7 +150,7 @@ class FrontendValidator(private val logger: Logger) {
                 type = validateType(it.type),
             )
         }
-        return ExtensionFunction(
+        return Patch.Extension.Function(
             name = name,
             jvmName = jvmName,
             parameters = parameters,
@@ -157,27 +159,27 @@ class FrontendValidator(private val logger: Logger) {
         )
     }
 
-    private fun ParsedPatchProperty.validateAsShadow(): ShadowProperty {
+    private fun ParsedPatch.Property.validateAsShadow(): Patch.Shadow.Property {
         validateType(type)
         kspRequire(isPublic) { "365" }
         kspRequire(isAbstract) { "366" }
         kspRequire(!hasExtensionReceiver) { "367" }
         kspRequireNotNull(getter) { "368" }
         kspRequireNotNull(getter.jvmName) { "369" }
-        val mappingName = resolveMappingName(explicitMappingName, name)
-        val shadowModifiers = resolveModifiers(shadowModifiers, isMethod = false)
-        return ShadowProperty(
+        val mappingName = validateMappingName(explicitMappingName, name)
+        val shadowModifiers = validateModifiers(shadowModifiers, isMethod = false)
+        return Patch.Shadow.Property(
             name = name,
             getterJvmName = getter.jvmName,
             setterJvmName = if (setter != null) kspRequireNotNull(setter.jvmName) { "375" } else null,
             mappingName = mappingName,
             modifiers = shadowModifiers,
             type = type,
-            mixinAnnotations = resolveMixinAnnotations(getter.annotations),
+            mixinAnnotations = validateMixinAnnotations(getter.annotations),
         )
     }
 
-    private fun ParsedPatchFunction.validateAsShadow(): ShadowFunction {
+    private fun ParsedPatch.Function.validateAsShadow(): Patch.Shadow.Function {
         kspRequire(isPublic) { "384" }
         kspRequireNotNull(jvmName) { "385" }
         kspRequire(isAbstract) { "386" }
@@ -188,33 +190,33 @@ class FrontendValidator(private val logger: Logger) {
                 type = validateType(it.type),
             )
         }
-        val mappingName = resolveMappingName(explicitMappingName, name)
-        val shadowModifiers = resolveModifiers(shadowModifiers, isMethod = true)
-        return ShadowFunction(
+        val mappingName = validateMappingName(explicitMappingName, name)
+        val shadowModifiers = validateModifiers(shadowModifiers, isMethod = true)
+        return Patch.Shadow.Function(
             name = name,
             jvmName = jvmName,
             parameters = parameters,
             returnType = returnType,
             mappingName = mappingName,
-            mixinAnnotations = resolveMixinAnnotations(annotations),
+            mixinAnnotations = validateMixinAnnotations(annotations),
             modifiers = shadowModifiers,
         )
     }
 
-    private fun ParsedPatchFunction.validateAsInjection(
+    private fun ParsedPatch.Function.validateAsInjection(
         isInCompanionObject: Boolean,
         targetClassDeclaration: KSClassDeclaration?,
-    ): PatchInjection {
+    ): Patch.Injection {
         kspRequireNotNull(jvmName) { "408" }
         kspRequire(!hasTypeParameters) { "409" }
         kspRequire(!isOpen) { "410" }
-        val mixinAnnotations = resolveMixinAnnotations(annotations)
+        val mixinAnnotations = validateMixinAnnotations(annotations)
         if (isInCompanionObject) {
             kspRequire(extensionReceiverClassDeclaration == null) { "438" }
         } else if (extensionReceiverClassDeclaration != null) {
             kspRequire(extensionReceiverClassDeclaration == validateClassDeclaration(targetClassDeclaration)) { "441" }
         }
-        return PatchInjection(
+        return Patch.Injection(
             jvmName = jvmName,
             extensionReceiverClassDeclaration = extensionReceiverClassDeclaration,
             mixinAnnotations = mixinAnnotations,
@@ -224,16 +226,16 @@ class FrontendValidator(private val logger: Logger) {
         )
     }
 
-    private fun ParsedPatchFunctionParameter.validateAsNativeInjectionParameter(): PatchNativeInjectionParameter {
+    private fun ParsedPatch.Function.Parameter.validateAsNativeInjectionParameter(): Patch.Injection.Parameter {
         kspRequireNotNull(name) { "620" }
         kspRequireNotNull(type) { "621" }
-        return PatchNativeInjectionParameter(name, type, resolveMixinAnnotations(annotations))
+        return Patch.Injection.Parameter(name, type, validateMixinAnnotations(annotations))
     }
 
     @OptIn(ExperimentalContracts::class)
     private fun SymbolSource.validateType(type: KSType?): KSType {
         contract { returns() implies (type != null) }
-        kspRequire(type?.isValid == true) { "770" }
+        kspRequire(type?.isError == false) { "770" }
         return type
     }
 
@@ -244,7 +246,7 @@ class FrontendValidator(private val logger: Logger) {
         return classDeclaration
     }
 
-    private fun SymbolSource.resolveModifiers(modifiers: List<Modifier>, isMethod: Boolean): Set<Modifier> {
+    private fun SymbolSource.validateModifiers(modifiers: List<Modifier>, isMethod: Boolean): Set<Modifier> {
         val set = modifiers.toSet()
         val allowed = if (isMethod) JavaModifiers.methodAllowed else JavaModifiers.fieldAllowed
         kspRequire(allowed.containsAll(set)) { "862" }
@@ -265,7 +267,7 @@ class FrontendValidator(private val logger: Logger) {
         return set
     }
 
-    private fun SymbolSource.resolveMappingName(explicitName: String?, implicitName: String): String =
+    private fun SymbolSource.validateMappingName(explicitName: String?, implicitName: String): String =
         if (explicitName != null) {
             kspRequire(explicitName.isNotEmpty()) { "913" }
             explicitName
@@ -273,47 +275,43 @@ class FrontendValidator(private val logger: Logger) {
             implicitName
         }
 
-    private fun SymbolSource.resolveMixinAnnotations(annotations: List<ParsedAnnotation>): List<MixinAnnotation> =
+    private fun SymbolSource.validateMixinAnnotations(annotations: List<ParsedAnnotation>): List<MixinAnnotation> =
         annotations.filterNot { it.isSourceRetention }.mapNotNull {
-            runOrNullOnSkip { resolveMixinAnnotation(it) }
+            runOrNullOnSkip { validateMixinAnnotation(it) }
         }
 
-    private fun SymbolSource.resolveMixinAnnotation(annotation: ParsedAnnotation): MixinAnnotation {
-        validateClassDeclaration(annotation.typeClassDeclaration)
-
-        fun ParsedAnnotationArgumentValue.resolveValue(): MixinAnnotationArgumentValue = when (this) {
-            is ParsedAnnotationBooleanArgumentValue -> MixinAnnotationBooleanArgumentValue(boolean)
-            is ParsedAnnotationByteArgumentValue -> MixinAnnotationByteArgumentValue(byte)
-            is ParsedAnnotationShortArgumentValue -> MixinAnnotationShortArgumentValue(short)
-            is ParsedAnnotationIntArgumentValue -> MixinAnnotationIntArgumentValue(int)
-            is ParsedAnnotationLongArgumentValue -> MixinAnnotationLongArgumentValue(long)
-            is ParsedAnnotationCharArgumentValue -> MixinAnnotationCharArgumentValue(char)
-            is ParsedAnnotationFloatArgumentValue -> MixinAnnotationFloatArgumentValue(float)
-            is ParsedAnnotationDoubleArgumentValue -> MixinAnnotationDoubleArgumentValue(double)
-            is ParsedAnnotationStringArgumentValue -> MixinAnnotationStringArgumentValue(string)
-            is ParsedAnnotationClassTypeArgumentValue -> MixinAnnotationClassTypeArgumentValue(validateType(type))
-            is ParsedAnnotationEnumArgumentValue -> {
-                MixinAnnotationEnumArgumentValue(validateClassDeclaration(enumClassDeclaration), entryName)
-            }
-
-            is ParsedAnnotationEmbeddedAnnotationArgumentValue -> {
-                MixinAnnotationEmbeddedAnnotationArgumentValue(resolveMixinAnnotation(embeddedAnnotation))
-            }
-        }
-        return MixinAnnotation(
-            typeClassDeclaration = annotation.typeClassDeclaration,
+    private fun SymbolSource.validateMixinAnnotation(annotation: ParsedAnnotation): MixinAnnotation =
+        MixinAnnotation(
+            classDeclaration = validateClassDeclaration(annotation.classDeclaration),
             arguments = annotation.arguments.filter { it.isExplicit }.map { argument ->
-                when (argument) {
-                    is ParsedAnnotationSingleArgument -> {
-                        MixinAnnotationSingleArgument(argument.name, argument.value.resolveValue())
-                    }
-
-                    is ParsedAnnotationArrayArgument -> {
-                        MixinAnnotationArrayArgument(argument.name, argument.values.map { it.resolveValue() })
-                    }
-                }
+                MixinAnnotation.Argument(
+                    argument.name,
+                    argument.values.map { validateMixinAnnotationArgumentValue(it) },
+                    argument.isArray,
+                )
             }
         )
+
+    fun SymbolSource.validateMixinAnnotationArgumentValue(
+        value: ParsedAnnotation.Argument.Value
+    ): MixinAnnotation.Argument.Value = when (value) {
+        is ParsedAnnotation.Argument.BooleanValue -> MixinAnnotation.Argument.BooleanValue(value.boolean)
+        is ParsedAnnotation.Argument.ByteValue -> MixinAnnotation.Argument.ByteValue(value.byte)
+        is ParsedAnnotation.Argument.ShortValue -> MixinAnnotation.Argument.ShortValue(value.short)
+        is ParsedAnnotation.Argument.IntValue -> MixinAnnotation.Argument.IntValue(value.int)
+        is ParsedAnnotation.Argument.LongValue -> MixinAnnotation.Argument.LongValue(value.long)
+        is ParsedAnnotation.Argument.CharValue -> MixinAnnotation.Argument.CharValue(value.char)
+        is ParsedAnnotation.Argument.FloatValue -> MixinAnnotation.Argument.FloatValue(value.float)
+        is ParsedAnnotation.Argument.DoubleValue -> MixinAnnotation.Argument.DoubleValue(value.double)
+        is ParsedAnnotation.Argument.StringValue -> MixinAnnotation.Argument.StringValue(value.string)
+        is ParsedAnnotation.Argument.ClassValue -> MixinAnnotation.Argument.ClassValue(validateType(value.type))
+        is ParsedAnnotation.Argument.EnumValue -> {
+            MixinAnnotation.Argument.EnumValue(validateClassDeclaration(value.classDeclaration), value.entryName)
+        }
+
+        is ParsedAnnotation.Argument.AnnotationValue -> {
+            MixinAnnotation.Argument.AnnotationValue(validateMixinAnnotation(value.annotation))
+        }
     }
 
     @Suppress("unused")

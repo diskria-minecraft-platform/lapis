@@ -19,7 +19,7 @@ abstract class LapisExtension @Inject internal constructor(
     fun sourceSet(name: String, configure: LapisSourceSetSpec.() -> Unit = {}): LapisSourceSetSpec =
         sourceSetSpecs.maybeCreate(name).apply { configure() }
 
-    internal fun validateMixinConfig() {
+    internal fun validateMixinConfigsSetup() {
         require(sourceSetSpecs.size <= 1 || !mixinConfig.isPresent) {
             "Cannot configure 'lapis.mixinConfig' property " +
                 "when multiple sourceSets exist (${sourceSetSpecs.names.joinToString()}). " +

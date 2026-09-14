@@ -7,8 +7,6 @@ import com.google.devtools.ksp.processing.SymbolProcessorProvider
 import io.github.diskria.lapis.ksp.extensions.elements
 import io.github.diskria.lapis.ksp.extensions.internalError
 import io.github.diskria.lapis.ksp.extensions.quoted
-import io.github.diskria.lapis.ksp.logging.KspOptions
-import io.github.diskria.lapis.ksp.logging.Logger
 import kotlinx.serialization.descriptors.serialDescriptor
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive

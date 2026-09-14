@@ -28,7 +28,7 @@ class LapisGradlePlugin : Plugin<Project> {
             }
         }
         project.afterEvaluate {
-            lapisExtension.validateMixinConfig()
+            lapisExtension.validateMixinConfigsSetup()
         }
     }
 
@@ -73,7 +73,7 @@ class LapisGradlePlugin : Plugin<Project> {
             mergeMixinConfigsTask.dependsOn(kspTaskName)
             mergeMixinConfigsTask.userConfig.set(mixinConfig)
             mergeMixinConfigsTask.generatedConfig.set(
-                kspResourcesDirectory.map { it.file("lapis-intermediates/mixins.json") }
+                kspResourcesDirectory.map { it.file("lapis-intermediates/generated-mixins.json") }
             )
             mergeMixinConfigsTask.mergedConfig.set(
                 relativePathProvider.flatMap { relativePath ->

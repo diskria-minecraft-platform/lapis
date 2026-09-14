@@ -1,4 +1,4 @@
-package io.github.diskria.lapis.ksp.common
+package io.github.diskria.lapis.ksp.utils
 
 import javax.lang.model.element.Modifier
 
