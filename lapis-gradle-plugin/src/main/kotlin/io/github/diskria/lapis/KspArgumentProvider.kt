@@ -7,34 +7,34 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.gradle.api.file.ProjectLayout
-import org.gradle.api.file.RegularFile
+import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.*
 import org.gradle.process.CommandLineArgumentProvider
-import java.io.File
 import javax.inject.Inject
 
-abstract class KspArgumentProvider @Inject constructor(
-    @Input
-    val uniqueModPrefix: Property<String>,
+abstract class KspArgumentProvider @Inject constructor(layout: ProjectLayout) : CommandLineArgumentProvider {
 
-    @Optional
-    @PathSensitive(PathSensitivity.RELATIVE)
-    @InputFiles
-    val mixinConfig: Provider<RegularFile>,
+    @get:Optional
+    @get:Input
+    abstract val uniqueModPrefix: Property<String>
 
-    @Optional
-    @Input
-    val mixinGeneratedSubpackage: Property<String>,
+    @get:Optional
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    @get:InputFiles
+    abstract val mixinConfig: RegularFileProperty
 
-    @Optional
-    @Input
-    val disableLCP: Property<Boolean>,
+    @get:Optional
+    @get:Input
+    abstract val mixinGeneratedSubpackage: Property<String>
 
-    @Internal
-    val layout: ProjectLayout,
-) : CommandLineArgumentProvider {
+    @get:Optional
+    @get:Input
+    abstract val disableLCP: Property<Boolean>
+
+    @get:Internal
+    val mixinConfigPath: Provider<String> = mixinConfig.map { it.asFile.getRootRelativePath(layout) }
 
     override fun asArguments(): Iterable<String> {
         val uniqueModPrefix = requireNotNull(uniqueModPrefix.orNull) {
@@ -44,22 +44,22 @@ abstract class KspArgumentProvider @Inject constructor(
             "Property 'lapis.mixinConfig' is required but not set."
         }
         require(mixinConfigFile.isFile) {
-            "Mixin config file (${mixinConfigFile.relativePath()}) does not exist."
+            "Mixin config file ($mixinConfigPath) does not exist."
         }
         val jsonObject = runCatching {
             Json.parseToJsonElement(mixinConfigFile.readText()).jsonObject
         }.getOrElse { error ->
             error(
-                "Cannot parse mixin config (${mixinConfigFile.relativePath()}):" +
+                "Cannot parse mixin config ($mixinConfigPath):" +
                     (error.message?.let { "\n$it" } ?: " ensure the file contains valid JSON.")
             )
         }
         val rawMixinPackage = requireNotNull(jsonObject["package"]?.jsonPrimitive?.contentOrNull) {
-            "Missing 'package' field in mixin config (${mixinConfigFile.relativePath()})."
+            "Missing 'package' field in mixin config ($mixinConfigPath)."
         }
         val normalizedMixinPackage = rawMixinPackage.removeSuffix(".")
         require(normalizedMixinPackage.isValidArgumentValue()) {
-            "Invalid 'package' field in mixin config (${mixinConfigFile.relativePath()}): " +
+            "Invalid 'package' field in mixin config ($mixinConfigPath): " +
                 "package cannot be default or contain whitespace characters, " +
                 "but got: ${rawMixinPackage.doubleQuoted()}."
         }
@@ -78,8 +78,6 @@ abstract class KspArgumentProvider @Inject constructor(
             "$prefixedKey=$valueStr"
         }
     }
-
-    private fun File.relativePath() = getRootRelativePath(layout)
 }
 
 private fun String.isValidArgumentValue() = isNotEmpty() && none { it.isWhitespace() }
