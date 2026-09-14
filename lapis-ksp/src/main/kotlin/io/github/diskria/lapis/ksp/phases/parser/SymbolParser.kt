@@ -10,7 +10,7 @@ import io.github.diskria.lapis.ksp.extensions.castOrNull
 import io.github.diskria.lapis.ksp.extensions.ks.*
 import io.github.diskria.lapis.ksp.extensions.ksp.KSPOrigin
 import io.github.diskria.lapis.ksp.extensions.ksp.getSymbolsAnnotatedWith
-import io.github.diskria.lapis.ksp.extensions.lapisError
+import io.github.diskria.lapis.ksp.extensions.internalError
 import io.github.diskria.lapis.ksp.logging.Logger
 import io.github.diskria.lapis.ksp.phases.parser.models.ParserResult
 import io.github.diskria.lapis.ksp.phases.parser.models.patches.*
@@ -182,7 +182,7 @@ class SymbolParser(
             }
 
             is KSAnnotation -> ParsedAnnotationEmbeddedAnnotationArgumentValue(parseAnnotation(value))
-            else -> lapisError("Unknown annotation argument type for value: $value")
+            else -> internalError("Unknown annotation argument type for value: '$value'.")
         }
         return argument.value?.castOrNull<Iterable<Any>>()?.let { array ->
             ParsedAnnotationArrayArgument(name, argument.isExplicit, array.map { parseValue(it) })

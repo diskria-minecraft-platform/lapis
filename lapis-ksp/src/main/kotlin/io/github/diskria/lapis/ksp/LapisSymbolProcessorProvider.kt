@@ -5,6 +5,7 @@ import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.processing.SymbolProcessorEnvironment
 import com.google.devtools.ksp.processing.SymbolProcessorProvider
 import io.github.diskria.lapis.ksp.extensions.elements
+import io.github.diskria.lapis.ksp.extensions.internalError
 import io.github.diskria.lapis.ksp.extensions.quoted
 import io.github.diskria.lapis.ksp.logging.KspOptions
 import io.github.diskria.lapis.ksp.logging.Logger
@@ -15,7 +16,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 
 @AutoService(SymbolProcessorProvider::class)
-class ProcessorProvider : SymbolProcessorProvider {
+class LapisSymbolProcessorProvider : SymbolProcessorProvider {
 
     override fun create(environment: SymbolProcessorEnvironment): SymbolProcessor {
         val logger = Logger(environment.logger)
@@ -36,15 +37,22 @@ class ProcessorProvider : SymbolProcessorProvider {
         if (missingRequiredKeys.isNotEmpty()) {
             logger.fatal("Missing required arguments: ${missingRequiredKeys.joinToString { it.quoted() }}.")
         }
-        return runCatching<KspOptions> {
-            optionsJson.decodeFromJsonElement(buildJsonObject {
+        val kspOptions = runCatching {
+            optionsJson.decodeFromJsonElement<KspOptions>(buildJsonObject {
                 scopedOptions.forEach { (rawKey, value) ->
                     put(rawKey.removeArgumentPrefix(), JsonPrimitive(value))
                 }
             })
         }.getOrElse { error ->
-            logger.fatal("Failed to parse KSP arguments: ${error.message}")
+            internalError(
+                "Cannot parse KSP arguments:" +
+                    (error.message?.let { "\n$it" } ?: " failed to deserialize KSP options.")
+            )
         }
+        runCatching { kspOptions.validate() }.onFailure { error ->
+            logger.fatal("Invalid KSP options:\n${error.message}")
+        }
+        return kspOptions
     }
 
     private fun String.withArgumentPrefix(): String =

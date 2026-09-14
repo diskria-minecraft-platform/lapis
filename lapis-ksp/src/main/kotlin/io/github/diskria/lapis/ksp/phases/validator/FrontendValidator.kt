@@ -4,9 +4,9 @@ import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.Variance
 import io.github.diskria.lapis.ksp.common.JavaModifiers
+import io.github.diskria.lapis.ksp.extensions.internalError
 import io.github.diskria.lapis.ksp.extensions.ks.isValid
 import io.github.diskria.lapis.ksp.extensions.ks.toClassDeclaration
-import io.github.diskria.lapis.ksp.extensions.lapisError
 import io.github.diskria.lapis.ksp.logging.Logger
 import io.github.diskria.lapis.ksp.phases.parser.models.ParserResult
 import io.github.diskria.lapis.ksp.phases.parser.models.patches.*
@@ -113,7 +113,7 @@ class FrontendValidator(private val logger: Logger) {
                 PatchConstructorOriginParameter(typeClassDeclaration)
             }
 
-            else -> skipWithError { "313" }
+            else -> kspError { "313" }
         }
     }
 
@@ -326,30 +326,23 @@ class FrontendValidator(private val logger: Logger) {
         logger.warn(message(), symbol)
     }
 
-    private inline fun SymbolSource.kspError(crossinline message: () -> String) {
+    private inline fun SymbolSource.kspError(crossinline message: () -> String): Nothing {
         logger.error(message(), symbol)
-    }
-
-    @Suppress("UnusedReceiverParameter")
-    private fun SymbolSource.skipSymbol(): Nothing = throw SkipSymbolSignal()
-
-    private inline fun SymbolSource.skipWithError(crossinline message: () -> String): Nothing {
-        kspError(message)
-        skipSymbol()
+        throw SkipSymbolSignal()
     }
 
     @OptIn(ExperimentalContracts::class)
     private inline fun SymbolSource.kspRequire(condition: Boolean, crossinline message: () -> String) {
         contract { returns() implies condition }
         if (!condition) {
-            skipWithError(message = message)
+            kspError(message = message)
         }
     }
 
     @OptIn(ExperimentalContracts::class)
     private inline fun <T> SymbolSource.kspRequireNotNull(value: T?, crossinline message: () -> String): T {
         contract { returns() implies (value != null) }
-        return value ?: skipWithError(message = message)
+        return value ?: kspError(message = message)
     }
 
     @Suppress("unused", "UnusedReceiverParameter")
@@ -358,7 +351,7 @@ class FrontendValidator(private val logger: Logger) {
         level = DeprecationLevel.ERROR
     )
     private inline fun <T : Any> SymbolSource.kspRequireNotNull(value: T, crossinline message: () -> String): Nothing {
-        lapisError("kspRequireNotNull() called with a non-nullable value.")
+        internalError("kspRequireNotNull() called with a non-nullable value.")
     }
 
     @Suppress("unused", "UnusedReceiverParameter")
@@ -368,7 +361,7 @@ class FrontendValidator(private val logger: Logger) {
         level = DeprecationLevel.ERROR,
     )
     private fun SymbolSource.kspRequireNotNull(value: Boolean?, message: () -> String): Nothing {
-        lapisError("kspRequireNotNull() called with a Boolean value. Use kspRequire() instead.")
+        internalError("kspRequireNotNull() called with a Boolean value. Use kspRequire() instead.")
     }
 
     private fun <R> runOrNullOnSkip(block: () -> R): R? =

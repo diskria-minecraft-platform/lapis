@@ -1,5 +1,7 @@
 package io.github.diskria.lapis.ksp.logging
 
+import io.github.diskria.lapis.ksp.extensions.quoted
+import io.github.diskria.poetesse.extensions.doubleQuoted
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -9,17 +11,20 @@ data class KspOptions(
     val mixinGeneratedSubpackage: String? = null,
     val disableLCP: Boolean = false,
 ) {
-    init {
+    fun validate() {
         require(IDENTIFIER_REGEX.matches(uniqueModPrefix)) {
-            "Invalid 'uniqueModPrefix': '$uniqueModPrefix'. Must be a valid Java identifier name."
+            "Invalid ${::uniqueModPrefix.name.quoted()}: expected a valid Java identifier name, " +
+                "but got ${uniqueModPrefix.doubleQuoted()}."
         }
         require(PACKAGE_REGEX.matches(mixinPackage)) {
-            "Invalid 'mixinPackage': '$mixinPackage'. Must be a valid Java package name."
+            "Invalid ${::mixinPackage.name.quoted()}: expected a valid Java package name, " +
+                "but got ${mixinPackage.doubleQuoted()}."
         }
         mixinGeneratedSubpackage?.let { subpackage ->
             require(PACKAGE_REGEX.matches(subpackage)) {
-                "Invalid 'mixinGeneratedSubpackage': '$subpackage'. Must be a valid Java package name " +
-                    "without leading or trailing dots (e.g. 'generated')."
+                "Invalid ${::mixinGeneratedSubpackage.name.quoted()}: expected a valid Java package name " +
+                    "without leading or trailing dots (e.g. 'generated'), " +
+                    "but got ${subpackage.doubleQuoted()}."
             }
         }
     }
