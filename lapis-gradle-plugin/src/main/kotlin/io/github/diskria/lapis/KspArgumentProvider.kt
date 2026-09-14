@@ -26,6 +26,10 @@ abstract class KspArgumentProvider @Inject constructor(
 
     @Optional
     @Input
+    val mixinGeneratedSubpackage: Property<String>,
+
+    @Optional
+    @Input
     val disableLCP: Property<Boolean>,
 
     @Internal
@@ -62,6 +66,7 @@ abstract class KspArgumentProvider @Inject constructor(
         return listOfNotNull(
             "uniqueModPrefix" to uniqueModPrefix,
             "mixinPackage" to normalizedMixinPackage,
+            mixinGeneratedSubpackage.orNull?.let { "mixinGeneratedSubpackage" to it },
             disableLCP.orNull?.let { "disableLCP" to it },
         ).map { (key, value) ->
             val prefixedKey = "lapis.$key"

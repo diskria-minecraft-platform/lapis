@@ -65,6 +65,7 @@ class LapisGradlePlugin : Plugin<Project> {
                     project.objects.newInstance<KspArgumentProvider>(
                         lapisExtension.uniqueModPrefix,
                         sourceSetSpec.mixinConfig,
+                        lapisExtension.mixinGeneratedSubpackage,
                         lapisExtension.disableLCP,
                     )
                 )
