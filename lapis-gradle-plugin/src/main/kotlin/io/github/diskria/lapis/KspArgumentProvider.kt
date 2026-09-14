@@ -34,7 +34,7 @@ abstract class KspArgumentProvider @Inject constructor(layout: ProjectLayout) : 
     abstract val disableLCP: Property<Boolean>
 
     @get:Internal
-    val mixinConfigPath: Provider<String> = mixinConfig.map { it.asFile.getRootRelativePath(layout) }
+    private val mixinConfigPath: Provider<String> = mixinConfig.map { it.asFile.getRootRelativePath(layout) }
 
     override fun asArguments(): Iterable<String> {
         val uniqueModPrefix = requireNotNull(uniqueModPrefix.orNull) {
@@ -44,22 +44,22 @@ abstract class KspArgumentProvider @Inject constructor(layout: ProjectLayout) : 
             "Property 'lapis.mixinConfig' is required but not set."
         }
         require(mixinConfigFile.isFile) {
-            "Mixin config file ($mixinConfigPath) does not exist."
+            "Mixin config file (${mixinConfigPath.get()}) does not exist."
         }
         val jsonObject = runCatching {
             Json.parseToJsonElement(mixinConfigFile.readText()).jsonObject
         }.getOrElse { error ->
             error(
-                "Cannot parse mixin config ($mixinConfigPath):" +
+                "Cannot parse mixin config (${mixinConfigPath.get()}):" +
                     (error.message?.let { "\n$it" } ?: " ensure the file contains valid JSON.")
             )
         }
         val rawMixinPackage = requireNotNull(jsonObject["package"]?.jsonPrimitive?.contentOrNull) {
-            "Missing 'package' field in mixin config ($mixinConfigPath)."
+            "Missing 'package' field in mixin config (${mixinConfigPath.get()})."
         }
         val normalizedMixinPackage = rawMixinPackage.removeSuffix(".")
         require(normalizedMixinPackage.isValidArgumentValue()) {
-            "Invalid 'package' field in mixin config ($mixinConfigPath): " +
+            "Invalid 'package' field in mixin config (${mixinConfigPath.get()}): " +
                 "package cannot be default or contain whitespace characters, " +
                 "but got: ${rawMixinPackage.doubleQuoted()}."
         }

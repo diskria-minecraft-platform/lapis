@@ -44,8 +44,8 @@ class LapisGradlePlugin : Plugin<Project> {
         val mixinConfig = spec.getEffectiveMixinConfig(lapisExtension)
 
         val kspTaskName = sourceSet.getTaskName("ksp", "kotlin")
-        project.tasks.withType<KspAATask>().matching { it.name == kspTaskName }.configureEach { kspAATask ->
-            kspAATask.commandLineArgumentProviders.add(
+        project.tasks.withType<KspAATask>().matching { it.name == kspTaskName }.configureEach { kspTask ->
+            kspTask.commandLineArgumentProviders.add(
                 project.objects.newInstance<KspArgumentProvider>().apply {
                     uniqueModPrefix.set(spec.getEffectiveUniqueModPrefix(lapisExtension))
                     this.mixinConfig.set(mixinConfig)

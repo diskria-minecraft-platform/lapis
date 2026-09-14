@@ -29,7 +29,7 @@ abstract class LapisExtension @Inject internal constructor(
             spec.mixinConfig.orNull?.asFile?.let { spec.name to it.getRootRelativePath(layout) }
         }.groupBy({ it.second }, { it.first }).filter { it.value.size > 1 }
         require(pathDuplicates.isEmpty()) {
-            pathDuplicates.entries.joinToString("\n\n") { (path, sourceSetNames) ->
+            pathDuplicates.entries.joinToString("\n") { (path, sourceSetNames) ->
                 "Duplicate 'mixinConfig' file detected: " +
                     "'$path' is configured in multiple sourceSets (${sourceSetNames.joinToString()}). " +
                     "Each sourceSet must have a unique 'mixinConfig' file."

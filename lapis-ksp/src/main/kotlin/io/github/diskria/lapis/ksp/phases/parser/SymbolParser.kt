@@ -7,10 +7,10 @@ import com.google.devtools.ksp.symbol.*
 import io.github.diskria.lapis.annotations.*
 import io.github.diskria.lapis.annotations.Origin
 import io.github.diskria.lapis.ksp.extensions.castOrNull
+import io.github.diskria.lapis.ksp.extensions.internalError
 import io.github.diskria.lapis.ksp.extensions.ks.*
 import io.github.diskria.lapis.ksp.extensions.ksp.KSPOrigin
 import io.github.diskria.lapis.ksp.extensions.ksp.getSymbolsAnnotatedWith
-import io.github.diskria.lapis.ksp.extensions.internalError
 import io.github.diskria.lapis.ksp.logging.Logger
 import io.github.diskria.lapis.ksp.phases.parser.models.ParserResult
 import io.github.diskria.lapis.ksp.phases.parser.models.patches.*

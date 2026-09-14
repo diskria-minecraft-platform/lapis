@@ -10,15 +10,15 @@ abstract class LapisSourceSetSpec @Inject constructor(
     objects: ObjectFactory,
 ) : LapisConfigurationHolder(objects) {
 
-    fun getEffectiveUniqueModPrefix(root: LapisConfigurationHolder): Provider<String> =
-        uniqueModPrefix.orElse(root.uniqueModPrefix)
+    fun getEffectiveUniqueModPrefix(lapisExtension: LapisExtension): Provider<String> =
+        uniqueModPrefix.orElse(lapisExtension.uniqueModPrefix)
 
-    fun getEffectiveMixinGeneratedSubpackage(root: LapisConfigurationHolder): Provider<String> =
-        mixinGeneratedSubpackage.orElse(root.mixinGeneratedSubpackage)
+    fun getEffectiveMixinGeneratedSubpackage(lapisExtension: LapisExtension): Provider<String> =
+        mixinGeneratedSubpackage.orElse(lapisExtension.mixinGeneratedSubpackage)
 
-    fun getEffectiveDisableLCP(root: LapisConfigurationHolder): Provider<Boolean> =
-        disableLCP.orElse(root.disableLCP)
+    fun getEffectiveDisableLCP(lapisExtension: LapisExtension): Provider<Boolean> =
+        disableLCP.orElse(lapisExtension.disableLCP)
 
-    fun getEffectiveMixinConfig(root: LapisConfigurationHolder): Provider<RegularFile> =
-        mixinConfig.orElse(root.mixinConfig)
+    fun getEffectiveMixinConfig(lapisExtension: LapisExtension): Provider<RegularFile> =
+        mixinConfig.orElse(lapisExtension.mixinConfig)
 }
