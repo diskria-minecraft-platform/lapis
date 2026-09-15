@@ -26,6 +26,7 @@ class Patch(
     val constructorParameters: List<ConstructorParameter>,
     val duckSources: List<DuckSource>,
     val injections: List<Injection>,
+    val companionObject: CompanionObject?,
     private val targetType: KSType,
     val mixinAnnotations: List<MixinAnnotation>,
 ) {
@@ -107,6 +108,8 @@ class Patch(
             val typeName: XTypeName get() = type.toXTypeName()
         }
     }
+
+    class CompanionObject(val name: String, val injections: List<Injection>)
 }
 
 class TargetType(

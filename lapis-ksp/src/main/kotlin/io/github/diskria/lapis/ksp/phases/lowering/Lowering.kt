@@ -67,7 +67,12 @@ class Lowering(
             sourceFile = patch.containingFile,
             className = resolveMixinClassName(patch.className, sourcePackageLCP),
             env = patch.env,
-            injections = patch.injections.map(::lowerInjection),
+            injections = buildList {
+                addAll(patch.injections.map(::lowerMemberInjection))
+                patch.companionObject?.let { companionObject ->
+                    addAll(companionObject.injections.map { lowerStaticInjection(companionObject, it) })
+                }
+            },
             duck = lowerMixinDuck(patch),
             targetTypeName = patch.targetTypeName,
             annotations = lowerMixinAnnotations(patch.mixinAnnotations),
@@ -157,12 +162,10 @@ class Lowering(
             }
         }
 
-    private fun lowerInjection(injection: Patch.Injection): IrMixin.Injection =
-        IrMixin.Injection(
+    private fun lowerMemberInjection(injection: Patch.Injection): IrMixin.Injection =
+        IrMixin.MemberInjection(
             jvmName = injection.jvmName,
-            extensionReceiverType = injection.extensionReceiverType?.let { lowerTargetType(it) },
             mixinAnnotations = lowerMixinAnnotations(injection.mixinAnnotations),
-            isStatic = injection.isStatic,
             parameters = injection.parameters.map { parameter ->
                 IrMixin.Injection.Parameter(
                     parameter.name,
@@ -171,6 +174,25 @@ class Lowering(
                 )
             },
             returnTypeName = injection.returnTypeName,
+            extensionReceiverType = injection.extensionReceiverType?.let { lowerTargetType(it) },
+        )
+
+    private fun lowerStaticInjection(
+        companionObject: Patch.CompanionObject,
+        injection: Patch.Injection,
+    ): IrMixin.Injection =
+        IrMixin.StaticInjection(
+            jvmName = injection.jvmName,
+            mixinAnnotations = lowerMixinAnnotations(injection.mixinAnnotations),
+            parameters = injection.parameters.map { parameter ->
+                IrMixin.Injection.Parameter(
+                    parameter.name,
+                    parameter.typeName,
+                    lowerMixinAnnotations(parameter.mixinAnnotations),
+                )
+            },
+            returnTypeName = injection.returnTypeName,
+            patchCompanionName = companionObject.name,
         )
 
     private fun resolveMixinClassName(sourceClassName: XClassName, sourcePackageLCP: String?): XClassName {

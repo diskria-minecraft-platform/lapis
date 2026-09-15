@@ -21,7 +21,7 @@ class ParsedPatch(
     val initStrategy: InitStrategy?,
     val classDeclaration: KSClassDeclaration,
     val targetType: KSType?,
-    val companionObjects: List<CompanionObject>,
+    val companionObject: CompanionObject?,
     val constructors: List<Constructor>,
     val properties: List<Property>,
     val functions: List<Function>,
@@ -96,6 +96,7 @@ class ParsedPatch(
     }
 
     class CompanionObject(
+        val name: String,
         val isPublic: Boolean,
         val functions: List<Function>,
         override val symbol: KSNode,

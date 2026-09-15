@@ -63,15 +63,13 @@ class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: Lo
             runOrNullOnSkip { it.validateAsShadow() }
         }
         val injections = parsedInjectionFunctions.mapNotNull {
-            runOrNullOnSkip { it.validateAsInjection(static = false, targetType) }
+            runOrNullOnSkip { it.validateAsInjection(isStatic = false, targetType) }
         }
-        val companionObjects = companionObjects.mapNotNull {
-            runOrNullOnSkip { it.validate() }
-        }
-        val companionObjectInjections = companionObjects.flatMap { companionObject ->
-            companionObject.functions.mapNotNull {
-                runOrNullOnSkip { it.validateAsInjection(static = true, targetType) }
+        val companionObject = companionObject?.validate()?.let { companionObject ->
+            val injections = companionObject.functions.mapNotNull {
+                runOrNullOnSkip { it.validateAsInjection(isStatic = true, targetType) }
             }
+            Patch.CompanionObject(name = companionObject.name, injections = injections)
         }
         val hasStaticHooksOnly = constructorParameters.isEmpty()
             && extensionProperties.isEmpty() && extensionFunctions.isEmpty()
@@ -95,7 +93,8 @@ class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: Lo
                 addAll(shadowProperties)
                 addAll(shadowFunctions)
             },
-            injections = injections + companionObjectInjections,
+            injections = injections,
+            companionObject = companionObject,
             mixinAnnotations = validateMixinAnnotations(annotations),
         )
     }
@@ -198,18 +197,18 @@ class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: Lo
         )
     }
 
-    private fun ParsedPatch.Function.validateAsInjection(static: Boolean, targetType: KSType): Patch.Injection {
+    private fun ParsedPatch.Function.validateAsInjection(isStatic: Boolean, targetType: KSType): Patch.Injection {
         kspRequireNotNull(jvmName) { "408" }
         kspRequire(!hasTypeParameters) { "409" }
         kspRequire(!isOpen) { "410" }
-        if (static) {
+        if (isStatic) {
             kspRequire(extensionReceiverType == null) { "438" }
         }
         return Patch.Injection(
             jvmName = jvmName,
             extensionReceiverType = extensionReceiverType?.let { validateTargetTypeCompatibility(it, targetType) },
             mixinAnnotations = validateMixinAnnotations(annotations),
-            isStatic = static,
+            isStatic = isStatic,
             parameters = parameters.map { it.validateAsInjectionParameter() },
             returnType = returnType,
         )

@@ -55,11 +55,11 @@ inline fun <reified A : Annotation> List<ParsedAnnotation?>.findLapisApiAnnotati
     find { it != null && it.isLapisApi && it.qualifiedName == requireQualifiedName<A>() }
 
 inline fun <reified A : Annotation> ParsedAnnotation.findArgument(property: KProperty1<A, String>): String? =
-    arguments.find { it.name == property.name }?.let { it as ParsedAnnotation.ScalarArgument }?.value
+    arguments.find { it.name == property.name }?.let { it as? ParsedAnnotation.ScalarArgument }?.value
         ?.let { it as? ParsedAnnotation.Argument.StringValue }?.string
 
 inline fun <reified A : Annotation> ParsedAnnotation.findArgument(property: KProperty1<A, KClass<*>>): KSType? =
-    arguments.find { it.name == property.name }?.let { it as ParsedAnnotation.ScalarArgument }?.value
+    arguments.find { it.name == property.name }?.let { it as? ParsedAnnotation.ScalarArgument }?.value
         ?.let { it as? ParsedAnnotation.Argument.TypeValue }?.type
 
 inline fun <reified A : Annotation, reified E : Enum<E>> ParsedAnnotation.findArgument(

@@ -214,8 +214,11 @@ class Generator(
                     }
                     mixin.injections.forEach { injection ->
                         mixinInjection(injection) {
-                            if (injection.isStatic) "${T(patchClassName)}.Companion"
-                            else requireNotNull(patchImplMember)
+                            if (injection is IrMixin.StaticInjection) {
+                                "${T(patchClassName)}.${L(injection.patchCompanionName)}"
+                            } else {
+                                requireNotNull(patchImplMember)
+                            }
                         }
                     }
                 }
@@ -302,7 +305,7 @@ class Generator(
     private fun JavaTypeScope.mixinInjection(injection: IrMixin.Injection, patchReceiver: JavaCodeScope.() -> String) {
         method(injection.jvmName) {
             private()
-            if (injection.isStatic) static()
+            if (injection is IrMixin.StaticInjection) static()
             mixinAnnotations(injection.mixinAnnotations)
             injection.parameters.forEach { parameter ->
                 parameter(parameter.name, parameter.typeName) {
@@ -313,7 +316,9 @@ class Generator(
             body {
                 val functionArguments = code {
                     buildList {
-                        injection.extensionReceiverType?.let { add(targetTypeCast(it)) }
+                        if (injection is IrMixin.MemberInjection) {
+                            injection.extensionReceiverType?.let { add(targetTypeCast(it)) }
+                        }
                         addAll(injection.parameters.map { it.name })
                     }.joinToString()
                 }

@@ -8,8 +8,10 @@ import io.github.diskria.lapis.annotations.*
 import io.github.diskria.lapis.annotations.Origin
 import io.github.diskria.lapis.ksp.Logger
 import io.github.diskria.lapis.ksp.extensions.internalError
-import io.github.diskria.lapis.ksp.extensions.ks.*
-import io.github.diskria.lapis.ksp.extensions.ksp.getSymbolsAnnotatedWith
+import io.github.diskria.lapis.ksp.extensions.ks.bodyPropertyDeclarations
+import io.github.diskria.lapis.ksp.extensions.ks.constructorDeclarations
+import io.github.diskria.lapis.ksp.extensions.ks.functionDeclarations
+import io.github.diskria.lapis.ksp.extensions.requireQualifiedName
 import io.github.diskria.lapis.ksp.phases.parser.models.ParsedAnnotation
 import io.github.diskria.lapis.ksp.phases.parser.models.ParsedPatch
 import io.github.diskria.lapis.ksp.phases.parser.models.findArgument
@@ -20,26 +22,31 @@ class SymbolParser(
     @Suppress("unused") private val logger: Logger,
 ) {
     fun parse(): List<ParsedPatch> =
-        resolver.getSymbolsAnnotatedWith<KMixin>().filterIsInstance<KSClassDeclaration>().toList().map(::parsePatch)
+        resolver
+            .getSymbolsWithAnnotation(requireQualifiedName<KMixin>())
+            .filterIsInstance<KSClassDeclaration>()
+            .toList()
+            .map(::parsePatch)
 
     private fun parsePatch(decl: KSClassDeclaration): ParsedPatch {
         val annotations = parseAnnotations(decl)
         val kMixinAnnotation = annotations.findLapisApiAnnotation<KMixin>()
         return ParsedPatch(
-            name = decl.name,
+            name = decl.simpleName.asString(),
             env = kMixinAnnotation?.findArgument(KMixin::env),
-            isClass = decl.isClass,
-            isObject = decl.isObject,
-            isOpen = decl.isExplicitlyOpen,
-            isAbstract = decl.isExplicitlyAbstract,
-            isSealed = decl.isSealed,
+            isClass = decl.classKind == ClassKind.CLASS,
+            isObject = decl.classKind == ClassKind.OBJECT,
+            isOpen = Modifier.OPEN in decl.modifiers,
+            isAbstract = Modifier.ABSTRACT in decl.modifiers,
+            isSealed = Modifier.SEALED in decl.modifiers,
             isTopLevel = decl.parentDeclaration == null,
             hasPackageName = decl.packageName.asString().isNotEmpty(),
             isPublic = decl.isPublic(),
             initStrategy = kMixinAnnotation?.findArgument(KMixin::initStrategy),
             classDeclaration = decl,
             targetType = kMixinAnnotation?.findArgument(KMixin::target),
-            companionObjects = decl.companionObjectClassDeclarations.map(::parsePatchCompanionObject).toList(),
+            companionObject = decl.declarations.filterIsInstance<KSClassDeclaration>().find { it.isCompanionObject }
+                ?.let { parsePatchCompanionObject(it) },
             constructors = decl.constructorDeclarations.map(::parsePatchConstructor).toList(),
             properties = decl.bodyPropertyDeclarations.map(::parsePatchBodyProperty).toList(),
             functions = decl.functionDeclarations.map(::parsePatchFunction).toList(),
@@ -57,17 +64,18 @@ class SymbolParser(
     private fun parsePatchConstructorParameter(parameter: KSValueParameter): ParsedPatch.Constructor.Parameter {
         val annotations = parseAnnotations(parameter)
         return ParsedPatch.Constructor.Parameter(
-            symbol = parameter,
             type = parameter.type.resolve(),
             hasOriginAnnotation = annotations.findLapisApiAnnotation<Origin>() != null,
+            symbol = parameter,
         )
     }
 
     private fun parsePatchCompanionObject(decl: KSClassDeclaration): ParsedPatch.CompanionObject =
         ParsedPatch.CompanionObject(
-            symbol = decl,
+            name = decl.simpleName.asString(),
             isPublic = decl.isPublic(),
             functions = decl.functionDeclarations.map(::parsePatchFunction).toList(),
+            symbol = decl,
         )
 
     @OptIn(KspExperimental::class)
@@ -75,13 +83,12 @@ class SymbolParser(
         val annotations = parseAnnotations(decl)
         val kShadowAnnotation = annotations.findLapisApiAnnotation<KShadow>()
         return ParsedPatch.Property(
-            symbol = decl,
-            name = decl.name,
+            name = decl.simpleName.asString(),
             type = decl.type.resolve(),
             isPublic = decl.isPublic(),
-            isOpen = decl.isExplicitlyOpen,
-            isAbstract = decl.isExplicitlyAbstract,
-            hasExtensionReceiver = decl.hasExtensionReceiver,
+            isOpen = Modifier.OPEN in decl.modifiers,
+            isAbstract = Modifier.ABSTRACT in decl.modifiers,
+            hasExtensionReceiver = decl.extensionReceiver != null,
             hasExtensionAnnotation = annotations.findLapisApiAnnotation<Extension>() != null,
             hasShadowAnnotation = kShadowAnnotation != null,
             explicitMappingName = annotations.findLapisApiAnnotation<MappingName>()?.findArgument(MappingName::name),
@@ -92,12 +99,13 @@ class SymbolParser(
                     annotations = parseAnnotations(it),
                 )
             },
-            setter = decl.setter?.takeIf { it.isPublic }?.let {
+            setter = decl.setter?.takeIf { Modifier.PUBLIC in it.modifiers }?.let {
                 ParsedPatch.Property.Setter(
                     jvmName = resolver.getJvmName(it),
                 )
             },
             annotations = annotations,
+            symbol = decl,
         )
     }
 
@@ -106,14 +114,13 @@ class SymbolParser(
         val annotations = parseAnnotations(decl)
         val kShadowAnnotation = annotations.findLapisApiAnnotation<KShadow>()
         return ParsedPatch.Function(
-            symbol = decl,
-            name = decl.name,
+            name = decl.simpleName.asString(),
             jvmName = resolver.getJvmName(decl),
             parameters = decl.parameters.map(::parsePatchFunctionParameter),
             returnType = decl.returnType?.resolve()?.takeIf { it != resolver.builtIns.unitType },
             hasTypeParameters = decl.typeParameters.isNotEmpty(),
             isPublic = decl.isPublic(),
-            isOpen = decl.isExplicitlyOpen,
+            isOpen = Modifier.OPEN in decl.modifiers,
             isAbstract = decl.isAbstract,
             extensionReceiverType = decl.extensionReceiver?.resolve(),
             hasExtensionAnnotation = annotations.findLapisApiAnnotation<Extension>() != null,
@@ -121,15 +128,16 @@ class SymbolParser(
             explicitMappingName = annotations.findLapisApiAnnotation<MappingName>()?.findArgument(MappingName::name),
             shadowModifiers = kShadowAnnotation?.findArgument(KShadow::modifiers).orEmpty(),
             annotations = annotations,
+            symbol = decl,
         )
     }
 
     private fun parsePatchFunctionParameter(parameter: KSValueParameter): ParsedPatch.Function.Parameter =
         ParsedPatch.Function.Parameter(
-            symbol = parameter,
             name = parameter.name?.asString(),
             type = parameter.type.resolve(),
             annotations = parseAnnotations(parameter),
+            symbol = parameter,
         )
 
     private fun parseAnnotations(annotated: KSAnnotated): List<ParsedAnnotation?> =
@@ -143,19 +151,20 @@ class SymbolParser(
                 is Array<*> -> value.toList()
                 else -> null
             }
+            val isExplicit = argument.origin != com.google.devtools.ksp.symbol.Origin.SYNTHETIC
             if (arrayElements != null) {
                 val normalizedElements = arrayElements.filterNotNull().takeIf { it.size == arrayElements.size }
                     ?: return null
                 ParsedAnnotation.ArrayArgument(
                     name = name,
-                    isExplicit = argument.isExplicit,
+                    isExplicit = isExplicit,
                     elements = normalizedElements.map { parseAnnotationArgumentValue(it, name) ?: return null },
                 )
             } else {
                 val normalizedValue = argument.value ?: return null
                 ParsedAnnotation.ScalarArgument(
                     name = name,
-                    isExplicit = argument.isExplicit,
+                    isExplicit = isExplicit,
                     value = parseAnnotationArgumentValue(normalizedValue, name) ?: return null,
                 )
             }
@@ -182,13 +191,17 @@ class SymbolParser(
             is String -> ParsedAnnotation.Argument.StringValue(value)
             is KSType -> ParsedAnnotation.Argument.TypeValue(value)
             is KSClassDeclaration -> {
-                val enumClassDeclaration = value.parentDeclaration as? KSClassDeclaration ?: internalError(
-                    "Parent declaration for expected enum entry is not a class: '${value.qualifiedName?.asString()}'."
-                )
+                val enumClassDeclaration = value.parentDeclaration as? KSClassDeclaration
+                    ?: internalError(
+                        "Expected an enum class declaration as the parent for " +
+                            "enum entry '${value.simpleName.asString()}', " +
+                            "but found: '${value.parentDeclaration?.qualifiedName?.asString() ?: "null"}' " +
+                            "(annotation argument: '$argumentName')."
+                    )
                 ParsedAnnotation.Argument.EnumValue(
                     enumClassDeclaration,
                     enumClassDeclaration.qualifiedName?.asString(),
-                    value.name
+                    value.simpleName.asString(),
                 )
             }
 
