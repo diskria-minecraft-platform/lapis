@@ -6,17 +6,17 @@ import io.github.diskria.poetesse.interop.XClassName
 import io.github.diskria.poetesse.interop.XTypeName
 
 class IrMixin(
-    val originatingFiles: List<KSFile>,
+    val sourceFile: KSFile?,
     val className: XClassName,
     val env: Env,
     val injections: List<Injection>,
     val duck: IrMixinDuck?,
-    val targetClassName: XClassName?,
+    val targetTypeName: XTypeName,
     val annotations: List<IrMixinAnnotation>,
 ) {
     class Injection(
         val jvmName: String,
-        val extensionReceiverClassName: XClassName?,
+        val extensionReceiverType: IrTargetType?,
         val mixinAnnotations: List<IrMixinAnnotation>,
         val isStatic: Boolean,
         val parameters: List<Parameter>,

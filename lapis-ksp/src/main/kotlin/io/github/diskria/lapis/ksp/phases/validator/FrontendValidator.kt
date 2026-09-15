@@ -1,5 +1,7 @@
 package io.github.diskria.lapis.ksp.phases.validator
 
+import com.google.devtools.ksp.processing.KSBuiltIns
+import com.google.devtools.ksp.symbol.ClassKind
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.Variance
@@ -12,13 +14,14 @@ import io.github.diskria.lapis.ksp.phases.parser.models.SymbolSource
 import io.github.diskria.lapis.ksp.phases.validator.models.FunctionParameter
 import io.github.diskria.lapis.ksp.phases.validator.models.MixinAnnotation
 import io.github.diskria.lapis.ksp.phases.validator.models.Patch
+import io.github.diskria.lapis.ksp.phases.validator.models.TargetType
 import io.github.diskria.lapis.ksp.utils.JavaModifiers
 import io.github.diskria.poetesse.java.JPModifier
 import javax.lang.model.element.Modifier
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.contract
 
-class FrontendValidator(private val logger: Logger) {
+class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: Logger) {
 
     fun validate(patches: List<ParsedPatch>): List<Patch> =
         patches.mapNotNull {
@@ -34,40 +37,40 @@ class FrontendValidator(private val logger: Logger) {
         kspRequire(isTopLevel) { "217" }
         kspRequire(hasPackageName) { "218" }
         kspRequire(isPublic) { "219" }
-        val mixinAnnotations = validateMixinAnnotations(annotations)
         kspRequire(isClass) { "235" }
         kspRequire(!isObject) { "236" }
         kspRequire(!isSealed) { "237" }
         kspRequire(!isOpen) { "238" }
+        validateType(targetType)
         val constructor = kspRequireNotNull(constructors.singleOrNull()) { "239" }
         constructor.kspRequire(constructor.isPublic) { "240" }
         val constructorParameters = constructor.parameters.mapNotNull {
-            runOrNullOnSkip { it.validate(targetClassDeclaration) }
+            runOrNullOnSkip { it.validate(targetType) }
         }
         val (parsedInjectionFunctions, parsedRegularFunctions) = functions.partition {
             validateMixinAnnotations(it.annotations).isNotEmpty()
         }
-        val extensionProperties = bodyProperties.filter { it.hasExtensionAnnotation }.mapNotNull {
-            runOrNullOnSkip { it.validateAsExtension(targetClassDeclaration) }
+        val extensionProperties = properties.filter { it.hasExtensionAnnotation }.mapNotNull {
+            runOrNullOnSkip { it.validateAsExtension(targetType) }
         }
         val extensionFunctions = parsedRegularFunctions.filter { it.hasExtensionAnnotation }.mapNotNull {
-            runOrNullOnSkip { it.validateAsExtension(targetClassDeclaration) }
+            runOrNullOnSkip { it.validateAsExtension(targetType) }
         }
-        val shadowProperties = bodyProperties.filter { it.hasShadowAnnotation }.mapNotNull {
+        val shadowProperties = properties.filter { it.hasShadowAnnotation }.mapNotNull {
             runOrNullOnSkip { it.validateAsShadow() }
         }
         val shadowFunctions = parsedRegularFunctions.filter { it.hasShadowAnnotation }.mapNotNull {
             runOrNullOnSkip { it.validateAsShadow() }
         }
         val injections = parsedInjectionFunctions.mapNotNull {
-            runOrNullOnSkip { it.validateAsInjection(isInCompanionObject = false, targetClassDeclaration) }
+            runOrNullOnSkip { it.validateAsInjection(static = false, targetType) }
         }
         val companionObjects = companionObjects.mapNotNull {
             runOrNullOnSkip { it.validate() }
         }
         val companionObjectInjections = companionObjects.flatMap { companionObject ->
             companionObject.functions.mapNotNull {
-                runOrNullOnSkip { it.validateAsInjection(isInCompanionObject = true, targetClassDeclaration) }
+                runOrNullOnSkip { it.validateAsInjection(static = true, targetType) }
             }
         }
         val hasStaticHooksOnly = constructorParameters.isEmpty()
@@ -84,7 +87,7 @@ class FrontendValidator(private val logger: Logger) {
             env = env,
             initStrategy = initStrategy,
             isImplRequired = !hasStaticHooksOnly,
-            targetClassDeclaration = targetClassDeclaration,
+            targetType = targetType,
             constructorParameters = constructorParameters,
             duckSources = buildList {
                 addAll(extensionProperties)
@@ -93,7 +96,7 @@ class FrontendValidator(private val logger: Logger) {
                 addAll(shadowFunctions)
             },
             injections = injections + companionObjectInjections,
-            mixinAnnotations = mixinAnnotations,
+            mixinAnnotations = validateMixinAnnotations(annotations),
         )
     }
 
@@ -102,27 +105,19 @@ class FrontendValidator(private val logger: Logger) {
         return this
     }
 
-    private fun ParsedPatch.Constructor.Parameter.validate(
-        targetClassDeclaration: KSClassDeclaration?
-    ): Patch.ConstructorParameter {
+    private fun ParsedPatch.Constructor.Parameter.validate(targetType: KSType): Patch.ConstructorParameter {
         validateType(type)
         return when {
             hasOriginAnnotation -> {
-                val typeClassDeclaration = type.declaration as? KSClassDeclaration
-                kspRequire(
-                    validateClassDeclaration(typeClassDeclaration) == validateClassDeclaration(targetClassDeclaration)
-                ) { "308" }
-                kspRequire(type.arguments.none { it.variance != Variance.STAR }) { "309" }
-                Patch.ConstructorParameter.Origin(typeClassDeclaration)
+                kspRequire(type.arguments.all { it.variance == Variance.STAR }) { "309" }
+                Patch.ConstructorParameter.Origin(instanceType = validateTargetTypeCompatibility(type, targetType))
             }
 
             else -> kspError { "313" }
         }
     }
 
-    private fun ParsedPatch.Property.validateAsExtension(
-        targetClassDeclaration: KSClassDeclaration?,
-    ): Patch.Extension.Property {
+    private fun ParsedPatch.Property.validateAsExtension(targetType: KSType): Patch.Extension.Property {
         validateType(type)
         kspRequireNotNull(getter) { "322" }
         kspRequireNotNull(getter.jvmName) { "323" }
@@ -134,16 +129,14 @@ class FrontendValidator(private val logger: Logger) {
             getterJvmName = getter.jvmName,
             setterJvmName = if (setter != null) kspRequireNotNull(setter.jvmName) { "332" } else null,
             type = type,
-            receiverClassDeclaration = validateClassDeclaration(targetClassDeclaration),
+            receiverType = validateTargetTypeCompatibility(targetType, targetType),
         )
     }
 
-    private fun ParsedPatch.Function.validateAsExtension(
-        targetClassDeclaration: KSClassDeclaration?,
-    ): Patch.Extension.Function {
+    private fun ParsedPatch.Function.validateAsExtension(targetType: KSType): Patch.Extension.Function {
         kspRequire(isPublic) { "342" }
         kspRequireNotNull(jvmName) { "343" }
-        kspRequire(extensionReceiverClassDeclaration == null) { "361" }
+        kspRequire(extensionReceiverType == null) { "361" }
         kspRequire(!isOpen && !isAbstract) { "346" }
         val parameters = parameters.map {
             FunctionParameter(
@@ -156,7 +149,7 @@ class FrontendValidator(private val logger: Logger) {
             jvmName = jvmName,
             parameters = parameters,
             returnType = returnType,
-            receiverClassDeclaration = validateClassDeclaration(targetClassDeclaration),
+            receiverType = validateTargetTypeCompatibility(targetType, targetType),
         )
     }
 
@@ -185,7 +178,7 @@ class FrontendValidator(private val logger: Logger) {
         kspRequire(isPublic) { "384" }
         kspRequireNotNull(jvmName) { "385" }
         kspRequire(isAbstract) { "386" }
-        kspRequire(extensionReceiverClassDeclaration == null) { "387" }
+        kspRequire(extensionReceiverType == null) { "387" }
         val parameters = parameters.map {
             FunctionParameter(
                 name = kspRequireNotNull(it.name) { "390" },
@@ -205,30 +198,24 @@ class FrontendValidator(private val logger: Logger) {
         )
     }
 
-    private fun ParsedPatch.Function.validateAsInjection(
-        isInCompanionObject: Boolean,
-        targetClassDeclaration: KSClassDeclaration?,
-    ): Patch.Injection {
+    private fun ParsedPatch.Function.validateAsInjection(static: Boolean, targetType: KSType): Patch.Injection {
         kspRequireNotNull(jvmName) { "408" }
         kspRequire(!hasTypeParameters) { "409" }
         kspRequire(!isOpen) { "410" }
-        val mixinAnnotations = validateMixinAnnotations(annotations)
-        if (isInCompanionObject) {
-            kspRequire(extensionReceiverClassDeclaration == null) { "438" }
-        } else if (extensionReceiverClassDeclaration != null) {
-            kspRequire(extensionReceiverClassDeclaration == validateClassDeclaration(targetClassDeclaration)) { "441" }
+        if (static) {
+            kspRequire(extensionReceiverType == null) { "438" }
         }
         return Patch.Injection(
             jvmName = jvmName,
-            extensionReceiverClassDeclaration = extensionReceiverClassDeclaration,
-            mixinAnnotations = mixinAnnotations,
-            isStatic = isInCompanionObject,
-            parameters = parameters.map { it.validateAsNativeInjectionParameter() },
+            extensionReceiverType = extensionReceiverType?.let { validateTargetTypeCompatibility(it, targetType) },
+            mixinAnnotations = validateMixinAnnotations(annotations),
+            isStatic = static,
+            parameters = parameters.map { it.validateAsInjectionParameter() },
             returnType = returnType,
         )
     }
 
-    private fun ParsedPatch.Function.Parameter.validateAsNativeInjectionParameter(): Patch.Injection.Parameter {
+    private fun ParsedPatch.Function.Parameter.validateAsInjectionParameter(): Patch.Injection.Parameter {
         kspRequireNotNull(name) { "620" }
         kspRequireNotNull(type) { "621" }
         return Patch.Injection.Parameter(name, type, validateMixinAnnotations(annotations))
@@ -286,7 +273,7 @@ class FrontendValidator(private val logger: Logger) {
 
     private fun SymbolSource.validateMixinAnnotation(annotation: ParsedAnnotation): MixinAnnotation =
         MixinAnnotation(
-            classDeclaration = validateClassDeclaration(annotation.classDeclaration),
+            typeClassDeclaration = validateClassDeclaration(annotation.typeClassDeclaration),
             arguments = annotation.arguments.filter { it.isExplicit }.map { argument ->
                 when (argument) {
                     is ParsedAnnotation.ScalarArgument -> MixinAnnotation.ScalarArgument(
@@ -322,6 +309,15 @@ class FrontendValidator(private val logger: Logger) {
         is ParsedAnnotation.Argument.AnnotationValue -> {
             MixinAnnotation.Argument.AnnotationValue(validateMixinAnnotation(value.annotation))
         }
+    }
+
+    private fun SymbolSource.validateTargetTypeCompatibility(type: KSType, targetType: KSType): TargetType {
+        kspRequire(type.isAssignableFrom(targetType)) { "441" }
+        return TargetType(
+            type = type,
+            isInterface = (type.declaration as? KSClassDeclaration)?.classKind == ClassKind.INTERFACE,
+            isAny = type == builtIns.anyType,
+        )
     }
 
     @Suppress("unused")

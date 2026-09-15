@@ -10,7 +10,7 @@ import kotlin.reflect.KClass
 @Target(CLASS)
 @Retention(SOURCE)
 annotation class KMixin(
-    val target: KClass<*> = Unit::class,
+    val target: KClass<*> = Any::class,
     val env: Env = Env.Common,
     val initStrategy: InitStrategy = InitStrategy.Lazy,
 )

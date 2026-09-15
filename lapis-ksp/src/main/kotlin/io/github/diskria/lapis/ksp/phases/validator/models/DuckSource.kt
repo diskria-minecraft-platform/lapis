@@ -1,7 +1,6 @@
 package io.github.diskria.lapis.ksp.phases.validator.models
 
 import com.google.devtools.ksp.symbol.KSType
-import io.github.diskria.lapis.ksp.phases.lowering.toXTypeName
 import io.github.diskria.poetesse.interop.XTypeName
 
 sealed interface DuckSource {

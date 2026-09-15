@@ -1,20 +1,15 @@
 package io.github.diskria.lapis.ksp.phases.lowering
 
-import com.google.devtools.ksp.symbol.KSClassDeclaration
-import com.google.devtools.ksp.symbol.KSType
-import com.squareup.kotlinpoet.ksp.toClassName
-import com.squareup.kotlinpoet.ksp.toTypeName
 import io.github.diskria.lapis.ksp.KspOptions
 import io.github.diskria.lapis.ksp.Logger
 import io.github.diskria.lapis.ksp.kspPoetesse
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
 import io.github.diskria.lapis.ksp.phases.validator.models.MixinAnnotation
 import io.github.diskria.lapis.ksp.phases.validator.models.Patch
+import io.github.diskria.lapis.ksp.phases.validator.models.TargetType
 import io.github.diskria.lapis.ksp.utils.JavaModifiers
 import io.github.diskria.poetesse.interop.XClassName
-import io.github.diskria.poetesse.interop.XTypeName
 import io.github.diskria.poetesse.interop.xClass
-import io.github.diskria.poetesse.interop.xType
 import io.github.diskria.poetesse.java.JPModifier
 
 class Lowering(
@@ -41,9 +36,9 @@ class Lowering(
 
     private fun lowerPatchConstructorArgument(parameter: Patch.ConstructorParameter): IrPatch.ConstructorArgument =
         when (parameter) {
-            is Patch.ConstructorParameter.Origin -> {
-                IrPatch.ConstructorArgument.Origin(parameter.classDeclaration.toXClassName())
-            }
+            is Patch.ConstructorParameter.Origin -> IrPatch.ConstructorArgument.Origin(
+                instanceType = lowerTargetType(parameter.instanceType),
+            )
         }
 
     private fun lowerPatchImpl(
@@ -53,11 +48,11 @@ class Lowering(
     ): IrPatchImpl? =
         if (patch.isImplRequired) {
             IrPatchImpl(
-                originatingFiles = listOfNotNull(patch.containingFile),
+                sourceFile = patch.containingFile,
                 className = patch.className.withSuffix("_Impl"),
                 constructorParameters = buildList {
                     constructorArguments.filterIsInstance<IrPatch.ConstructorArgument.Origin>().firstOrNull()?.let {
-                        add(IrPatchImpl.ConstructorParameter.Instance(it.className))
+                        add(IrPatchImpl.ConstructorParameter.Instance(it.instanceType))
                     }
                     if (patch.duckSources.filterIsInstance<Patch.Shadow>().isNotEmpty()) {
                         add(IrPatchImpl.ConstructorParameter.Duck(requireNotNull(mixin.duck).className))
@@ -69,12 +64,12 @@ class Lowering(
 
     private fun lowerMixin(patch: Patch, sourcePackageLCP: String?): IrMixin =
         IrMixin(
-            originatingFiles = listOfNotNull(patch.containingFile),
+            sourceFile = patch.containingFile,
             className = resolveMixinClassName(patch.className, sourcePackageLCP),
             env = patch.env,
             injections = patch.injections.map(::lowerInjection),
             duck = lowerMixinDuck(patch),
-            targetClassName = patch.targetClassDeclaration?.toXClassName(),
+            targetTypeName = patch.targetTypeName,
             annotations = lowerMixinAnnotations(patch.mixinAnnotations),
         )
 
@@ -87,7 +82,7 @@ class Lowering(
         }
         return if (entries.isNotEmpty()) {
             IrMixinDuck(
-                originatingFiles = listOfNotNull(patch.containingFile),
+                sourceFile = patch.containingFile,
                 className = patch.className.withSuffix("_Duck"),
                 entries = entries,
             )
@@ -104,7 +99,7 @@ class Lowering(
                     sourceSetterJvmName = source.setterJvmName,
                     getterName = source.getterJvmName.withUniqueModPrefix(),
                     setterName = source.setterJvmName?.withUniqueModPrefix(),
-                    receiverTypeName = source.receiverClassDeclaration.toXClassName(),
+                    receiverType = lowerTargetType(source.receiverType),
                 )
             }
 
@@ -115,7 +110,7 @@ class Lowering(
                     name = source.jvmName.withUniqueModPrefix(),
                     parameters = source.parameters.map { it.asIrFunctionParameter() },
                     returnTypeName = source.returnTypeName,
-                    receiverTypeName = source.receiverClassDeclaration.toXClassName(),
+                    receiverType = lowerTargetType(source.receiverType),
                 )
             }
         }
@@ -165,17 +160,17 @@ class Lowering(
     private fun lowerInjection(injection: Patch.Injection): IrMixin.Injection =
         IrMixin.Injection(
             jvmName = injection.jvmName,
-            extensionReceiverClassName = injection.extensionReceiverClassName,
+            extensionReceiverType = injection.extensionReceiverType?.let { lowerTargetType(it) },
             mixinAnnotations = lowerMixinAnnotations(injection.mixinAnnotations),
             isStatic = injection.isStatic,
             parameters = injection.parameters.map { parameter ->
                 IrMixin.Injection.Parameter(
                     parameter.name,
-                    parameter.type.toXTypeName(),
+                    parameter.typeName,
                     lowerMixinAnnotations(parameter.mixinAnnotations),
                 )
             },
-            returnTypeName = injection.returnType?.toXTypeName(),
+            returnTypeName = injection.returnTypeName,
         )
 
     private fun resolveMixinClassName(sourceClassName: XClassName, sourcePackageLCP: String?): XClassName {
@@ -194,7 +189,7 @@ class Lowering(
         annotations.map(::lowerMixinAnnotation)
 
     private fun lowerMixinAnnotation(annotation: MixinAnnotation): IrMixinAnnotation =
-        IrMixinAnnotation(annotation.className, annotation.arguments.map { argument ->
+        IrMixinAnnotation(annotation.typeClassName, annotation.arguments.map { argument ->
             when (argument) {
                 is MixinAnnotation.ScalarArgument -> IrMixinAnnotation.ScalarArgument(
                     name = argument.name,
@@ -227,6 +222,13 @@ class Lowering(
         }
     }
 
+    private fun lowerTargetType(targetType: TargetType): IrTargetType =
+        IrTargetType(
+            typeName = targetType.typeName,
+            isObjectCastRequired = !targetType.isInterface,
+            isTargetTypeCastRequired = !targetType.isAny,
+        )
+
     private fun findMixinSourcePackageLCP(patches: List<Patch>): String =
         patches.map { it.className.packageName }.reduceOrNull { lcp, next ->
             val currentParts = lcp.orEmpty().split('.')
@@ -237,12 +239,6 @@ class Lowering(
     private fun String.withUniqueModPrefix(): String =
         kspOptions.uniqueModPrefix + this
 }
-
-fun KSType.toXTypeName(): XTypeName =
-    kspPoetesse.xType(toTypeName())
-
-fun KSClassDeclaration.toXClassName(): XClassName =
-    kspPoetesse.xClass(toClassName())
 
 fun XClassName.withSuffix(name: String): XClassName =
     kspPoetesse.xClass(packageName, "$simpleName$name")

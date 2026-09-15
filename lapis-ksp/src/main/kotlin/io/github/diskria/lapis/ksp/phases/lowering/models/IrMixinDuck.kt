@@ -6,7 +6,7 @@ import io.github.diskria.poetesse.interop.XClassName
 import io.github.diskria.poetesse.interop.XTypeName
 import io.github.diskria.poetesse.java.JPModifier
 
-class IrMixinDuck(val originatingFiles: List<KSFile>, val className: XClassName, val entries: List<Entry>) {
+class IrMixinDuck(val sourceFile: KSFile?, val className: XClassName, val entries: List<Entry>) {
 
     sealed interface Entry {
 
@@ -68,7 +68,7 @@ class IrMixinDuck(val originatingFiles: List<KSFile>, val className: XClassName,
 
     sealed interface Extension : Entry {
 
-        val receiverTypeName: XTypeName
+        val receiverType: IrTargetType
 
         class Property(
             override val sourceName: String,
@@ -77,7 +77,7 @@ class IrMixinDuck(val originatingFiles: List<KSFile>, val className: XClassName,
             override val sourceSetterJvmName: String?,
             override val getterName: String,
             override val setterName: String?,
-            override val receiverTypeName: XTypeName,
+            override val receiverType: IrTargetType,
         ) : IrMixinDuck.Property,
             Extension
 
@@ -87,7 +87,7 @@ class IrMixinDuck(val originatingFiles: List<KSFile>, val className: XClassName,
             override val sourceJvmName: String,
             override val parameters: List<IrFunctionParameter>,
             override val returnTypeName: XTypeName?,
-            override val receiverTypeName: XTypeName,
+            override val receiverType: IrTargetType,
         ) : IrMixinDuck.Function,
             Extension
     }

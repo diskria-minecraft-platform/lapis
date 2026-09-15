@@ -9,6 +9,6 @@ class IrPatch(
     val mixin: IrMixin,
 ) {
     sealed interface ConstructorArgument {
-        class Origin(val className: XClassName) : ConstructorArgument
+        class Origin(val instanceType: IrTargetType) : ConstructorArgument
     }
 }

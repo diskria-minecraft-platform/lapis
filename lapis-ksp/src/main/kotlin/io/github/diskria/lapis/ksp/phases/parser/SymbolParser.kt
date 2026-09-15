@@ -38,10 +38,10 @@ class SymbolParser(
             isPublic = decl.isPublic(),
             initStrategy = kMixinAnnotation?.findArgument(KMixin::initStrategy),
             classDeclaration = decl,
-            targetClassDeclaration = kMixinAnnotation?.findArgument(KMixin::target)?.declaration as? KSClassDeclaration,
+            targetType = kMixinAnnotation?.findArgument(KMixin::target),
             companionObjects = decl.companionObjectClassDeclarations.map(::parsePatchCompanionObject).toList(),
             constructors = decl.constructorDeclarations.map(::parsePatchConstructor).toList(),
-            bodyProperties = decl.bodyPropertyDeclarations.map(::parsePatchBodyProperty).toList(),
+            properties = decl.bodyPropertyDeclarations.map(::parsePatchBodyProperty).toList(),
             functions = decl.functionDeclarations.map(::parsePatchFunction).toList(),
             annotations = annotations,
         )
@@ -115,7 +115,7 @@ class SymbolParser(
             isPublic = decl.isPublic(),
             isOpen = decl.isExplicitlyOpen,
             isAbstract = decl.isAbstract,
-            extensionReceiverClassDeclaration = decl.extensionReceiver?.resolve()?.declaration as? KSClassDeclaration,
+            extensionReceiverType = decl.extensionReceiver?.resolve(),
             hasExtensionAnnotation = annotations.findLapisApiAnnotation<Extension>() != null,
             hasShadowAnnotation = kShadowAnnotation != null,
             explicitMappingName = annotations.findLapisApiAnnotation<MappingName>()?.findArgument(MappingName::name),
@@ -162,7 +162,7 @@ class SymbolParser(
         }
         val typeClassDeclaration = annotation.annotationType.resolve().declaration as? KSClassDeclaration
         return ParsedAnnotation(
-            classDeclaration = typeClassDeclaration,
+            typeClassDeclaration = typeClassDeclaration,
             isLapisApi = typeClassDeclaration?.packageName?.asString() == "io.github.diskria.lapis.annotations",
             qualifiedName = typeClassDeclaration?.qualifiedName?.asString(),
             arguments = arguments,

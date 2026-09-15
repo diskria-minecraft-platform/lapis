@@ -5,15 +5,20 @@ import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSFile
 import com.google.devtools.ksp.symbol.KSNode
 import com.google.devtools.ksp.symbol.KSType
+import com.squareup.kotlinpoet.ksp.toClassName
+import com.squareup.kotlinpoet.ksp.toTypeName
 import io.github.diskria.lapis.annotations.Env
 import io.github.diskria.lapis.annotations.InitStrategy
-import io.github.diskria.lapis.ksp.phases.lowering.toXClassName
+import io.github.diskria.lapis.ksp.kspPoetesse
 import io.github.diskria.poetesse.interop.XClassName
+import io.github.diskria.poetesse.interop.XTypeName
+import io.github.diskria.poetesse.interop.xClass
+import io.github.diskria.poetesse.interop.xType
 import io.github.diskria.poetesse.java.JPModifier
 
 class Patch(
-    symbol: KSNode,
-    classDeclaration: KSClassDeclaration,
+    private val symbol: KSNode,
+    private val classDeclaration: KSClassDeclaration,
     val name: String,
     val env: Env,
     val initStrategy: InitStrategy,
@@ -21,26 +26,27 @@ class Patch(
     val constructorParameters: List<ConstructorParameter>,
     val duckSources: List<DuckSource>,
     val injections: List<Injection>,
-    val targetClassDeclaration: KSClassDeclaration?,
+    private val targetType: KSType,
     val mixinAnnotations: List<MixinAnnotation>,
 ) {
-    val containingFile: KSFile? = symbol.containingFile
-    val className: XClassName = classDeclaration.toXClassName()
+    val containingFile: KSFile? get() = symbol.containingFile
+    val className: XClassName get() = classDeclaration.toXClassName()
+    val targetTypeName: XTypeName get() = targetType.toXTypeName()
 
     sealed interface ConstructorParameter {
-        class Origin(val classDeclaration: KSClassDeclaration) : ConstructorParameter
+        class Origin(val instanceType: TargetType) : ConstructorParameter
     }
 
     sealed interface Extension {
 
-        val receiverClassDeclaration: KSClassDeclaration
+        val receiverType: TargetType
 
         class Property(
             override val name: String,
             override val getterJvmName: String,
             override val setterJvmName: String?,
             override val type: KSType,
-            override val receiverClassDeclaration: KSClassDeclaration,
+            override val receiverType: TargetType,
         ) : DuckSource.Property,
             Extension
 
@@ -49,7 +55,7 @@ class Patch(
             override val jvmName: String,
             override val parameters: List<FunctionParameter>,
             override val returnType: KSType?,
-            override val receiverClassDeclaration: KSClassDeclaration,
+            override val receiverType: TargetType,
         ) : DuckSource.Function,
             Extension
     }
@@ -85,18 +91,34 @@ class Patch(
 
     class Injection(
         val jvmName: String,
-        val extensionReceiverClassDeclaration: KSClassDeclaration?,
+        val extensionReceiverType: TargetType?,
         val mixinAnnotations: List<MixinAnnotation>,
         val isStatic: Boolean,
         val parameters: List<Parameter>,
-        val returnType: KSType?,
+        private val returnType: KSType?,
     ) {
-        val extensionReceiverClassName: XClassName? get() = extensionReceiverClassDeclaration?.toXClassName()
+        val returnTypeName: XTypeName? get() = returnType?.toXTypeName()
 
         class Parameter(
             val name: String,
-            val type: KSType,
+            private val type: KSType,
             val mixinAnnotations: List<MixinAnnotation>,
-        )
+        ) {
+            val typeName: XTypeName get() = type.toXTypeName()
+        }
     }
 }
+
+class TargetType(
+    private val type: KSType,
+    val isInterface: Boolean,
+    val isAny: Boolean,
+) {
+    val typeName: XTypeName get() = type.toXTypeName()
+}
+
+fun KSType.toXTypeName(): XTypeName =
+    kspPoetesse.xType(toTypeName())
+
+fun KSClassDeclaration.toXClassName(): XClassName =
+    kspPoetesse.xClass(toClassName())

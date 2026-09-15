@@ -11,7 +11,6 @@ import io.github.diskria.lapis.ksp.phases.generator.models.GeneratedMixinsJson
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
 import io.github.diskria.poetesse.PoetesseFile
 import io.github.diskria.poetesse.interop.XClassName
-import io.github.diskria.poetesse.interop.XTypeName
 import io.github.diskria.poetesse.java.*
 import io.github.diskria.poetesse.kotlin.*
 import kotlinx.serialization.json.Json
@@ -43,7 +42,7 @@ class Generator(
                             patchImpl.constructorParameters.forEach { parameter ->
                                 when (parameter) {
                                     is IrPatchImpl.ConstructorParameter.Instance -> {
-                                        parameter("instance", parameter.className)
+                                        parameter("instance", parameter.targetType.typeName)
                                             .property { private() }
                                     }
 
@@ -102,7 +101,7 @@ class Generator(
                     }
                 }
             }
-        }.writeWith(codeGenerator, aggregating = false, patchImpl.originatingFiles)
+        }.writeWith(aggregating = false, listOfNotNull(patchImpl.sourceFile))
     }
 
     private fun generateMixin(mixin: IrMixin, patchClassName: XClassName, patchImpl: IrPatchImpl?) {
@@ -115,7 +114,7 @@ class Generator(
                         mixinAnnotations(mixin.annotations)
                     } else {
                         annotation<Mixin> {
-                            member(Mixin::value, requireNotNull(mixin.targetClassName))
+                            member(Mixin::value, mixin.targetTypeName)
                         }
                     }
                     val patchImplMember = patchImpl?.let { patchImplMember(it) }
@@ -221,44 +220,20 @@ class Generator(
                     }
                 }
             }
-        }.writeWith(codeGenerator, aggregating = false, mixin.originatingFiles)
+        }.writeWith(aggregating = false, listOfNotNull(mixin.sourceFile))
     }
 
-    private fun JavaAnnotationTrait.mixinAnnotations(mixinAnnotations: List<IrMixinAnnotation>) {
-        mixinAnnotations.forEach { +mixinAnnotation(it) }
-    }
-
-    private fun mixinAnnotation(annotation: IrMixinAnnotation): JavaTypedAnnotationRef<Annotation> =
-        kspPoetesse.java.annotation(annotation.className) {
-            annotation.arguments.forEach { argument ->
-                member(argument.name) {
-                    when (argument) {
-                        is IrMixinAnnotation.ScalarArgument -> mixinAnnotationArgumentValue(argument.value)
-                        is IrMixinAnnotation.ArrayArgument -> {
-                            argument.elements.joinToString(prefix = "{", postfix = "}") {
-                                mixinAnnotationArgumentValue(it)
-                            }
-                        }
-                    }
+    private fun JavaCodeScope.patchImplInitializer(patchImpl: IrPatchImpl): String {
+        val constructorArguments = code {
+            patchImpl.constructorParameters.joinToString { parameter ->
+                when (parameter) {
+                    is IrPatchImpl.ConstructorParameter.Instance -> targetTypeCast(parameter.targetType)
+                    is IrPatchImpl.ConstructorParameter.Duck -> "this"
                 }
             }
         }
-
-    private fun JavaCodeScope.mixinAnnotationArgumentValue(value: IrMixinAnnotation.Argument.Value): String =
-        when (value) {
-            is IrMixinAnnotation.Argument.BooleanValue -> L(value.boolean)
-            is IrMixinAnnotation.Argument.ByteValue -> L(value.byte)
-            is IrMixinAnnotation.Argument.ShortValue -> L(value.short)
-            is IrMixinAnnotation.Argument.IntValue -> L(value.int)
-            is IrMixinAnnotation.Argument.LongValue -> L(value.long)
-            is IrMixinAnnotation.Argument.CharValue -> L(value.char)
-            is IrMixinAnnotation.Argument.FloatValue -> L(value.float)
-            is IrMixinAnnotation.Argument.DoubleValue -> L(value.double)
-            is IrMixinAnnotation.Argument.StringValue -> S(value.string)
-            is IrMixinAnnotation.Argument.EnumValue -> "${T(value.className)}.${L(value.entryName)}"
-            is IrMixinAnnotation.Argument.TypeValue -> "${T(value.typeName)}.class"
-            is IrMixinAnnotation.Argument.AnnotationValue -> L(mixinAnnotation(value.annotation))
-        }
+        return "new ${T(patchImpl.className)}(${L(constructorArguments)})"
+    }
 
     private fun JavaTypeScope.patchImplMember(patchImpl: IrPatchImpl): String {
         val isEager = patchImpl.initStrategy == InitStrategy.Eager
@@ -324,20 +299,6 @@ class Generator(
         return "$getOrInitPatchMethod()"
     }
 
-    fun JavaCodeScope.patchImplInitializer(patchImpl: IrPatchImpl): String {
-        val constructorArguments = code {
-            patchImpl.constructorParameters.joinToString { parameter ->
-                when (parameter) {
-                    is IrPatchImpl.ConstructorParameter.Instance -> doubleCastTo(parameter.className)
-                    is IrPatchImpl.ConstructorParameter.Duck -> "this"
-                }
-            }
-        }
-        return "new ${T(patchImpl.className)}(${L(constructorArguments)})"
-    }
-
-    fun JavaCodeScope.doubleCastTo(targetTypeName: XTypeName): String = "(${T(targetTypeName)}) (${T<Any>()}) this"
-
     private fun JavaTypeScope.mixinInjection(injection: IrMixin.Injection, patchReceiver: JavaCodeScope.() -> String) {
         method(injection.jvmName) {
             private()
@@ -352,7 +313,7 @@ class Generator(
             body {
                 val functionArguments = code {
                     buildList {
-                        injection.extensionReceiverClassName?.let { add(doubleCastTo(it)) }
+                        injection.extensionReceiverType?.let { add(targetTypeCast(it)) }
                         addAll(injection.parameters.map { it.name })
                     }.joinToString()
                 }
@@ -377,13 +338,65 @@ class Generator(
                     }
                 }
             }
-        }.writeWith(codeGenerator, aggregating = false, duck.originatingFiles)
+        }.writeWith(aggregating = false, listOfNotNull(duck.sourceFile))
+    }
+
+    private fun JavaAnnotationTrait.mixinAnnotations(mixinAnnotations: List<IrMixinAnnotation>) {
+        mixinAnnotations.forEach { +mixinAnnotation(it) }
+    }
+
+    private fun mixinAnnotation(annotation: IrMixinAnnotation): JavaTypedAnnotationRef<Annotation> =
+        kspPoetesse.java.annotation(annotation.typeClassName) {
+            annotation.arguments.forEach { argument ->
+                member(argument.name) {
+                    when (argument) {
+                        is IrMixinAnnotation.ScalarArgument -> mixinAnnotationArgumentValue(argument.value)
+                        is IrMixinAnnotation.ArrayArgument -> {
+                            argument.elements.joinToString(prefix = "{", postfix = "}") {
+                                mixinAnnotationArgumentValue(it)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+    private fun JavaCodeScope.mixinAnnotationArgumentValue(value: IrMixinAnnotation.Argument.Value): String =
+        when (value) {
+            is IrMixinAnnotation.Argument.BooleanValue -> L(value.boolean)
+            is IrMixinAnnotation.Argument.ByteValue -> L(value.byte)
+            is IrMixinAnnotation.Argument.ShortValue -> L(value.short)
+            is IrMixinAnnotation.Argument.IntValue -> L(value.int)
+            is IrMixinAnnotation.Argument.LongValue -> L(value.long)
+            is IrMixinAnnotation.Argument.CharValue -> L(value.char)
+            is IrMixinAnnotation.Argument.FloatValue -> L(value.float)
+            is IrMixinAnnotation.Argument.DoubleValue -> L(value.double)
+            is IrMixinAnnotation.Argument.StringValue -> S(value.string)
+            is IrMixinAnnotation.Argument.EnumValue -> "${T(value.className)}.${L(value.entryName)}"
+            is IrMixinAnnotation.Argument.TypeValue -> "${T(value.typeName)}.class"
+            is IrMixinAnnotation.Argument.AnnotationValue -> L(mixinAnnotation(value.annotation))
+        }
+
+    private fun JavaCodeScope.targetTypeCast(targetType: IrTargetType): String =
+        when {
+            !targetType.isTargetTypeCastRequired -> "this"
+            targetType.isObjectCastRequired -> "(${T(targetType.typeName)}) (${T<Any>()}) this"
+            else -> "(${T(targetType.typeName)}) this"
+        }
+
+    private fun PoetesseFile.writeWith(aggregating: Boolean, originatingFiles: Iterable<KSFile>) {
+        codeGenerator.createNewFile(
+            dependencies = Dependencies(aggregating, *originatingFiles.toList().toTypedArray()),
+            packageName = packageName.orEmpty(),
+            fileName = fileName,
+            extensionName = extensionName,
+        ).writer().use(::writeTo)
     }
 
     private fun generateMixinConfig(mixinBlueprints: List<IrMixin>) {
         generateResourceFile(
             "generated-mixins.json",
-            mixinBlueprints.flatMap { it.originatingFiles },
+            mixinBlueprints.mapNotNull { it.sourceFile },
             aggregating = true,
         ) {
             val envClassNames = mixinBlueprints.groupBy({ it.env }, { it.className })
@@ -393,23 +406,14 @@ class Generator(
 
     private fun generateResourceFile(
         fileName: String,
-        originatingKSFiles: Iterable<KSFile>,
+        originatingFiles: Iterable<KSFile>,
         aggregating: Boolean,
         buildText: () -> String,
     ) {
         codeGenerator.createNewFileByPath(
-            dependencies = Dependencies(aggregating, *originatingKSFiles.toList().toTypedArray()),
+            dependencies = Dependencies(aggregating, *originatingFiles.toList().toTypedArray()),
             path = "lapis-intermediates/$fileName",
             extensionName = "",
         ).writer().use { it.write(buildText()) }
     }
-}
-
-fun PoetesseFile.writeWith(codeGenerator: CodeGenerator, aggregating: Boolean, originatingKSFiles: Iterable<KSFile>) {
-    codeGenerator.createNewFile(
-        dependencies = Dependencies(aggregating, *originatingKSFiles.toList().toTypedArray()),
-        packageName = packageName.orEmpty(),
-        fileName = fileName,
-        extensionName = extensionName,
-    ).writer().use(::writeTo)
 }

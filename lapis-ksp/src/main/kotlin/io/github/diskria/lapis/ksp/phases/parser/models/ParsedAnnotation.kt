@@ -8,7 +8,7 @@ import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 
 class ParsedAnnotation(
-    val classDeclaration: KSClassDeclaration?,
+    val typeClassDeclaration: KSClassDeclaration?,
     val isLapisApi: Boolean,
     val qualifiedName: String?,
     val arguments: List<Argument>

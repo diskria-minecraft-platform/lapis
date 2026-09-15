@@ -2,14 +2,12 @@ package io.github.diskria.lapis.ksp.phases.validator.models
 
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSType
-import io.github.diskria.lapis.ksp.phases.lowering.toXClassName
-import io.github.diskria.lapis.ksp.phases.lowering.toXTypeName
 import io.github.diskria.poetesse.interop.XClassName
 import io.github.diskria.poetesse.interop.XTypeName
 
-class MixinAnnotation(classDeclaration: KSClassDeclaration, val arguments: List<Argument>) {
+class MixinAnnotation(private val typeClassDeclaration: KSClassDeclaration, val arguments: List<Argument>) {
 
-    val className: XClassName = classDeclaration.toXClassName()
+    val typeClassName: XClassName get() = typeClassDeclaration.toXClassName()
 
     sealed interface Argument {
 
@@ -25,12 +23,12 @@ class MixinAnnotation(classDeclaration: KSClassDeclaration, val arguments: List<
         class FloatValue(val float: Float) : Value
         class DoubleValue(val double: Double) : Value
         class StringValue(val string: String) : Value
-        class TypeValue(type: KSType) : Value {
-            val typeName: XTypeName = type.toXTypeName()
+        class TypeValue(private val type: KSType) : Value {
+            val typeName: XTypeName get() = type.toXTypeName()
         }
 
-        class EnumValue(classDeclaration: KSClassDeclaration, val entryName: String) : Value {
-            val className: XClassName = classDeclaration.toXClassName()
+        class EnumValue(private val classDeclaration: KSClassDeclaration, val entryName: String) : Value {
+            val className: XClassName get() = classDeclaration.toXClassName()
         }
 
         class AnnotationValue(val annotation: MixinAnnotation) : Value

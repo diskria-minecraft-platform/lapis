@@ -27,7 +27,7 @@ class LapisSymbolProcessor(
         val parsedPatches = parser.parse()
 
         logger.setPhase(Logger.Phase.VALIDATION)
-        val validatedPatches = FrontendValidator(logger).validate(parsedPatches)
+        val validatedPatches = FrontendValidator(resolver.builtIns, logger).validate(parsedPatches)
 
         logger.setPhase(Logger.Phase.TRANSFORMATION)
         val irPatches = lowering.lower(validatedPatches)
