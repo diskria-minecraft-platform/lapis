@@ -5,9 +5,9 @@ import com.google.devtools.ksp.symbol.ClassKind
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.Variance
+import com.google.devtools.ksp.validate
 import io.github.diskria.lapis.ksp.Logger
 import io.github.diskria.lapis.ksp.extensions.internalError
-import io.github.diskria.lapis.ksp.extensions.ks.isValid
 import io.github.diskria.lapis.ksp.phases.parser.models.ParsedAnnotation
 import io.github.diskria.lapis.ksp.phases.parser.models.ParsedPatch
 import io.github.diskria.lapis.ksp.phases.parser.models.SymbolSource
@@ -230,7 +230,7 @@ class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: Lo
     @OptIn(ExperimentalContracts::class)
     private fun SymbolSource.validateClassDeclaration(classDeclaration: KSClassDeclaration?): KSClassDeclaration {
         contract { returns() implies (classDeclaration != null) }
-        kspRequire(classDeclaration?.isValid == true) { "777" }
+        kspRequire(classDeclaration?.validate(enableNewFeatures = true) == true) { "777" }
         return classDeclaration
     }
 

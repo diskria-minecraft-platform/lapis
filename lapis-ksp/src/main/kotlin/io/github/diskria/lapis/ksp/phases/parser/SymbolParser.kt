@@ -1,16 +1,12 @@
 package io.github.diskria.lapis.ksp.phases.parser
 
-import com.google.devtools.ksp.KspExperimental
-import com.google.devtools.ksp.isPublic
+import com.google.devtools.ksp.*
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.symbol.*
 import io.github.diskria.lapis.annotations.*
 import io.github.diskria.lapis.annotations.Origin
 import io.github.diskria.lapis.ksp.Logger
 import io.github.diskria.lapis.ksp.extensions.internalError
-import io.github.diskria.lapis.ksp.extensions.ks.bodyPropertyDeclarations
-import io.github.diskria.lapis.ksp.extensions.ks.constructorDeclarations
-import io.github.diskria.lapis.ksp.extensions.ks.functionDeclarations
 import io.github.diskria.lapis.ksp.extensions.requireQualifiedName
 import io.github.diskria.lapis.ksp.phases.parser.models.ParsedAnnotation
 import io.github.diskria.lapis.ksp.phases.parser.models.ParsedPatch
@@ -31,6 +27,13 @@ class SymbolParser(
     private fun parsePatch(decl: KSClassDeclaration): ParsedPatch {
         val annotations = parseAnnotations(decl)
         val kMixinAnnotation = annotations.findLapisApiAnnotation<KMixin>()
+        val constructorDeclarations = decl.getConstructors()
+        val constructorPropertyNames = constructorDeclarations.flatMap { decl ->
+            decl.parameters.filter { it.isVal || it.isVar }.mapNotNull { it.name?.asString() }
+        }
+        val propertyDeclarations = decl.getDeclaredProperties().filter {
+            it.simpleName.asString() !in constructorPropertyNames
+        }
         return ParsedPatch(
             name = decl.simpleName.asString(),
             env = kMixinAnnotation?.findArgument(KMixin::env),
@@ -47,9 +50,9 @@ class SymbolParser(
             targetType = kMixinAnnotation?.findArgument(KMixin::target),
             companionObject = decl.declarations.filterIsInstance<KSClassDeclaration>().find { it.isCompanionObject }
                 ?.let { parsePatchCompanionObject(it) },
-            constructors = decl.constructorDeclarations.map(::parsePatchConstructor).toList(),
-            properties = decl.bodyPropertyDeclarations.map(::parsePatchBodyProperty).toList(),
-            functions = decl.functionDeclarations.map(::parsePatchFunction).toList(),
+            constructors = constructorDeclarations.map(::parsePatchConstructor).toList(),
+            properties = propertyDeclarations.map(::parsePatchBodyProperty).toList(),
+            functions = decl.getDeclaredFunctions().filter { !it.isConstructor() }.map(::parsePatchFunction).toList(),
             annotations = annotations,
         )
     }
@@ -74,7 +77,7 @@ class SymbolParser(
         ParsedPatch.CompanionObject(
             name = decl.simpleName.asString(),
             isPublic = decl.isPublic(),
-            functions = decl.functionDeclarations.map(::parsePatchFunction).toList(),
+            functions = decl.getDeclaredFunctions().filter { !it.isConstructor() }.map(::parsePatchFunction).toList(),
             symbol = decl,
         )
 
