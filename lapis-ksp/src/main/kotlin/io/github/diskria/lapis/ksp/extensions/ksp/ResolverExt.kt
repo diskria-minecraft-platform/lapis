@@ -5,4 +5,4 @@ import com.google.devtools.ksp.symbol.KSAnnotated
 import io.github.diskria.lapis.ksp.extensions.requireQualifiedName
 
 inline fun <reified A : Annotation> Resolver.getSymbolsAnnotatedWith(): Sequence<KSAnnotated> =
-    getSymbolsWithAnnotation(A::class.requireQualifiedName())
+    getSymbolsWithAnnotation(requireQualifiedName<A>())

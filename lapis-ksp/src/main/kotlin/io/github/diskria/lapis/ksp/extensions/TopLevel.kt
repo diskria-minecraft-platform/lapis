@@ -6,3 +6,6 @@ fun internalError(message: String): Nothing =
         appendLine("This is a Lapis KSP internal error. Please report it to the issue tracker:")
         append("https://github.com/diskria-minecraft-platform/lapis/issues/")
     })
+
+inline fun <reified T : Any> requireQualifiedName(): String =
+    T::class.qualifiedName ?: internalError("Cannot resolve qualified name for '${T::class.simpleName}'.")

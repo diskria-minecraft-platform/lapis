@@ -3,9 +3,6 @@ package io.github.diskria.lapis.ksp.extensions.ks
 import com.google.devtools.ksp.*
 import com.google.devtools.ksp.symbol.*
 
-val KSClassDeclaration.type: KSType
-    get() = asType(emptyList())
-
 val KSClassDeclaration.isClass: Boolean
     get() = classKind == ClassKind.CLASS
 

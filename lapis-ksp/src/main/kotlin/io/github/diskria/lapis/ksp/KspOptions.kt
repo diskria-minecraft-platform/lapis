@@ -1,7 +1,6 @@
 package io.github.diskria.lapis.ksp
 
 import io.github.diskria.lapis.ksp.extensions.quoted
-import io.github.diskria.poetesse.extensions.doubleQuoted
 import kotlinx.serialization.Serializable
 import javax.lang.model.SourceVersion
 
@@ -16,24 +15,24 @@ data class KspOptions(
         val errors = buildList {
             if (!SourceVersion.isIdentifier(uniqueModPrefix)) {
                 add(
-                    "Invalid ${::uniqueModPrefix.name.quoted()}: " +
-                        "expected a valid Java identifier name (e.g. ${"modid$".doubleQuoted()}), " +
-                        "but got ${uniqueModPrefix.doubleQuoted()}."
+                    "Invalid '${::uniqueModPrefix.name}': " +
+                        "expected a valid Java identifier name (e.g. ${"modid$".quoted()}), " +
+                        "but got ${uniqueModPrefix.quoted()}."
                 )
             }
             if (!SourceVersion.isName(mixinPackage)) {
                 add(
-                    "Invalid ${::mixinPackage.name.quoted()}: " +
-                        "expected a valid Java package name (e.g. ${"com.example.modid.mixin".doubleQuoted()}), " +
-                        "but got ${mixinPackage.doubleQuoted()}."
+                    "Invalid '${::mixinPackage.name}': " +
+                        "expected a valid Java package name (e.g. ${"com.example.modid.mixin".quoted()}), " +
+                        "but got ${mixinPackage.quoted()}."
                 )
             }
             mixinGeneratedSubpackage?.let { subpackage ->
                 if (!SourceVersion.isName(subpackage)) {
                     add(
-                        "Invalid ${::mixinGeneratedSubpackage.name.quoted()}: " +
-                            "expected a valid Java subpackage name (e.g. ${"generated".doubleQuoted()}), " +
-                            "but got ${subpackage.doubleQuoted()}."
+                        "Invalid '${::mixinGeneratedSubpackage.name}': " +
+                            "expected a valid Java subpackage name (e.g. ${"generated".quoted()}), " +
+                            "but got ${subpackage.quoted()}."
                     )
                 }
             }

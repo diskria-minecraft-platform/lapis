@@ -6,7 +6,6 @@ import com.google.devtools.ksp.symbol.Variance
 import io.github.diskria.lapis.ksp.Logger
 import io.github.diskria.lapis.ksp.extensions.internalError
 import io.github.diskria.lapis.ksp.extensions.ks.isValid
-import io.github.diskria.lapis.ksp.extensions.ks.toClassDeclaration
 import io.github.diskria.lapis.ksp.phases.parser.models.ParsedAnnotation
 import io.github.diskria.lapis.ksp.phases.parser.models.ParsedPatch
 import io.github.diskria.lapis.ksp.phases.parser.models.SymbolSource
@@ -22,7 +21,9 @@ import kotlin.contracts.contract
 class FrontendValidator(private val logger: Logger) {
 
     fun validate(patches: List<ParsedPatch>): List<Patch> =
-        patches.mapNotNull { runOrNullOnSkip { it.validate() } }
+        patches.mapNotNull {
+            runOrNullOnSkip { it.validate() }
+        }
 
     private fun ParsedPatch.validate(): Patch {
         kspRequireNotNull(name) { "213" }
@@ -107,7 +108,7 @@ class FrontendValidator(private val logger: Logger) {
         validateType(type)
         return when {
             hasOriginAnnotation -> {
-                val typeClassDeclaration = type.toClassDeclaration()
+                val typeClassDeclaration = type.declaration as? KSClassDeclaration
                 kspRequire(
                     validateClassDeclaration(typeClassDeclaration) == validateClassDeclaration(targetClassDeclaration)
                 ) { "308" }
@@ -166,6 +167,7 @@ class FrontendValidator(private val logger: Logger) {
         kspRequire(!hasExtensionReceiver) { "367" }
         kspRequireNotNull(getter) { "368" }
         kspRequireNotNull(getter.jvmName) { "369" }
+        validateMixinAnnotations(annotations)
         val mappingName = validateMappingName(explicitMappingName, name)
         val shadowModifiers = validateModifiers(shadowModifiers, isMethod = false)
         return Patch.Shadow.Property(
@@ -275,8 +277,10 @@ class FrontendValidator(private val logger: Logger) {
             implicitName
         }
 
-    private fun SymbolSource.validateMixinAnnotations(annotations: List<ParsedAnnotation>): List<MixinAnnotation> =
-        annotations.filterNot { it.isSourceRetention }.mapNotNull {
+    private fun SymbolSource.validateMixinAnnotations(annotations: List<ParsedAnnotation?>): List<MixinAnnotation> =
+        annotations.map {
+            kspRequireNotNull(it) { "285" }
+        }.filter { !it.isLapisApi }.mapNotNull {
             runOrNullOnSkip { validateMixinAnnotation(it) }
         }
 
@@ -284,11 +288,17 @@ class FrontendValidator(private val logger: Logger) {
         MixinAnnotation(
             classDeclaration = validateClassDeclaration(annotation.classDeclaration),
             arguments = annotation.arguments.filter { it.isExplicit }.map { argument ->
-                MixinAnnotation.Argument(
-                    argument.name,
-                    argument.values.map { validateMixinAnnotationArgumentValue(it) },
-                    argument.isArray,
-                )
+                when (argument) {
+                    is ParsedAnnotation.ScalarArgument -> MixinAnnotation.ScalarArgument(
+                        name = argument.name,
+                        value = validateMixinAnnotationArgumentValue(argument.value),
+                    )
+
+                    is ParsedAnnotation.ArrayArgument -> MixinAnnotation.ArrayArgument(
+                        name = argument.name,
+                        elements = argument.elements.map { validateMixinAnnotationArgumentValue(it) },
+                    )
+                }
             }
         )
 
@@ -304,9 +314,9 @@ class FrontendValidator(private val logger: Logger) {
         is ParsedAnnotation.Argument.FloatValue -> MixinAnnotation.Argument.FloatValue(value.float)
         is ParsedAnnotation.Argument.DoubleValue -> MixinAnnotation.Argument.DoubleValue(value.double)
         is ParsedAnnotation.Argument.StringValue -> MixinAnnotation.Argument.StringValue(value.string)
-        is ParsedAnnotation.Argument.ClassValue -> MixinAnnotation.Argument.ClassValue(validateType(value.type))
+        is ParsedAnnotation.Argument.TypeValue -> MixinAnnotation.Argument.TypeValue(validateType(value.type))
         is ParsedAnnotation.Argument.EnumValue -> {
-            MixinAnnotation.Argument.EnumValue(validateClassDeclaration(value.classDeclaration), value.entryName)
+            MixinAnnotation.Argument.EnumValue(validateClassDeclaration(value.enumClassDeclaration), value.entryName)
         }
 
         is ParsedAnnotation.Argument.AnnotationValue -> {

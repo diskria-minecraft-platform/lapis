@@ -11,7 +11,9 @@ class MixinAnnotation(classDeclaration: KSClassDeclaration, val arguments: List<
 
     val className: XClassName = classDeclaration.toXClassName()
 
-    class Argument(val name: String, val values: List<Value>, val isArray: Boolean) {
+    sealed interface Argument {
+
+        val name: String
 
         sealed interface Value
         class BooleanValue(val boolean: Boolean) : Value
@@ -23,7 +25,7 @@ class MixinAnnotation(classDeclaration: KSClassDeclaration, val arguments: List<
         class FloatValue(val float: Float) : Value
         class DoubleValue(val double: Double) : Value
         class StringValue(val string: String) : Value
-        class ClassValue(type: KSType) : Value {
+        class TypeValue(type: KSType) : Value {
             val typeName: XTypeName = type.toXTypeName()
         }
 
@@ -33,4 +35,14 @@ class MixinAnnotation(classDeclaration: KSClassDeclaration, val arguments: List<
 
         class AnnotationValue(val annotation: MixinAnnotation) : Value
     }
+
+    class ScalarArgument(
+        override val name: String,
+        val value: Argument.Value,
+    ) : Argument
+
+    class ArrayArgument(
+        override val name: String,
+        val elements: List<Argument.Value>,
+    ) : Argument
 }

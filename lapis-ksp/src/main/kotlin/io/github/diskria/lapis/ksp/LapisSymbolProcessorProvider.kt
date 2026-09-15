@@ -6,7 +6,6 @@ import com.google.devtools.ksp.processing.SymbolProcessorEnvironment
 import com.google.devtools.ksp.processing.SymbolProcessorProvider
 import io.github.diskria.lapis.ksp.extensions.elements
 import io.github.diskria.lapis.ksp.extensions.internalError
-import io.github.diskria.lapis.ksp.extensions.quoted
 import kotlinx.serialization.descriptors.serialDescriptor
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
@@ -28,12 +27,12 @@ class LapisSymbolProcessorProvider : SymbolProcessorProvider {
         val existingKeys = descriptorElements.map { it.name.withArgumentPrefix() }.toSet()
         val unknownKeys = scopedOptions.keys - existingKeys
         if (unknownKeys.isNotEmpty()) {
-            logger.warn("Unknown arguments: ${unknownKeys.joinToString { it.quoted() }}.")
+            logger.warn("Unknown arguments: ${unknownKeys.joinToString { "'$it'" }}.")
         }
         val requiredKeys = descriptorElements.filter { !it.isOptional }.map { it.name.withArgumentPrefix() }.toSet()
         val missingRequiredKeys = requiredKeys - scopedOptions.keys
         if (missingRequiredKeys.isNotEmpty()) {
-            logger.fatal("Missing required arguments: ${missingRequiredKeys.joinToString { it.quoted() }}.")
+            logger.fatal("Missing required arguments: ${missingRequiredKeys.joinToString { "'$it'" }}.")
         }
         val kspOptions = runCatching {
             optionsJson.decodeFromJsonElement<KspOptions>(buildJsonObject {

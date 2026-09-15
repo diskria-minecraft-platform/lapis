@@ -232,11 +232,13 @@ class Generator(
         kspPoetesse.java.annotation(annotation.className) {
             annotation.arguments.forEach { argument ->
                 member(argument.name) {
-                    val scalarValue = argument.takeIf { !it.isArray }?.values?.singleOrNull()
-                    if (scalarValue != null) {
-                        mixinAnnotationArgumentValue(scalarValue)
-                    } else {
-                        argument.values.joinToString(prefix = "{", postfix = "}") { mixinAnnotationArgumentValue(it) }
+                    when (argument) {
+                        is IrMixinAnnotation.ScalarArgument -> mixinAnnotationArgumentValue(argument.value)
+                        is IrMixinAnnotation.ArrayArgument -> {
+                            argument.elements.joinToString(prefix = "{", postfix = "}") {
+                                mixinAnnotationArgumentValue(it)
+                            }
+                        }
                     }
                 }
             }
@@ -254,7 +256,7 @@ class Generator(
             is IrMixinAnnotation.Argument.DoubleValue -> L(value.double)
             is IrMixinAnnotation.Argument.StringValue -> S(value.string)
             is IrMixinAnnotation.Argument.EnumValue -> "${T(value.className)}.${L(value.entryName)}"
-            is IrMixinAnnotation.Argument.ClassValue -> "${T(value.typeName)}.class"
+            is IrMixinAnnotation.Argument.TypeValue -> "${T(value.typeName)}.class"
             is IrMixinAnnotation.Argument.AnnotationValue -> L(mixinAnnotation(value.annotation))
         }
 

@@ -5,7 +5,9 @@ import io.github.diskria.poetesse.interop.XTypeName
 
 class IrMixinAnnotation(val className: XClassName, val arguments: List<Argument>) {
 
-    class Argument(val name: String, val values: List<Value>, val isArray: Boolean) {
+    sealed interface Argument {
+
+        val name: String
 
         sealed interface Value
         class BooleanValue(val boolean: Boolean) : Value
@@ -17,8 +19,11 @@ class IrMixinAnnotation(val className: XClassName, val arguments: List<Argument>
         class FloatValue(val float: Float) : Value
         class DoubleValue(val double: Double) : Value
         class StringValue(val string: String) : Value
-        class ClassValue(val typeName: XTypeName) : Value
+        class TypeValue(val typeName: XTypeName) : Value
         class EnumValue(val className: XClassName, val entryName: String) : Value
         class AnnotationValue(val annotation: IrMixinAnnotation) : Value
     }
+
+    class ScalarArgument(override val name: String, val value: Argument.Value) : Argument
+    class ArrayArgument(override val name: String, val elements: List<Argument.Value>) : Argument
 }

@@ -195,11 +195,17 @@ class Lowering(
 
     private fun lowerMixinAnnotation(annotation: MixinAnnotation): IrMixinAnnotation =
         IrMixinAnnotation(annotation.className, annotation.arguments.map { argument ->
-            IrMixinAnnotation.Argument(
-                argument.name,
-                argument.values.map { lowerMixinAnnotationArgumentValue(it) },
-                argument.isArray,
-            )
+            when (argument) {
+                is MixinAnnotation.ScalarArgument -> IrMixinAnnotation.ScalarArgument(
+                    name = argument.name,
+                    value = lowerMixinAnnotationArgumentValue(argument.value),
+                )
+
+                is MixinAnnotation.ArrayArgument -> IrMixinAnnotation.ArrayArgument(
+                    name = argument.name,
+                    elements = argument.elements.map { lowerMixinAnnotationArgumentValue(it) },
+                )
+            }
         })
 
     private fun lowerMixinAnnotationArgumentValue(
@@ -214,7 +220,7 @@ class Lowering(
         is MixinAnnotation.Argument.FloatValue -> IrMixinAnnotation.Argument.FloatValue(value.float)
         is MixinAnnotation.Argument.DoubleValue -> IrMixinAnnotation.Argument.DoubleValue(value.double)
         is MixinAnnotation.Argument.StringValue -> IrMixinAnnotation.Argument.StringValue(value.string)
-        is MixinAnnotation.Argument.ClassValue -> IrMixinAnnotation.Argument.ClassValue(value.typeName)
+        is MixinAnnotation.Argument.TypeValue -> IrMixinAnnotation.Argument.TypeValue(value.typeName)
         is MixinAnnotation.Argument.EnumValue -> IrMixinAnnotation.Argument.EnumValue(value.className, value.entryName)
         is MixinAnnotation.Argument.AnnotationValue -> {
             IrMixinAnnotation.Argument.AnnotationValue(lowerMixinAnnotation(value.annotation))

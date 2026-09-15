@@ -25,7 +25,7 @@ class ParsedPatch(
     val constructors: List<Constructor>,
     val bodyProperties: List<Property>,
     val functions: List<Function>,
-    val annotations: List<ParsedAnnotation>,
+    val annotations: List<ParsedAnnotation?>,
     override val symbol: KSNode = classDeclaration,
 ) : SymbolSource {
 
@@ -53,6 +53,7 @@ class ParsedPatch(
         val hasExtensionAnnotation: Boolean,
         val hasShadowAnnotation: Boolean,
         val shadowModifiers: List<Modifier>,
+        val annotations: List<ParsedAnnotation?>,
         val getter: Getter?,
         val setter: Setter?,
         override val symbol: KSNode,
@@ -60,7 +61,7 @@ class ParsedPatch(
 
         class Getter(
             val jvmName: String?,
-            val annotations: List<ParsedAnnotation>,
+            val annotations: List<ParsedAnnotation?>,
         )
 
         class Setter(
@@ -82,14 +83,14 @@ class ParsedPatch(
         val hasShadowAnnotation: Boolean,
         val explicitMappingName: String?,
         val shadowModifiers: List<Modifier>,
-        val annotations: List<ParsedAnnotation>,
+        val annotations: List<ParsedAnnotation?>,
         override val symbol: KSNode,
     ) : SymbolSource {
 
         class Parameter(
             val name: String?,
             val type: KSType?,
-            val annotations: List<ParsedAnnotation>,
+            val annotations: List<ParsedAnnotation?>,
             override val symbol: KSNode,
         ) : SymbolSource
     }
