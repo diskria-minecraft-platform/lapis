@@ -365,7 +365,6 @@ class Generator(
             java.file(duck.className) {
                 interface_(fileName) {
                     public()
-                    abstract()
                     duck.entries.flatMap { it.kinds }.forEach { kind ->
                         method(kind.name) {
                             public()
