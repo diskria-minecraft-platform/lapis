@@ -48,7 +48,7 @@ class Lowering(
     ): IrPatchImpl? =
         if (patch.isImplRequired) {
             IrPatchImpl(
-                sourceFile = patch.containingFile,
+                patchOriginatingFile = patch.containingFile,
                 className = patch.className.withSuffix("_Impl"),
                 constructorParameters = buildList {
                     constructorArguments.filterIsInstance<IrPatch.ConstructorArgument.Origin>().firstOrNull()?.let {
@@ -64,7 +64,7 @@ class Lowering(
 
     private fun lowerMixin(patch: Patch, sourcePackageLCP: String?): IrMixin =
         IrMixin(
-            sourceFile = patch.containingFile,
+            patchOriginatingFile = patch.containingFile,
             className = resolveMixinClassName(patch.className, sourcePackageLCP),
             env = patch.env,
             injections = buildList {
@@ -87,7 +87,7 @@ class Lowering(
         }
         return if (entries.isNotEmpty()) {
             IrMixinDuck(
-                sourceFile = patch.containingFile,
+                patchOriginatingFile = patch.containingFile,
                 className = patch.className.withSuffix("_Duck"),
                 entries = entries,
             )

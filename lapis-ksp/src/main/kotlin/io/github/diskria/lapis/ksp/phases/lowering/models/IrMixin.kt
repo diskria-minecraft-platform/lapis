@@ -7,7 +7,7 @@ import io.github.diskria.poetesse.interop.XClassName
 import io.github.diskria.poetesse.interop.XTypeName
 
 class IrMixin(
-    val sourceFile: KSFile?,
+    val patchOriginatingFile: KSFile?,
     val className: XClassName,
     val env: Env,
     val injections: List<Injection>,

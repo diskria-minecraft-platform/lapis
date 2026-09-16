@@ -6,7 +6,7 @@ import io.github.diskria.poetesse.interop.XClassName
 import io.github.diskria.poetesse.interop.XTypeName
 import io.github.diskria.poetesse.java.JPModifier
 
-class IrMixinDuck(val sourceFile: KSFile?, val className: XClassName, val entries: List<Entry>) {
+class IrMixinDuck(val patchOriginatingFile: KSFile?, val className: XClassName, val entries: List<Entry>) {
 
     sealed interface Entry {
 

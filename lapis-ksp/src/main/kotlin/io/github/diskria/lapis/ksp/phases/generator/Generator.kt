@@ -9,6 +9,7 @@ import io.github.diskria.lapis.ksp.Logger
 import io.github.diskria.lapis.ksp.kspPoetesse
 import io.github.diskria.lapis.ksp.phases.generator.models.GeneratedMixinsJson
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
+import io.github.diskria.lapis.ksp.phases.lowering.withSuffix
 import io.github.diskria.poetesse.PoetesseFile
 import io.github.diskria.poetesse.interop.XClassName
 import io.github.diskria.poetesse.java.*
@@ -23,12 +24,84 @@ class Generator(
 ) {
     fun generate(patches: List<IrPatch>) {
         patches.forEach { patch ->
+            patch.mixin.duck?.let {
+                generateMixinDuck(it)
+                generateExtensions(it, patch)
+            }
             patch.impl?.let { generatePatchImpl(it, patch) }
-            patch.mixin.duck?.let { generateMixinDuck(it) }
             generateMixin(patch.mixin, patch.className, patch.impl)
         }
         generateMixinConfig(patches.map { it.mixin })
-        // todo pass extensions to fir via gen res
+    }
+
+    private fun generateMixinDuck(duck: IrMixinDuck) {
+        kspPoetesse {
+            java.file(duck.className) {
+                interface_(fileName) {
+                    public()
+                    duck.entries.flatMap { it.kinds }.forEach { kind ->
+                        method(kind.name) {
+                            public()
+                            abstract()
+                            kind.parameters.forEach { parameter(it.name, it.typeName) }
+                            kind.returnTypeName?.let { returns(it) }
+                        }
+                    }
+                }
+            }
+        }.writeWith(aggregating = false, listOfNotNull(duck.patchOriginatingFile))
+    }
+
+    // todo migrate to FIR plugin
+    private fun generateExtensions(duck: IrMixinDuck, patch: IrPatch) {
+        val entries = duck.entries.filterIsInstance<IrMixinDuck.Extension>().ifEmpty { return }
+        kspPoetesse {
+            kotlin.file(patch.className.withSuffix("_Extensions")) {
+                entries.forEach { entry ->
+                    when (entry) {
+                        is IrMixinDuck.Extension.Property -> {
+                            property(entry.sourceName, entry.typeName) {
+                                public()
+                                inline()
+                                extensionReceiver(entry.receiverType.typeName)
+                                getter {
+                                    expression {
+                                        "(this as ${T(duck.className)}).${(N(entry.getter.name))}()"
+                                    }
+                                }
+                                entry.setter?.let { setter ->
+                                    setter { newValue ->
+                                        body {
+                                            line { "(this as ${T(duck.className)}).${N(setter.name)}(${N(newValue)})" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        is IrMixinDuck.Extension.Function -> {
+                            function(entry.sourceName) {
+                                public()
+                                inline()
+                                extensionReceiver(entry.receiverType.typeName)
+                                entry.parameters.forEach { parameter(it.name, it.typeName) }
+                                entry.returnTypeName?.let { returns(it) }
+                                body {
+                                    val maybeReturn = if (entry.returnTypeName != null) "return " else ""
+                                    val parameters = code {
+                                        entry.parameters.joinToString { N(it.name) }
+                                    }
+                                    line {
+                                        "$maybeReturn(this as ${T(duck.className)})." +
+                                            "${N(entry.name)}(${L(parameters)})"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }.writeWith(aggregating = false, listOfNotNull(duck.patchOriginatingFile))
     }
 
     private fun generatePatchImpl(patchImpl: IrPatchImpl, patch: IrPatch) {
@@ -67,6 +140,7 @@ class Generator(
                         when (entry) {
                             is IrMixinDuck.Property -> {
                                 property(entry.sourceName, entry.typeName) {
+                                    public()
                                     override()
                                     getter {
                                         expression {
@@ -74,9 +148,9 @@ class Generator(
                                         }
                                     }
                                     entry.setter?.let { setter ->
-                                        setter { parameterName ->
+                                        setter { newValue ->
                                             body {
-                                                line { "${N("duck")}.${N(setter.name)}(${N(parameterName)})" }
+                                                line { "${N("duck")}.${N(setter.name)}(${N(newValue)})" }
                                             }
                                         }
                                     }
@@ -85,6 +159,7 @@ class Generator(
 
                             is IrMixinDuck.Function -> {
                                 function(entry.sourceName) {
+                                    public()
                                     override()
                                     entry.parameters.forEach { parameter(it.name, it.typeName) }
                                     entry.returnTypeName?.let { returns(it) }
@@ -101,7 +176,7 @@ class Generator(
                     }
                 }
             }
-        }.writeWith(aggregating = false, listOfNotNull(patchImpl.sourceFile))
+        }.writeWith(aggregating = false, listOfNotNull(patchImpl.patchOriginatingFile))
     }
 
     private fun generateMixin(mixin: IrMixin, patchClassName: XClassName, patchImpl: IrPatchImpl?) {
@@ -223,7 +298,7 @@ class Generator(
                     }
                 }
             }
-        }.writeWith(aggregating = false, listOfNotNull(mixin.sourceFile))
+        }.writeWith(aggregating = false, listOfNotNull(mixin.patchOriginatingFile))
     }
 
     private fun JavaCodeScope.patchImplInitializer(patchImpl: IrPatchImpl): String {
@@ -328,24 +403,6 @@ class Generator(
         }
     }
 
-    private fun generateMixinDuck(duck: IrMixinDuck) {
-        kspPoetesse {
-            java.file(duck.className) {
-                interface_(fileName) {
-                    public()
-                    duck.entries.flatMap { it.kinds }.forEach { kind ->
-                        method(kind.name) {
-                            public()
-                            abstract()
-                            kind.parameters.forEach { parameter(it.name, it.typeName) }
-                            kind.returnTypeName?.let { returns(it) }
-                        }
-                    }
-                }
-            }
-        }.writeWith(aggregating = false, listOfNotNull(duck.sourceFile))
-    }
-
     private fun JavaAnnotationTrait.mixinAnnotations(mixinAnnotations: List<IrMixinAnnotation>) {
         mixinAnnotations.forEach { +mixinAnnotation(it) }
     }
@@ -401,7 +458,7 @@ class Generator(
     private fun generateMixinConfig(mixinBlueprints: List<IrMixin>) {
         generateResourceFile(
             "generated-mixins.json",
-            mixinBlueprints.mapNotNull { it.sourceFile },
+            mixinBlueprints.mapNotNull { it.patchOriginatingFile },
             aggregating = true,
         ) {
             val envClassNames = mixinBlueprints.groupBy({ it.env }, { it.className })
