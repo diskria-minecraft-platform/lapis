@@ -57,7 +57,8 @@ class IrMixinDuck(val patchOriginatingFile: KSFile?, val className: XClassName, 
             override val sourceJvmName: String,
             typeName: XTypeName,
         ) : AccessorKind {
-            override val parameters: List<IrFunctionParameter> = listOf(IrFunctionParameter("newValue", typeName))
+            val parameter = IrFunctionParameter("newValue", typeName)
+            override val parameters: List<IrFunctionParameter> = listOf(parameter)
             override val returnTypeName: XTypeName? = null
         }
     }

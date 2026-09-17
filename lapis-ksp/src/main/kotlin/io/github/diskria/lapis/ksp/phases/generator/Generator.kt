@@ -243,7 +243,7 @@ class Generator(
                                                         }
 
                                                         is IrMixinDuck.Property.Setter -> {
-                                                            line { "$shadowField = ${kind.name}" }
+                                                            line { "$shadowField = ${kind.parameter.name}" }
                                                         }
                                                     }
                                                 }
