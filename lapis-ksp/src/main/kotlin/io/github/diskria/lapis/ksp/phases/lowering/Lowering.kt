@@ -168,7 +168,8 @@ class Lowering(
     }
 
     private fun lowerMemberInjection(injection: Patch.Injection) = IrMixin.MemberInjection(
-        jvmName = injection.jvmName,
+        sourceJvmName = injection.jvmName,
+        name = injection.jvmName.withUniqueModPrefix(),
         mixinAnnotations = lowerMixinAnnotations(injection.mixinAnnotations),
         parameters = injection.parameters.map { parameter ->
             IrMixin.Injection.Parameter(
@@ -185,7 +186,8 @@ class Lowering(
         companionObject: Patch.CompanionObject,
         injection: Patch.Injection,
     ) = IrMixin.StaticInjection(
-        jvmName = injection.jvmName,
+        sourceJvmName = injection.jvmName,
+        name = injection.jvmName.withUniqueModPrefix(),
         mixinAnnotations = lowerMixinAnnotations(injection.mixinAnnotations),
         parameters = injection.parameters.map { parameter ->
             IrMixin.Injection.Parameter(

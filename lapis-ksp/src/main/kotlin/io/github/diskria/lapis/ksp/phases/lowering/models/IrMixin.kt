@@ -17,7 +17,8 @@ class IrMixin(
 ) {
     sealed interface Injection {
 
-        val jvmName: String
+        val name: String
+        val sourceJvmName: String
         val mixinAnnotations: List<IrMixinAnnotation>
         val parameters: List<Parameter>
         val returnTypeName: XTypeName?
@@ -30,7 +31,8 @@ class IrMixin(
     }
 
     class MemberInjection(
-        override val jvmName: String,
+        override val name: String,
+        override val sourceJvmName: String,
         override val mixinAnnotations: List<IrMixinAnnotation>,
         override val parameters: List<Parameter>,
         override val returnTypeName: XTypeName?,
@@ -38,7 +40,8 @@ class IrMixin(
     ) : Injection
 
     class StaticInjection(
-        override val jvmName: String,
+        override val name: String,
+        override val sourceJvmName: String,
         override val mixinAnnotations: List<IrMixinAnnotation>,
         override val parameters: List<Parameter>,
         override val returnTypeName: XTypeName?,

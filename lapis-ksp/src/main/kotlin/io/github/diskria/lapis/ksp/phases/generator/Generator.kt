@@ -380,7 +380,7 @@ class Generator(
     }
 
     private fun JavaTypeScope.mixinInjection(injection: IrMixin.Injection, patchReceiver: JavaCodeScope.() -> String) {
-        method(injection.jvmName) {
+        method(injection.name) {
             private()
             if (injection is IrMixin.StaticInjection) static()
             mixinAnnotations(injection.mixinAnnotations)
@@ -400,7 +400,7 @@ class Generator(
                     }.joinToString()
                 }
                 val maybeReturn = if (injection.returnTypeName != null) "return " else ""
-                line { "$maybeReturn${L(patchReceiver)}.${L(injection.jvmName)}(${L(functionArguments)})" }
+                line { "$maybeReturn${L(patchReceiver)}.${L(injection.sourceJvmName)}(${L(functionArguments)})" }
             }
         }
     }
