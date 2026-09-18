@@ -352,7 +352,7 @@ class Generator(
             annotation<Unique>()
             if (isEager) {
                 final()
-                initializer { L(initializer) }
+                initializer(initializer)
             } else if (isThreadSafe) {
                 volatile()
             }
@@ -422,7 +422,7 @@ class Generator(
                     }
                     superinterface(mixin.duck?.className ?: patch.className)
                     mixin.duck?.shadows?.filterIsInstance<IrMixinDuck.Shadow.Function>()?.forEach { shadowFunction ->
-                        val shadowMethod = method(shadowFunction.mappingName) {
+                        val shadowMethod = method("shadow$${shadowFunction.mappingName}") {
                             if (shadowFunction.mixinAnnotations.isNotEmpty()) {
                                 mixinAnnotations(shadowFunction.mixinAnnotations)
                             } else {
