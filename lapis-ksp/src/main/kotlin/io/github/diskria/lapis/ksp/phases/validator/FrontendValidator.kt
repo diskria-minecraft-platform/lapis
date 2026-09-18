@@ -37,16 +37,9 @@ class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: Lo
         kspRequire(isTopLevel) { "217" }
         kspRequire(hasPackageName) { "218" }
         kspRequire(isPublic) { "219" }
-        kspRequire(isClass) { "235" }
-        kspRequire(!isObject) { "236" }
         kspRequire(!isSealed) { "237" }
         kspRequire(!isOpen) { "238" }
         validateType(targetType)
-        val constructor = kspRequireNotNull(constructors.singleOrNull()) { "239" }
-        constructor.kspRequire(constructor.isPublic) { "240" }
-        val constructorParameters = constructor.parameters.mapNotNull {
-            runOrNullOnSkip { it.validate(targetType) }
-        }
         val (parsedInjectionFunctions, parsedRegularFunctions) = functions.partition {
             validateMixinAnnotations(it.annotations).isNotEmpty()
         }
@@ -71,12 +64,17 @@ class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: Lo
             }
             Patch.CompanionObject(name = companionObject.name, injections = injections)
         }
-        val hasStaticHooksOnly = constructorParameters.isEmpty()
-            && extensionProperties.isEmpty() && extensionFunctions.isEmpty()
-            && shadowProperties.isEmpty() && shadowFunctions.isEmpty()
-            && injections.all { it.isStatic }
-        if (!hasStaticHooksOnly) {
-            kspRequire(isAbstract) { "275" }
+        val classKind = if (isClass) {
+            val constructor = kspRequireNotNull(constructors.singleOrNull()) { "239" }
+            constructor.kspRequire(constructor.isPublic) { "240" }
+            val constructorParameters = constructor.parameters.mapNotNull {
+                runOrNullOnSkip { it.validate(targetType) }
+            }
+            Patch.Class(isAbstract, constructorParameters)
+        } else if (isInterface) {
+            Patch.Interface
+        } else {
+            kspError { "53" }
         }
         return Patch(
             symbol = symbol,
@@ -84,14 +82,15 @@ class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: Lo
             name = name,
             env = env,
             initStrategy = initStrategy,
-            isImplRequired = !hasStaticHooksOnly,
+            classKind = classKind,
             targetType = targetType,
-            constructorParameters = constructorParameters,
             duckSources = buildList {
                 addAll(extensionProperties)
                 addAll(extensionFunctions)
-                addAll(shadowProperties)
-                addAll(shadowFunctions)
+                if (isAbstract) {
+                    addAll(shadowProperties)
+                    addAll(shadowFunctions)
+                }
             },
             injections = injections,
             companionObject = companionObject,
@@ -104,12 +103,16 @@ class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: Lo
         return this
     }
 
-    private fun ParsedPatch.Constructor.Parameter.validate(targetType: KSType): Patch.ConstructorParameter {
+    private fun ParsedPatch.Constructor.Parameter.validate(targetType: KSType): Patch.Class.ConstructorParameter {
         validateType(type)
         return when {
             hasOriginAnnotation -> {
+                kspRequireNotNull(name) { "110" }
                 kspRequire(type.arguments.all { it.variance == Variance.STAR }) { "309" }
-                Patch.ConstructorParameter.Origin(instanceType = validateTargetTypeCompatibility(type, targetType))
+                Patch.Class.ConstructorParameter.Origin(
+                    name = name,
+                    type = validateTargetTypeCompatibility(type, targetType),
+                )
             }
 
             else -> kspError { "313" }

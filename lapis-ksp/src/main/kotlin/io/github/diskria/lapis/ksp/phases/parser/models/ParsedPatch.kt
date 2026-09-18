@@ -11,7 +11,7 @@ class ParsedPatch(
     val name: String?,
     val env: Env?,
     val isClass: Boolean,
-    val isObject: Boolean,
+    val isInterface: Boolean,
     val isOpen: Boolean,
     val isAbstract: Boolean,
     val isSealed: Boolean,
@@ -36,6 +36,7 @@ class ParsedPatch(
     ) : SymbolSource {
 
         class Parameter(
+            val name: String?,
             val type: KSType?,
             val hasOriginAnnotation: Boolean,
             override val symbol: KSNode,

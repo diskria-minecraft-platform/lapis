@@ -1,14 +1,26 @@
 package io.github.diskria.lapis.ksp.phases.lowering.models
 
+import io.github.diskria.lapis.annotations.InitStrategy
 import io.github.diskria.poetesse.interop.XClassName
 
-class IrPatch(
-    val className: XClassName,
-    val constructorArguments: List<ConstructorArgument>,
+sealed interface IrPatch {
+    val className: XClassName
+    val mixin: IrMixin
+}
+
+class IrPatchClass(
+    override val className: XClassName,
+    override val mixin: IrMixin,
     val impl: IrPatchImpl?,
-    val mixin: IrMixin,
-) {
-    sealed interface ConstructorArgument {
-        class Origin(val instanceType: IrTargetType) : ConstructorArgument
+    val constructorParameters: List<ConstructorParameter>,
+    val initStrategy: InitStrategy,
+) : IrPatch {
+    sealed interface ConstructorParameter {
+        class Origin(val name: String, val type: IrTargetType) : ConstructorParameter
     }
 }
+
+class IrPatchInterface(
+    override val className: XClassName,
+    override val mixin: IrMixin,
+) : IrPatch

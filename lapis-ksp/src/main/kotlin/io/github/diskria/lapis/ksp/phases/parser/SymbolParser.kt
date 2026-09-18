@@ -38,7 +38,7 @@ class SymbolParser(
             name = decl.simpleName.asString(),
             env = kMixinAnnotation?.findArgument(KMixin::env),
             isClass = decl.classKind == ClassKind.CLASS,
-            isObject = decl.classKind == ClassKind.OBJECT,
+            isInterface = decl.classKind == ClassKind.INTERFACE,
             isOpen = Modifier.OPEN in decl.modifiers,
             isAbstract = Modifier.ABSTRACT in decl.modifiers,
             isSealed = Modifier.SEALED in decl.modifiers,
@@ -67,6 +67,7 @@ class SymbolParser(
     private fun parsePatchConstructorParameter(parameter: KSValueParameter): ParsedPatch.Constructor.Parameter {
         val annotations = parseAnnotations(parameter)
         return ParsedPatch.Constructor.Parameter(
+            name = parameter.name?.asString(),
             type = parameter.type.resolve(),
             hasOriginAnnotation = annotations.findLapisApiAnnotation<Origin>() != null,
             symbol = parameter,

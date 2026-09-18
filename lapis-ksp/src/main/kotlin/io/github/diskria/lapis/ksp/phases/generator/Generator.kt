@@ -11,7 +11,6 @@ import io.github.diskria.lapis.ksp.phases.generator.models.GeneratedMixinsJson
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
 import io.github.diskria.lapis.ksp.phases.lowering.withSuffix
 import io.github.diskria.poetesse.PoetesseFile
-import io.github.diskria.poetesse.interop.XClassName
 import io.github.diskria.poetesse.java.*
 import io.github.diskria.poetesse.kotlin.*
 import kotlinx.serialization.json.Json
@@ -28,8 +27,14 @@ class Generator(
                 generateMixinDuck(it)
                 generateExtensions(it, patch)
             }
-            patch.impl?.let { generatePatchImpl(it, patch) }
-            generateMixin(patch.mixin, patch.className, patch.impl)
+            when (patch) {
+                is IrPatchClass -> {
+                    patch.impl?.let { generatePatchImpl(it, patch) }
+                    generateMixinClass(patch.mixin, patch)
+                }
+
+                is IrPatchInterface -> generateMixinInterface()
+            }
         }
         generateMixinConfig(patches.map { it.mixin })
     }
@@ -88,12 +93,9 @@ class Generator(
                                 entry.returnTypeName?.let { returns(it) }
                                 body {
                                     val maybeReturn = if (entry.returnTypeName != null) "return " else ""
-                                    val parameters = code {
-                                        entry.parameters.joinToString { N(it.name) }
-                                    }
+                                    val parameters = code { entry.parameters.joinToString { N(it.name) } }
                                     line {
-                                        "$maybeReturn(this as ${T(duck.className)})." +
-                                            "${N(entry.name)}(${L(parameters)})"
+                                        "$maybeReturn(this as ${T(duck.className)}).${N(entry.name)}(${L(parameters)})"
                                     }
                                 }
                             }
@@ -104,7 +106,7 @@ class Generator(
         }.writeWith(aggregating = false, listOfNotNull(duck.patchOriginatingFile))
     }
 
-    private fun generatePatchImpl(patchImpl: IrPatchImpl, patch: IrPatch) {
+    private fun generatePatchImpl(patchImpl: IrPatchImpl, patch: IrPatchClass) {
         kspPoetesse {
             kotlin.file(patchImpl.className) {
                 class_(fileName) {
@@ -115,8 +117,7 @@ class Generator(
                             patchImpl.constructorParameters.forEach { parameter ->
                                 when (parameter) {
                                     is IrPatchImpl.ConstructorParameter.Instance -> {
-                                        parameter("instance", parameter.targetType.typeName)
-                                            .property { private() }
+                                        parameter(parameter.name, parameter.type.typeName)
                                     }
 
                                     is IrPatchImpl.ConstructorParameter.Duck -> {
@@ -128,10 +129,10 @@ class Generator(
                         }
                     }
                     superclass(patch.className) {
-                        patch.constructorArguments.forEach { argument ->
-                            when (argument) {
-                                is IrPatch.ConstructorArgument.Origin -> {
-                                    argument { N("instance") }
+                        patch.constructorParameters.forEach { parameter ->
+                            argument {
+                                when (parameter) {
+                                    is IrPatchClass.ConstructorParameter.Origin -> N(parameter.name)
                                 }
                             }
                         }
@@ -165,9 +166,7 @@ class Generator(
                                     entry.returnTypeName?.let { returns(it) }
                                     body {
                                         val maybeReturn = if (entry.returnTypeName != null) "return " else ""
-                                        val parameters = code {
-                                            entry.parameters.joinToString { N(it.name) }
-                                        }
+                                        val parameters = code { entry.parameters.joinToString { N(it.name) } }
                                         line { "$maybeReturn${N("duck")}.${N(entry.name)}(${L(parameters)})" }
                                     }
                                 }
@@ -179,7 +178,7 @@ class Generator(
         }.writeWith(aggregating = false, listOfNotNull(patchImpl.patchOriginatingFile))
     }
 
-    private fun generateMixin(mixin: IrMixin, patchClassName: XClassName, patchImpl: IrPatchImpl?) {
+    private fun generateMixinClass(mixin: IrMixin, patch: IrPatchClass) {
         kspPoetesse {
             java.file(mixin.className) {
                 class_(fileName) {
@@ -192,108 +191,97 @@ class Generator(
                             member(Mixin::value, mixin.targetTypeName)
                         }
                     }
-                    val patchImplMember = patchImpl?.let { patchImplMember(it) }
-                    mixin.duck?.let { duck ->
-                        superinterface(duck.className)
-                        duck.entries.forEach { entry ->
-                            when (entry) {
-                                is IrMixinDuck.Extension -> {
-                                    entry.kinds.forEach { kind ->
-                                        method(kind.name) {
-                                            public()
-                                            annotation<Override>()
-                                            kind.parameters.forEach { parameter(it.name, it.typeName) }
-                                            kind.returnTypeName?.let { returns(it) }
-                                            body {
-                                                val maybeReturn = if (kind.returnTypeName != null) "return " else ""
-                                                val parameters = code {
-                                                    kind.parameters.joinToString { it.name }
+                    mixin.duck?.let { superinterface(it.className) }
+                    val duckExtensionEntries = mixin.duck?.entries?.filterIsInstance<IrMixinDuck.Extension>().orEmpty()
+                    val memberInjections = mixin.injections.filterIsInstance<IrMixin.MemberInjection>()
+                    val patchMember = if (duckExtensionEntries.isNotEmpty() || memberInjections.isNotEmpty()) {
+                        patchMember(patch)
+                    } else null
+                    mixin.duck?.entries?.filterIsInstance<IrMixinDuck.Shadow>()?.forEach { shadowEntry ->
+                        when (shadowEntry) {
+                            is IrMixinDuck.Shadow.Property -> {
+                                val shadowField = field(shadowEntry.mappingName, shadowEntry.typeName) {
+                                    if (shadowEntry.mixinAnnotations.isNotEmpty()) {
+                                        mixinAnnotations(shadowEntry.mixinAnnotations)
+                                    } else {
+                                        if (shadowEntry.setter != null) annotation<Mutable>()
+                                        if (shadowEntry.isFinal) annotation<Final>()
+                                        annotation<Shadow>()
+                                    }
+                                    shadowEntry.modifiers.forEach { modifier(it) }
+                                }
+                                shadowEntry.kinds.forEach { kind ->
+                                    method(kind.name) {
+                                        public()
+                                        annotation<Override>()
+                                        kind.parameters.forEach { parameter(it.name, it.typeName) }
+                                        kind.returnTypeName?.let { returns(it) }
+                                        body {
+                                            when (kind) {
+                                                is IrMixinDuck.Property.Getter -> {
+                                                    line { "return $shadowField" }
                                                 }
-                                                line {
-                                                    "$maybeReturn$patchImplMember.${L(kind.sourceJvmName)}" +
-                                                        "(${L(parameters)})"
+
+                                                is IrMixinDuck.Property.Setter -> {
+                                                    line { "$shadowField = ${kind.parameter.name}" }
                                                 }
                                             }
                                         }
                                     }
                                 }
+                            }
 
-                                is IrMixinDuck.Shadow -> when (entry) {
-                                    is IrMixinDuck.Shadow.Property -> {
-                                        val shadowField = field(entry.mappingName, entry.typeName) {
-                                            if (entry.mixinAnnotations.isNotEmpty()) {
-                                                mixinAnnotations(entry.mixinAnnotations)
-                                            } else {
-                                                if (entry.setter != null) annotation<Mutable>()
-                                                if (entry.isFinal) annotation<Final>()
-                                                annotation<Shadow>()
-                                            }
-                                            entry.modifiers.forEach { modifier(it) }
-                                        }
-                                        entry.kinds.forEach { kind ->
-                                            method(kind.name) {
-                                                public()
-                                                annotation<Override>()
-                                                kind.parameters.forEach { parameter(it.name, it.typeName) }
-                                                kind.returnTypeName?.let { returns(it) }
-                                                body {
-                                                    when (kind) {
-                                                        is IrMixinDuck.Property.Getter -> {
-                                                            line { "return $shadowField" }
-                                                        }
-
-                                                        is IrMixinDuck.Property.Setter -> {
-                                                            line { "$shadowField = ${kind.parameter.name}" }
-                                                        }
-                                                    }
-                                                }
-                                            }
+                            is IrMixinDuck.Shadow.Function -> {
+                                val shadowMethod = method(shadowEntry.mappingName) {
+                                    val isStatic = JPModifier.STATIC in shadowEntry.modifiers
+                                    if (isStatic) public()
+                                    if (shadowEntry.mixinAnnotations.isNotEmpty()) {
+                                        mixinAnnotations(shadowEntry.mixinAnnotations)
+                                    } else {
+                                        annotation<Shadow>()
+                                    }
+                                    shadowEntry.modifiers.forEach { modifier(it) }
+                                    shadowEntry.parameters.forEach { parameter(it.name, it.typeName) }
+                                    shadowEntry.returnTypeName?.let { returns(it) }
+                                    if (isStatic) {
+                                        body {
+                                            line { "throw ${T<AssertionError>()}(${S("Stub!")})" }
                                         }
                                     }
-
-                                    is IrMixinDuck.Shadow.Function -> {
-                                        val shadowMethod = method(entry.mappingName) {
-                                            val isStatic = JPModifier.STATIC in entry.modifiers
-                                            if (isStatic) public()
-                                            if (entry.mixinAnnotations.isNotEmpty()) {
-                                                mixinAnnotations(entry.mixinAnnotations)
-                                            } else {
-                                                annotation<Shadow>()
-                                            }
-                                            entry.modifiers.forEach { modifier(it) }
-                                            entry.parameters.forEach { parameter(it.name, it.typeName) }
-                                            entry.returnTypeName?.let { returns(it) }
-                                            if (isStatic) {
-                                                body {
-                                                    line { "throw ${T<AssertionError>()}(${S("Stub!")})" }
-                                                }
-                                            }
-                                        }
-                                        method(entry.name) {
-                                            public()
-                                            annotation<Override>()
-                                            entry.parameters.forEach { parameter(it.name, it.typeName) }
-                                            entry.returnTypeName?.let { returns(it) }
-                                            body {
-                                                val maybeReturn = if (entry.returnTypeName != null) "return " else ""
-                                                val parameters = code {
-                                                    entry.parameters.joinToString { it.name }
-                                                }
-                                                line { "$maybeReturn$shadowMethod(${L(parameters)})" }
-                                            }
-                                        }
+                                }
+                                method(shadowEntry.name) {
+                                    public()
+                                    annotation<Override>()
+                                    shadowEntry.parameters.forEach { parameter(it.name, it.typeName) }
+                                    shadowEntry.returnTypeName?.let { returns(it) }
+                                    body {
+                                        val maybeReturn = if (shadowEntry.returnTypeName != null) "return " else ""
+                                        val parameters = code { shadowEntry.parameters.joinToString { it.name } }
+                                        line { "$maybeReturn$shadowMethod(${L(parameters)})" }
                                     }
                                 }
                             }
                         }
                     }
-                    mixin.injections.forEach { injection ->
-                        mixinInjection(injection) {
-                            if (injection is IrMixin.StaticInjection) {
-                                "${T(patchClassName)}.${L(injection.patchCompanionName)}"
-                            } else {
-                                requireNotNull(patchImplMember)
+                    if (patchMember != null) {
+                        duckExtensionEntries.flatMap { it.kinds }.forEach { kind ->
+                            method(kind.name) {
+                                public()
+                                annotation<Override>()
+                                kind.parameters.forEach { parameter(it.name, it.typeName) }
+                                kind.returnTypeName?.let { returns(it) }
+                                body {
+                                    val maybeReturn = if (kind.returnTypeName != null) "return " else ""
+                                    val parameters = code { kind.parameters.joinToString { it.name } }
+                                    line { "$maybeReturn$patchMember.${L(kind.sourceJvmName)}(${L(parameters)})" }
+                                }
                             }
+                        }
+                        memberInjections.forEach { mixinInjection(it) { patchMember } }
+                    }
+                    mixin.injections.filterIsInstance<IrMixin.StaticInjection>().forEach { staticInjection ->
+                        mixinInjection(staticInjection) {
+                            "${T(patch.className)}.${L(staticInjection.patchCompanionName)}"
                         }
                     }
                 }
@@ -301,28 +289,38 @@ class Generator(
         }.writeWith(aggregating = false, listOfNotNull(mixin.patchOriginatingFile))
     }
 
-    private fun JavaCodeScope.patchImplInitializer(patchImpl: IrPatchImpl): String {
-        val constructorArguments = code {
-            patchImpl.constructorParameters.joinToString { parameter ->
-                when (parameter) {
-                    is IrPatchImpl.ConstructorParameter.Instance -> targetTypeCast(parameter.targetType)
-                    is IrPatchImpl.ConstructorParameter.Duck -> "this"
+    private fun JavaCodeScope.patchInitializer(patch: IrPatchClass): String {
+        val (className, arguments) = if (patch.impl != null) {
+            patch.impl.className to code {
+                patch.impl.constructorParameters.joinToString { parameter ->
+                    when (parameter) {
+                        is IrPatchImpl.ConstructorParameter.Instance -> targetTypeCast(parameter.type)
+                        is IrPatchImpl.ConstructorParameter.Duck -> "this"
+                    }
+                }
+            }
+        } else {
+            patch.className to code {
+                patch.constructorParameters.joinToString { parameter ->
+                    when (parameter) {
+                        is IrPatchClass.ConstructorParameter.Origin -> targetTypeCast(parameter.type)
+                    }
                 }
             }
         }
-        return "new ${T(patchImpl.className)}(${L(constructorArguments)})"
+        return "new ${T(className)}(${L(arguments)})"
     }
 
-    private fun JavaTypeScope.patchImplMember(patchImpl: IrPatchImpl): String {
-        val isEager = patchImpl.initStrategy == InitStrategy.Eager
-        val isSynchronized = patchImpl.initStrategy == InitStrategy.Synchronized
-        val isThreadSafe = patchImpl.initStrategy == InitStrategy.Volatile || isSynchronized
-        val patchField = field("patch", patchImpl.className) {
+    private fun JavaTypeScope.patchMember(patch: IrPatchClass): String {
+        val isEager = patch.initStrategy == InitStrategy.Eager
+        val isSynchronized = patch.initStrategy == InitStrategy.Synchronized
+        val isThreadSafe = patch.initStrategy == InitStrategy.Volatile || isSynchronized
+        val patchField = field("patch", patch.className) {
             private()
             annotation<Unique>()
             if (isEager) {
                 final()
-                initializer { patchImplInitializer(patchImpl) }
+                initializer { patchInitializer(patch) }
             } else if (isThreadSafe) {
                 volatile()
             }
@@ -341,7 +339,7 @@ class Generator(
             annotation<Unique>()
             body {
                 if (isThreadSafe) {
-                    val local by var_(patchImpl.className) { "this.$patchField" }
+                    val local by var_(patch.className) { "this.$patchField" }
                     controlFlow {
                         branch("if ($local == null)") {
                             if (isSynchronized && patchLockField != null) {
@@ -350,14 +348,14 @@ class Generator(
                                         line { "$local = this.$patchField" }
                                         controlFlow {
                                             branch("if ($local == null)") {
-                                                line { "$local = ${L { patchImplInitializer(patchImpl) }}" }
+                                                line { "$local = ${L { patchInitializer(patch) }}" }
                                                 line { "this.$patchField = $local" }
                                             }
                                         }
                                     }
                                 }
                             } else {
-                                line { "$local = ${L { patchImplInitializer(patchImpl) }}" }
+                                line { "$local = ${L { patchInitializer(patch) }}" }
                                 line { "this.$patchField = $local" }
                             }
                         }
@@ -366,15 +364,19 @@ class Generator(
                 } else {
                     controlFlow {
                         branch("if (this.$patchField == null)") {
-                            line { "this.$patchField = ${L { patchImplInitializer(patchImpl) }}" }
+                            line { "this.$patchField = ${L { patchInitializer(patch) }}" }
                         }
                     }
                     line { "return this.$patchField" }
                 }
             }
-            returns(patchImpl.className)
+            returns(patch.className)
         }
         return "$getOrInitPatchMethod()"
+    }
+
+    private fun generateMixinInterface() {
+
     }
 
     private fun JavaTypeScope.mixinInjection(injection: IrMixin.Injection, patchReceiver: JavaCodeScope.() -> String) {

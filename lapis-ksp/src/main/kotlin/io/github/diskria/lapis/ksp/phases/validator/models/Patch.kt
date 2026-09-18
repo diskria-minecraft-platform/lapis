@@ -22,8 +22,7 @@ class Patch(
     val name: String,
     val env: Env,
     val initStrategy: InitStrategy,
-    val isImplRequired: Boolean,
-    val constructorParameters: List<ConstructorParameter>,
+    val classKind: TargetKind,
     val duckSources: List<DuckSource>,
     val injections: List<Injection>,
     val companionObject: CompanionObject?,
@@ -34,9 +33,17 @@ class Patch(
     val className: XClassName get() = classDeclaration.toXClassName()
     val targetTypeName: XTypeName get() = targetType.toXTypeName()
 
-    sealed interface ConstructorParameter {
-        class Origin(val instanceType: TargetType) : ConstructorParameter
+    sealed interface TargetKind
+    class Class(
+        val isAbstract: Boolean,
+        val constructorParameters: List<ConstructorParameter>,
+    ) : TargetKind {
+        sealed interface ConstructorParameter {
+            class Origin(val name: String, val type: TargetType) : ConstructorParameter
+        }
     }
+
+    data object Interface : TargetKind
 
     sealed interface Extension {
 
