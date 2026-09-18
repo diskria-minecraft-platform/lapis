@@ -10,13 +10,15 @@ import io.github.diskria.lapis.ksp.phases.generator.models.GeneratedMixinsJson
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
 import io.github.diskria.poetesse.Poetesse
 import io.github.diskria.poetesse.PoetesseFile
+import io.github.diskria.poetesse.interop.nullable
+import io.github.diskria.poetesse.interop.withSuffix
+import io.github.diskria.poetesse.interop.xClass
 import io.github.diskria.poetesse.java.*
 import io.github.diskria.poetesse.kotlin.*
 import kotlinx.serialization.json.Json
-import org.spongepowered.asm.mixin.*
 
 class Generator(
-    private val kspOptions: KspOptions,
+    private val options: KspOptions,
     private val poetesse: Poetesse,
     private val codeGenerator: CodeGenerator,
     @Suppress("unused") private val logger: KspLogger,
@@ -223,13 +225,7 @@ class Generator(
                 class_(fileName) { _ ->
                     public()
                     abstract()
-                    if (mixin.annotations.isNotEmpty()) {
-                        mixinAnnotations(mixin.annotations)
-                    } else {
-                        annotation<Mixin> {
-                            member(Mixin::value, mixin.targetTypeName)
-                        }
-                    }
+                    mixinAnnotations(mixin.annotations)
                     mixin.duck?.let { superinterface(it.className) }
                     val extensions = mixin.duck?.extensions.orEmpty()
                     val memberInjections = mixin.injections.filterIsInstance<IrMixin.MemberInjection>()
@@ -240,13 +236,7 @@ class Generator(
                         when (shadow) {
                             is IrMixinDuck.Shadow.Property -> {
                                 val shadowField = field(shadow.mappingName, shadow.typeName) {
-                                    if (shadow.mixinAnnotations.isNotEmpty()) {
-                                        mixinAnnotations(shadow.mixinAnnotations)
-                                    } else {
-                                        if (shadow.setter != null) annotation<Mutable>()
-                                        if (shadow.isFinal) annotation<Final>()
-                                        annotation<Shadow>()
-                                    }
+                                    mixinAnnotations(shadow.mixinAnnotations)
                                     shadow.modifiers.forEach { modifier(it) }
                                 }
                                 shadow.kinds.forEach { kind ->
@@ -272,11 +262,7 @@ class Generator(
 
                             is IrMixinDuck.Shadow.Function -> {
                                 val shadowMethod = method(shadow.mappingName) {
-                                    if (shadow.mixinAnnotations.isNotEmpty()) {
-                                        mixinAnnotations(shadow.mixinAnnotations)
-                                    } else {
-                                        annotation<Shadow>()
-                                    }
+                                    mixinAnnotations(shadow.mixinAnnotations)
                                     shadow.modifiers.forEach { modifier(it) }
                                     shadow.parameters.forEach { parameter(it.name, it.typeName) }
                                     shadow.returnTypeName?.let { returns(it) }
@@ -359,7 +345,7 @@ class Generator(
         val initializer = poetesse.java.code { patchInitializer(patch) }
         val patchField = field("patch", patch.className.nullable()) {
             private()
-            annotation<Unique>()
+            annotation<Annotation>(xClass(options.uniqueAnnotation))
             if (isEager) {
                 final()
                 initializer(initializer)
@@ -372,13 +358,13 @@ class Generator(
             field<Any>("patchLock") {
                 private()
                 final()
-                annotation<Unique>()
+                annotation<Annotation>(xClass(options.uniqueAnnotation))
                 initializer { "new ${T<Any>()}()" }
             }
         } else null
         val getOrInitPatchMethod = method("getOrInitPatch") {
             private()
-            annotation<Unique>()
+            annotation<Annotation>(xClass(options.uniqueAnnotation))
             body {
                 if (isThreadSafe) {
                     val local by var_(patch.className) { "this.${N(patchField)}" }
@@ -422,21 +408,11 @@ class Generator(
             java.file(mixin.className) {
                 interface_(fileName) { _ ->
                     public()
-                    if (mixin.annotations.isNotEmpty()) {
-                        mixinAnnotations(mixin.annotations)
-                    } else {
-                        annotation<Mixin> {
-                            member(Mixin::value, mixin.targetTypeName)
-                        }
-                    }
+                    mixinAnnotations(mixin.annotations)
                     superinterface(mixin.duck?.className ?: patch.className)
                     mixin.duck?.shadows?.filterIsInstance<IrMixinDuck.Shadow.Function>()?.forEach { shadowFunction ->
                         val shadowMethod = method("shadow$${shadowFunction.mappingName}") {
-                            if (shadowFunction.mixinAnnotations.isNotEmpty()) {
-                                mixinAnnotations(shadowFunction.mixinAnnotations)
-                            } else {
-                                annotation<Shadow>()
-                            }
+                            mixinAnnotations(shadowFunction.mixinAnnotations)
                             shadowFunction.modifiers.forEach { modifier(it) }
                             shadowFunction.parameters.forEach { parameter(it.name, it.typeName) }
                             shadowFunction.returnTypeName?.let { returns(it) }
@@ -561,7 +537,7 @@ class Generator(
             aggregating = true,
         ) {
             val envClassNames = mixinBlueprints.groupBy({ it.env }, { it.className })
-            Json.encodeToString(GeneratedMixinsJson.of(kspOptions.mixinPackage, envClassNames))
+            Json.encodeToString(GeneratedMixinsJson.of(options.mixinPackage, envClassNames))
         }
     }
 

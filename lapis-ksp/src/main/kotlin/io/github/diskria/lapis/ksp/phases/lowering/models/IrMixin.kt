@@ -12,7 +12,6 @@ class IrMixin(
     val env: Env,
     val injections: List<Injection>,
     val duck: IrMixinDuck?,
-    val targetTypeName: XTypeName,
     val annotations: List<IrMixinAnnotation>,
 ) {
     sealed interface Injection {

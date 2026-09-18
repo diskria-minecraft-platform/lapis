@@ -15,9 +15,5 @@ projektor {
 dependencyResolutionManagement {
     repositories {
         mavenLocal()
-        maven("https://repo.spongepowered.org/repository/maven-public") {
-            name = "SpongePublic"
-            content { includeGroup("org.spongepowered") }
-        }
     }
 }

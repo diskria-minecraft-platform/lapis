@@ -113,7 +113,6 @@ class IrMixinDuck(
             override val modifiers: List<JPModifier>,
             override val mappingName: String,
             override val mixinAnnotations: List<IrMixinAnnotation>,
-            val isFinal: Boolean,
         ) : IrMixinDuck.Property,
             Shadow
 

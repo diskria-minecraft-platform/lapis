@@ -12,22 +12,19 @@ import io.github.diskria.lapis.ksp.phases.validator.models.Patch
 import io.github.diskria.lapis.ksp.phases.validator.models.TargetCompatType
 import io.github.diskria.lapis.ksp.utils.JavaModifiers
 import io.github.diskria.poetesse.Poetesse
-import io.github.diskria.poetesse.interop.XClassName
-import io.github.diskria.poetesse.interop.XTypeName
-import io.github.diskria.poetesse.interop.xClass
-import io.github.diskria.poetesse.interop.xType
+import io.github.diskria.poetesse.interop.*
 import io.github.diskria.poetesse.java.JPModifier
 import java.util.*
 import javax.lang.model.element.Modifier
 import javax.lang.model.element.Modifier.*
 
 class Lowering(
-    private val kspOptions: KspOptions,
+    private val options: KspOptions,
     private val poetesse: Poetesse,
     @Suppress("unused") private val logger: KspLogger,
 ) {
     fun lower(patches: List<Patch>): List<IrPatch> {
-        val mixinSourcePackageLCP = if (kspOptions.disableLCP) null else {
+        val mixinSourcePackageLCP = if (options.disableLCP) null else {
             findMixinSourcePackageLCP(patches)
         }
         return patches.map { lowerPatch(it, mixinSourcePackageLCP) }
@@ -76,26 +73,34 @@ class Lowering(
         },
     )
 
-    private fun lowerMixin(patch: Patch, sourcePackageLCP: String?) = IrMixin(
-        patchOriginatingFile = patch.containingFile,
-        className = resolveMixinClassName(patch.classDeclaration.toXClassName(), sourcePackageLCP),
-        env = patch.env,
-        injections = buildList {
-            addAll(patch.injections.map(::lowerMemberInjection))
-            patch.companionObject?.let { companionObject ->
-                addAll(companionObject.injections.map { lowerStaticInjection(companionObject, it) })
-            }
-        },
-        duck = lowerMixinDuck(patch),
-        targetTypeName = patch.targetType.toXTypeName(),
-        annotations = lowerMixinAnnotations(patch.mixinAnnotations),
-    )
+    private fun lowerMixin(patch: Patch, sourcePackageLCP: String?): IrMixin {
+        val effectiveMixinAnnotations = if (patch.mixinAnnotations.isNotEmpty()) {
+            lowerMixinAnnotations(patch.mixinAnnotations)
+        } else {
+            val targetTypeValue = IrMixinAnnotation.Argument.TypeValue(patch.targetType.toXTypeName())
+            val valueArgument = IrMixinAnnotation.ScalarArgument("value", targetTypeValue)
+            listOf(IrMixinAnnotation(poetesse.xClass(options.mixinAnnotation), listOf(valueArgument)))
+        }
+        return IrMixin(
+            patchOriginatingFile = patch.containingFile,
+            className = resolveMixinClassName(patch.classDeclaration.toXClassName(), sourcePackageLCP),
+            env = patch.env,
+            injections = buildList {
+                addAll(patch.injections.map(::lowerMemberInjection))
+                patch.companionObject?.let { companionObject ->
+                    addAll(companionObject.injections.map { lowerStaticInjection(companionObject, it) })
+                }
+            },
+            duck = lowerMixinDuck(patch),
+            annotations = effectiveMixinAnnotations,
+        )
+    }
 
     private fun resolveMixinClassName(sourceClassName: XClassName, sourcePackageLCP: String?): XClassName {
         val sourcePackageName = sourceClassName.packageName
         val mixinPackageName = buildString {
-            append(kspOptions.mixinPackage)
-            kspOptions.mixinGeneratedSubpackage?.let { append(".$it") }
+            append(options.mixinPackage)
+            options.mixinGeneratedSubpackage?.let { append(".$it") }
             if (sourcePackageName != null && sourcePackageLCP != null && sourcePackageName != sourcePackageLCP) {
                 append(".${sourcePackageName.removePrefix("$sourcePackageLCP.")}")
             }
@@ -138,20 +143,35 @@ class Lowering(
     }
 
     private fun lowerMixinDuckShadowEntry(source: Patch.Shadow, isInterface: Boolean) = when (source) {
-        is Patch.Shadow.Property -> IrMixinDuck.Shadow.Property(
-            typeName = source.type.toXTypeName(),
-            sourceName = source.name,
-            sourceGetterJvmName = source.getterJvmName,
-            sourceSetterJvmName = source.setterJvmName,
-            getterName = source.getterJvmName.withUniqueModPrefix(),
-            setterName = source.setterJvmName?.withUniqueModPrefix(),
-            mappingName = source.mappingName,
-            modifiers = lowerShadowModifiers(source.modifiers, isInterface, isField = true),
-            isFinal = FINAL in source.modifiers,
-            mixinAnnotations = lowerMixinAnnotations(source.mixinAnnotations),
-        )
+        is Patch.Shadow.Property -> {
+            val effectiveMixinAnnotations = if (source.mixinAnnotations.isNotEmpty()) {
+                lowerMixinAnnotations(source.mixinAnnotations)
+            } else {
+                listOfNotNull(
+                    if (source.setterJvmName != null) options.mutableAnnotation else null,
+                    if (FINAL in source.modifiers) options.finalAnnotation else null,
+                    options.shadowAnnotation,
+                ).map { IrMixinAnnotation(poetesse.xClass(it), emptyList()) }
+            }
+            IrMixinDuck.Shadow.Property(
+                typeName = source.type.toXTypeName(),
+                sourceName = source.name,
+                sourceGetterJvmName = source.getterJvmName,
+                sourceSetterJvmName = source.setterJvmName,
+                getterName = source.getterJvmName.withUniqueModPrefix(),
+                setterName = source.setterJvmName?.withUniqueModPrefix(),
+                mappingName = source.mappingName,
+                modifiers = lowerShadowModifiers(source.modifiers, isInterface, isField = true),
+                mixinAnnotations = effectiveMixinAnnotations,
+            )
+        }
 
         is Patch.Shadow.Function -> {
+            val effectiveMixinAnnotations = if (source.mixinAnnotations.isNotEmpty()) {
+                lowerMixinAnnotations(source.mixinAnnotations)
+            } else {
+                listOf(IrMixinAnnotation(poetesse.xClass(options.shadowAnnotation), emptyList()))
+            }
             IrMixinDuck.Shadow.Function(
                 sourceName = source.name,
                 sourceJvmName = source.jvmName,
@@ -159,8 +179,8 @@ class Lowering(
                 parameters = source.parameters.map { IrFunctionParameter(it.name, it.type.toXTypeName()) },
                 returnTypeName = source.returnType?.toXTypeName(),
                 mappingName = source.mappingName,
-                mixinAnnotations = lowerMixinAnnotations(source.mixinAnnotations),
                 modifiers = lowerShadowModifiers(source.modifiers, isInterface, isField = false),
+                mixinAnnotations = effectiveMixinAnnotations,
             )
         }
     }
@@ -277,7 +297,7 @@ class Lowering(
         }.orEmpty()
 
     private fun String.withUniqueModPrefix(): String =
-        kspOptions.uniqueModPrefix + this
+        options.uniqueModPrefix + this
 
     private fun KSType.toXTypeName(): XTypeName =
         poetesse.xType(toTypeName())
