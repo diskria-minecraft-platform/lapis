@@ -1,6 +1,7 @@
 package io.github.diskria.lapis.ksp
 
 import io.github.diskria.lapis.ksp.extensions.quoted
+import io.github.diskria.poetesse.java.JPClassName
 import kotlinx.serialization.Serializable
 import javax.lang.model.SourceVersion
 
@@ -38,22 +39,26 @@ data class KspOptions(
             }
         }
         nullableAnnotation?.let { annotation ->
-            if (!SourceVersion.isName(annotation)) {
+            if (annotation.isInvalidClassName()) {
                 add(
                     "Invalid '${::nullableAnnotation.name}': " +
-                        "expected a valid Java FQCN (e.g. ${"org.jspecify.annotations.Nullable".quoted()}), " +
+                        "expected a valid fully-qualified annotation name " +
+                        "(e.g. ${"org.jspecify.annotations.Nullable".quoted()}), " +
                         "but got ${annotation.quoted()}."
                 )
             }
         }
         nonNullAnnotation?.let { annotation ->
-            if (!SourceVersion.isName(annotation)) {
+            if (annotation.isInvalidClassName()) {
                 add(
                     "Invalid '${::nonNullAnnotation.name}': " +
-                        "expected a valid Java FQCN (e.g. ${"org.jspecify.annotations.NonNull".quoted()}), " +
+                        "expected a valid fully-qualified annotation name " +
+                        "(e.g. ${"org.jspecify.annotations.NonNull".quoted()}), " +
                         "but got ${annotation.quoted()}."
                 )
             }
         }
     }
 }
+
+private fun String.isInvalidClassName(): Boolean = runCatching { JPClassName.bestGuess(this) }.isFailure
