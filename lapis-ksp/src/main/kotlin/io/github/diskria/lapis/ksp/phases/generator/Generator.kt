@@ -75,9 +75,19 @@ class Generator(
                         extension.kinds.forEach { kind ->
                             method(kind.name) {
                                 public()
-                                abstract()
+                                if (patchInterface != null) default() else abstract()
                                 kind.parameters.forEach { parameter(it.name, it.typeName) }
                                 kind.returnTypeName?.let { returns(it) }
+                                if (patchInterface != null) {
+                                    body {
+                                        val maybeReturn = if (kind.returnTypeName != null) "return " else ""
+                                        val patchReceiver = code { "${T(patchInterface.className)}.super" }
+                                        val parameters = code { kind.parameters.joinToString { N(it.name) } }
+                                        line {
+                                            "$maybeReturn${L(patchReceiver)}.${N(kind.sourceJvmName)}(${L(parameters)})"
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -409,7 +419,6 @@ class Generator(
 
     private fun generateMixinInterface(mixin: IrMixin, patch: IrPatchInterface) {
         kspPoetesse {
-            val patchReceiver = java.code { "${T(mixin.duck?.className ?: patch.className)}.super" }
             java.file(mixin.className) {
                 interface_(fileName) { _ ->
                     public()
@@ -452,26 +461,10 @@ class Generator(
                             }
                         }
                     }
-                    mixin.duck?.extensions?.forEach { extension ->
-                        extension.kinds.forEach { kind ->
-                            method(kind.name) {
-                                annotation<Override>()
-                                public()
-                                abstract()
-                                kind.parameters.forEach { parameter(it.name, it.typeName) }
-                                kind.returnTypeName?.let { returns(it) }
-                                body {
-                                    val maybeReturn = if (kind.returnTypeName != null) "return " else ""
-                                    val parameters = code { kind.parameters.joinToString { N(it.name) } }
-                                    line {
-                                        "$maybeReturn${L(patchReceiver)}.${N(kind.sourceJvmName)}(${L(parameters)})"
-                                    }
-                                }
-                            }
-                        }
-                    }
                     mixin.injections.filterIsInstance<IrMixin.MemberInjection>().forEach { memberInjection ->
-                        mixinInjection(memberInjection) { L(patchReceiver) }
+                        mixinInjection(memberInjection) {
+                            "${T(mixin.duck?.className ?: patch.className)}.super"
+                        }
                     }
                     mixin.injections.filterIsInstance<IrMixin.StaticInjection>().forEach { staticInjection ->
                         mixinInjection(staticInjection) {
