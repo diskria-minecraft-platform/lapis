@@ -21,17 +21,25 @@ abstract class KspArgumentProvider @Inject constructor(layout: ProjectLayout) : 
     abstract val uniqueModPrefix: Property<String>
 
     @get:Optional
-    @get:PathSensitive(PathSensitivity.RELATIVE)
-    @get:InputFiles
-    abstract val mixinConfig: RegularFileProperty
-
-    @get:Optional
     @get:Input
     abstract val mixinGeneratedSubpackage: Property<String>
 
     @get:Optional
     @get:Input
     abstract val disableLCP: Property<Boolean>
+
+    @get:Optional
+    @get:Input
+    abstract val nullableAnnotation: Property<String>
+
+    @get:Optional
+    @get:Input
+    abstract val nonNullAnnotation: Property<String>
+
+    @get:Optional
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    @get:InputFiles
+    abstract val mixinConfig: RegularFileProperty
 
     @get:Internal
     private val mixinConfigPath: Provider<String> = mixinConfig.map { it.asFile.getRootRelativePath(layout) }
@@ -68,6 +76,8 @@ abstract class KspArgumentProvider @Inject constructor(layout: ProjectLayout) : 
             "mixinPackage" to normalizedMixinPackage,
             mixinGeneratedSubpackage.orNull?.let { "mixinGeneratedSubpackage" to it },
             disableLCP.orNull?.let { "disableLCP" to it },
+            nullableAnnotation.orNull?.let { "nullableAnnotation" to it },
+            nonNullAnnotation.orNull?.let { "nonNullAnnotation" to it },
         ).map { (key, value) ->
             val prefixedKey = "lapis.$key"
             val valueStr = value.toString()

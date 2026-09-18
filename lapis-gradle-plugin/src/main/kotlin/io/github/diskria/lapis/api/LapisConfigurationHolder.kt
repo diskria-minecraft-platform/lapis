@@ -10,5 +10,7 @@ abstract class LapisConfigurationHolder @Inject constructor(objects: ObjectFacto
     val uniqueModPrefix: Property<String> = objects.property<String>()
     val mixinGeneratedSubpackage: Property<String> = objects.property<String>()
     val disableLCP: Property<Boolean> = objects.property<Boolean>()
+    val nullableAnnotation: Property<String> = objects.property<String>()
+    val nonNullAnnotation: Property<String> = objects.property<String>()
     val mixinConfig: RegularFileProperty = objects.fileProperty()
 }

@@ -19,6 +19,12 @@ abstract class LapisSourceSetSpec @Inject constructor(
     fun getEffectiveDisableLCP(lapisExtension: LapisExtension): Provider<Boolean> =
         disableLCP.orElse(lapisExtension.disableLCP)
 
+    fun getEffectiveNullableAnnotation(lapisExtension: LapisExtension): Provider<String> =
+        nullableAnnotation.orElse(lapisExtension.nullableAnnotation)
+
+    fun getEffectiveNonNullAnnotation(lapisExtension: LapisExtension): Provider<String> =
+        nonNullAnnotation.orElse(lapisExtension.nonNullAnnotation)
+
     fun getEffectiveMixinConfig(lapisExtension: LapisExtension): Provider<RegularFile> =
         mixinConfig.orElse(lapisExtension.mixinConfig)
 }

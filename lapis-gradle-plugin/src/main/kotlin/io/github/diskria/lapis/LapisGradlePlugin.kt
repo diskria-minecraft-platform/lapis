@@ -48,9 +48,11 @@ class LapisGradlePlugin : Plugin<Project> {
             kspTask.commandLineArgumentProviders.add(
                 project.objects.newInstance<KspArgumentProvider>().apply {
                     uniqueModPrefix.set(spec.getEffectiveUniqueModPrefix(lapisExtension))
-                    this.mixinConfig.set(mixinConfig)
                     mixinGeneratedSubpackage.set(spec.getEffectiveMixinGeneratedSubpackage(lapisExtension))
                     disableLCP.set(spec.getEffectiveDisableLCP(lapisExtension))
+                    nullableAnnotation.set(spec.getEffectiveNullableAnnotation(lapisExtension))
+                    nonNullAnnotation.set(spec.getEffectiveNonNullAnnotation(lapisExtension))
+                    this.mixinConfig.set(mixinConfig)
                 }
             )
         }
