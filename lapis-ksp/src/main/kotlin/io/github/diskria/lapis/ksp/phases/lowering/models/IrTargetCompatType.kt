@@ -2,8 +2,8 @@ package io.github.diskria.lapis.ksp.phases.lowering.models
 
 import io.github.diskria.poetesse.interop.XTypeName
 
-class IrTargetType(
+class IrTargetCompatType(
     val typeName: XTypeName,
-    val isObjectCastRequired: Boolean,
-    val isTargetTypeCastRequired: Boolean,
+    val isUnsafeCastRequired: Boolean,
+    val isTargetCastRequired: Boolean,
 )

@@ -46,8 +46,9 @@ class LapisSymbolProcessorProvider : SymbolProcessorProvider {
                     (error.message?.let { "\n$it" } ?: " failed to deserialize KSP options.")
             )
         }
-        runCatching { kspOptions.validate() }.onFailure { error ->
-            logger.fatal("Invalid KSP options:\n${error.message}")
+        val errors = kspOptions.validate()
+        if (errors.isNotEmpty()) {
+            logger.fatal("Invalid KSP options:\n${errors.joinToString("\n")}")
         }
         return kspOptions
     }

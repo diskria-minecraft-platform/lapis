@@ -14,10 +14,11 @@ import io.github.diskria.lapis.ksp.phases.parser.models.SymbolSource
 import io.github.diskria.lapis.ksp.phases.validator.models.FunctionParameter
 import io.github.diskria.lapis.ksp.phases.validator.models.MixinAnnotation
 import io.github.diskria.lapis.ksp.phases.validator.models.Patch
-import io.github.diskria.lapis.ksp.phases.validator.models.TargetType
+import io.github.diskria.lapis.ksp.phases.validator.models.TargetCompatType
 import io.github.diskria.lapis.ksp.utils.JavaModifiers
-import io.github.diskria.poetesse.java.JPModifier
+import java.util.*
 import javax.lang.model.element.Modifier
+import javax.lang.model.element.Modifier.*
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.contract
 
@@ -50,17 +51,17 @@ class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: Lo
             runOrNullOnSkip { it.validateAsExtension(targetType) }
         }
         val shadowProperties = properties.filter { it.hasShadowAnnotation }.mapNotNull {
-            runOrNullOnSkip { it.validateAsShadow() }
+            runOrNullOnSkip { it.validateAsShadow(isInterface) }
         }
         val shadowFunctions = parsedRegularFunctions.filter { it.hasShadowAnnotation }.mapNotNull {
-            runOrNullOnSkip { it.validateAsShadow() }
+            runOrNullOnSkip { it.validateAsShadow(isInterface) }
         }
         val injections = parsedInjectionFunctions.mapNotNull {
-            runOrNullOnSkip { it.validateAsInjection(isStatic = false, targetType) }
+            runOrNullOnSkip { it.validateAsInjection(isInCompanionObject = false, targetType) }
         }
         val companionObject = companionObject?.validate()?.let { companionObject ->
             val injections = companionObject.functions.mapNotNull {
-                runOrNullOnSkip { it.validateAsInjection(isStatic = true, targetType) }
+                runOrNullOnSkip { it.validateAsInjection(isInCompanionObject = true, targetType) }
             }
             Patch.CompanionObject(name = companionObject.name, injections = injections)
         }
@@ -84,14 +85,8 @@ class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: Lo
             initStrategy = initStrategy,
             classKind = classKind,
             targetType = targetType,
-            duckSources = buildList {
-                addAll(extensionProperties)
-                addAll(extensionFunctions)
-                if (isAbstract) {
-                    addAll(shadowProperties)
-                    addAll(shadowFunctions)
-                }
-            },
+            shadowSources = if (isAbstract || isInterface) shadowProperties + shadowFunctions else emptyList(),
+            extensionSources = extensionProperties + extensionFunctions,
             injections = injections,
             companionObject = companionObject,
             mixinAnnotations = validateMixinAnnotations(annotations),
@@ -155,7 +150,7 @@ class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: Lo
         )
     }
 
-    private fun ParsedPatch.Property.validateAsShadow(): Patch.Shadow.Property {
+    private fun ParsedPatch.Property.validateAsShadow(isInterface: Boolean): Patch.Shadow.Property {
         validateType(type)
         kspRequire(isPublic) { "365" }
         kspRequire(isAbstract) { "366" }
@@ -164,7 +159,7 @@ class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: Lo
         kspRequireNotNull(getter.jvmName) { "369" }
         validateMixinAnnotations(annotations)
         val mappingName = validateMappingName(explicitMappingName, name)
-        val shadowModifiers = validateModifiers(shadowModifiers, isMethod = false)
+        val shadowModifiers = validateModifiers(shadowModifiers, isInterface, isField = true)
         return Patch.Shadow.Property(
             name = name,
             getterJvmName = getter.jvmName,
@@ -176,7 +171,7 @@ class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: Lo
         )
     }
 
-    private fun ParsedPatch.Function.validateAsShadow(): Patch.Shadow.Function {
+    private fun ParsedPatch.Function.validateAsShadow(isInterface: Boolean): Patch.Shadow.Function {
         kspRequire(isPublic) { "384" }
         kspRequireNotNull(jvmName) { "385" }
         kspRequire(isAbstract) { "386" }
@@ -188,7 +183,7 @@ class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: Lo
             )
         }
         val mappingName = validateMappingName(explicitMappingName, name)
-        val shadowModifiers = validateModifiers(shadowModifiers, isMethod = true)
+        val shadowModifiers = validateModifiers(shadowModifiers, isInterface, isField = false)
         return Patch.Shadow.Function(
             name = name,
             jvmName = jvmName,
@@ -200,18 +195,21 @@ class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: Lo
         )
     }
 
-    private fun ParsedPatch.Function.validateAsInjection(isStatic: Boolean, targetType: KSType): Patch.Injection {
+    private fun ParsedPatch.Function.validateAsInjection(
+        isInCompanionObject: Boolean,
+        targetType: KSType,
+    ): Patch.Injection {
         kspRequireNotNull(jvmName) { "408" }
         kspRequire(!hasTypeParameters) { "409" }
         kspRequire(!isOpen) { "410" }
-        if (isStatic) {
+        if (isInCompanionObject) {
             kspRequire(extensionReceiverType == null) { "438" }
         }
         return Patch.Injection(
             jvmName = jvmName,
             extensionReceiverType = extensionReceiverType?.let { validateTargetTypeCompatibility(it, targetType) },
             mixinAnnotations = validateMixinAnnotations(annotations),
-            isStatic = isStatic,
+            isStatic = isInCompanionObject,
             parameters = parameters.map { it.validateAsInjectionParameter() },
             returnType = returnType,
         )
@@ -237,25 +235,49 @@ class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: Lo
         return classDeclaration
     }
 
-    private fun SymbolSource.validateModifiers(modifiers: List<Modifier>, isMethod: Boolean): Set<Modifier> {
-        val set = modifiers.toSet()
-        val allowed = if (isMethod) JavaModifiers.methodAllowed else JavaModifiers.fieldAllowed
-        kspRequire(allowed.containsAll(set)) { "862" }
-        kspRequire(set.count { it in JavaModifiers.visibilities } <= 1) { "863" }
-        if (isMethod) {
-            kspRequire(set.count { it in JavaModifiers.methodConflicts } <= 1) { "865" }
-            if (JPModifier.ABSTRACT in set) {
-                kspRequire(set.none { it in JavaModifiers.abstractIllegals }) { "867" }
+    fun SymbolSource.validateModifiers(
+        rawModifiers: List<Modifier>,
+        isInterface: Boolean,
+        isField: Boolean,
+    ): EnumSet<Modifier> {
+        val result = if (rawModifiers.isEmpty()) EnumSet.noneOf(Modifier::class.java) else EnumSet.copyOf(rawModifiers)
+        if (isInterface) {
+            if (PRIVATE !in result && PROTECTED !in result) {
+                result.add(PUBLIC)
             }
-            if (Modifier.NATIVE in set) {
-                kspRequire(Modifier.DEFAULT !in set) { "870" }
-            }
-        } else {
-            if (Modifier.FINAL in set) {
-                kspRequire(Modifier.VOLATILE !in set) { "874" }
+            if (isField) {
+                result.add(STATIC)
+                result.add(FINAL)
+            } else if (DEFAULT !in result && STATIC !in result && PRIVATE !in result) {
+                result.add(ABSTRACT)
             }
         }
-        return set
+        val allowed = if (isField) JavaModifiers.FIELD_ALLOWED else JavaModifiers.METHOD_ALLOWED
+        kspRequire(allowed.containsAll(result)) { "862" }
+        kspRequire(result.count { it in JavaModifiers.VISIBILITIES } <= 1) { "863" }
+        if (isField) {
+            if (FINAL in result) {
+                kspRequire(VOLATILE !in result) { "874" }
+            }
+        } else {
+            if (ABSTRACT in result) {
+                kspRequire(result.none { it in JavaModifiers.ABSTRACT_ILLEGALS }) { "865" }
+            }
+            if (NATIVE in result) {
+                kspRequire(DEFAULT !in result) { "870" }
+            }
+            if (isInterface) {
+                if (PRIVATE in result) {
+                    kspRequire(DEFAULT !in result) { "866" }
+                    kspRequire(ABSTRACT !in result) { "867" }
+                } else {
+                    kspRequire(result.count { it in EnumSet.of(ABSTRACT, STATIC, DEFAULT) } == 1) { "868" }
+                }
+            } else {
+                kspRequire(DEFAULT !in result) { "869" }
+            }
+        }
+        return result
     }
 
     private fun SymbolSource.validateMappingName(explicitName: String?, implicitName: String): String =
@@ -313,9 +335,9 @@ class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: Lo
         }
     }
 
-    private fun SymbolSource.validateTargetTypeCompatibility(type: KSType, targetType: KSType): TargetType {
+    private fun SymbolSource.validateTargetTypeCompatibility(type: KSType, targetType: KSType): TargetCompatType {
         kspRequire(type.isAssignableFrom(targetType)) { "441" }
-        return TargetType(
+        return TargetCompatType(
             type = type,
             isInterface = (type.declaration as? KSClassDeclaration)?.classKind == ClassKind.INTERFACE,
             isAny = type == builtIns.anyType,
@@ -380,4 +402,4 @@ class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: Lo
     private class SkipSymbolSignal : Exception()
 }
 
-// todo user-friendly errors
+// TODO: user-friendly errors

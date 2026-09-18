@@ -5,7 +5,7 @@ ksp = "2.3.12"
 mixin = "0.8.7"
 mixin-extras = "0.5.5"
 asm = "9.10.1"
-poetesse = "0.1.5"
+poetesse = "0.1.6-SNAPSHOT"
 kotlin-poet-ksp = "2.4.0"
 kotlin-serialization-json = "1.11.0"
 

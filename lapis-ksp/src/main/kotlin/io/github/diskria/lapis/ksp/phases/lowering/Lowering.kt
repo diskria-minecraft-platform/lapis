@@ -6,11 +6,14 @@ import io.github.diskria.lapis.ksp.kspPoetesse
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
 import io.github.diskria.lapis.ksp.phases.validator.models.MixinAnnotation
 import io.github.diskria.lapis.ksp.phases.validator.models.Patch
-import io.github.diskria.lapis.ksp.phases.validator.models.TargetType
+import io.github.diskria.lapis.ksp.phases.validator.models.TargetCompatType
 import io.github.diskria.lapis.ksp.utils.JavaModifiers
 import io.github.diskria.poetesse.interop.XClassName
 import io.github.diskria.poetesse.interop.xClass
 import io.github.diskria.poetesse.java.JPModifier
+import java.util.*
+import javax.lang.model.element.Modifier
+import javax.lang.model.element.Modifier.*
 
 class Lowering(
     private val kspOptions: KspOptions,
@@ -47,7 +50,7 @@ class Lowering(
     private fun lowerPatchConstructorParameter(parameter: Patch.Class.ConstructorParameter) = when (parameter) {
         is Patch.Class.ConstructorParameter.Origin -> IrPatchClass.ConstructorParameter.Origin(
             name = parameter.name,
-            type = lowerTargetType(parameter.type),
+            type = lowerTargetCompatType(parameter.type),
         )
     }
 
@@ -60,7 +63,7 @@ class Lowering(
             constructorParameters.firstNotNullOfOrNull { it as? IrPatchClass.ConstructorParameter.Origin }?.let {
                 add(IrPatchImpl.ConstructorParameter.Instance(it.name, it.type))
             }
-            if (mixin.duck != null && patch.duckSources.filterIsInstance<Patch.Shadow>().isNotEmpty()) {
+            if (mixin.duck != null && patch.shadowSources.isNotEmpty()) {
                 add(IrPatchImpl.ConstructorParameter.Duck(mixin.duck.className))
             }
         },
@@ -94,17 +97,14 @@ class Lowering(
     }
 
     private fun lowerMixinDuck(patch: Patch): IrMixinDuck? {
-        val entries = patch.duckSources.map { duckSource ->
-            when (duckSource) {
-                is Patch.Extension -> lowerMixinDuckExtensionEntry(duckSource)
-                is Patch.Shadow -> lowerMixinDuckShadowEntry(duckSource)
-            }
-        }
-        return if (entries.isNotEmpty()) {
+        val shadows = patch.shadowSources.map { lowerMixinDuckShadowEntry(it, patch.classKind is Patch.Interface) }
+        val extensions = patch.extensionSources.map { lowerMixinDuckExtensionEntry(it) }
+        return if (shadows.isNotEmpty() || extensions.isNotEmpty()) {
             IrMixinDuck(
                 patchOriginatingFile = patch.containingFile,
                 className = patch.className.withSuffix("_Duck"),
-                entries = entries,
+                shadows = shadows,
+                extensions = extensions,
             )
         } else null
     }
@@ -117,7 +117,7 @@ class Lowering(
             sourceSetterJvmName = source.setterJvmName,
             getterName = source.getterJvmName.withUniqueModPrefix(),
             setterName = source.setterJvmName?.withUniqueModPrefix(),
-            receiverType = lowerTargetType(source.receiverType),
+            receiverType = lowerTargetCompatType(source.receiverType),
         )
 
         is Patch.Extension.Function -> IrMixinDuck.Extension.Function(
@@ -126,11 +126,11 @@ class Lowering(
             name = source.jvmName.withUniqueModPrefix(),
             parameters = source.parameters.map { it.asIrFunctionParameter() },
             returnTypeName = source.returnTypeName,
-            receiverType = lowerTargetType(source.receiverType),
+            receiverType = lowerTargetCompatType(source.receiverType),
         )
     }
 
-    private fun lowerMixinDuckShadowEntry(source: Patch.Shadow) = when (source) {
+    private fun lowerMixinDuckShadowEntry(source: Patch.Shadow, isInterface: Boolean) = when (source) {
         is Patch.Shadow.Property -> IrMixinDuck.Shadow.Property(
             typeName = source.typeName,
             sourceName = source.name,
@@ -139,32 +139,23 @@ class Lowering(
             getterName = source.getterJvmName.withUniqueModPrefix(),
             setterName = source.setterJvmName?.withUniqueModPrefix(),
             mappingName = source.mappingName,
-            modifiers = source.modifiers.toMutableSet().apply { remove(JPModifier.FINAL) },
-            isFinal = JPModifier.FINAL in source.modifiers,
+            modifiers = lowerShadowModifiers(source.modifiers, isInterface, isField = true),
+            isFinal = FINAL in source.modifiers,
             mixinAnnotations = lowerMixinAnnotations(source.mixinAnnotations),
         )
 
-        is Patch.Shadow.Function -> IrMixinDuck.Shadow.Function(
-            sourceName = source.name,
-            sourceJvmName = source.jvmName,
-            name = source.jvmName.withUniqueModPrefix(),
-            parameters = source.parameters.map { it.asIrFunctionParameter() },
-            returnTypeName = source.returnTypeName,
-            mappingName = source.mappingName,
-            mixinAnnotations = lowerMixinAnnotations(source.mixinAnnotations),
-            modifiers = if (JPModifier.STATIC in source.modifiers) source.modifiers else buildSet {
-                add(JPModifier.ABSTRACT)
-                addAll(source.modifiers.mapNotNull { modifier ->
-                    if (modifier == JPModifier.PRIVATE) {
-                        return@mapNotNull JPModifier.PROTECTED
-                    }
-                    if (modifier in JavaModifiers.abstractIllegals) {
-                        return@mapNotNull null
-                    }
-                    modifier
-                })
-            }
-        )
+        is Patch.Shadow.Function -> {
+            IrMixinDuck.Shadow.Function(
+                sourceName = source.name,
+                sourceJvmName = source.jvmName,
+                name = source.jvmName.withUniqueModPrefix(),
+                parameters = source.parameters.map { it.asIrFunctionParameter() },
+                returnTypeName = source.returnTypeName,
+                mappingName = source.mappingName,
+                mixinAnnotations = lowerMixinAnnotations(source.mixinAnnotations),
+                modifiers = lowerShadowModifiers(source.modifiers, isInterface, isField = false),
+            )
+        }
     }
 
     private fun lowerMemberInjection(injection: Patch.Injection) = IrMixin.MemberInjection(
@@ -179,7 +170,7 @@ class Lowering(
             )
         },
         returnTypeName = injection.returnTypeName,
-        extensionReceiverType = injection.extensionReceiverType?.let { lowerTargetType(it) },
+        extensionReceiverType = injection.extensionReceiverType?.let { lowerTargetCompatType(it) },
     )
 
     private fun lowerStaticInjection(
@@ -197,7 +188,7 @@ class Lowering(
             )
         },
         returnTypeName = injection.returnTypeName,
-        patchCompanionName = companionObject.name,
+        patchCompanionObjectName = companionObject.name,
     )
 
     private fun lowerMixinAnnotations(annotations: List<MixinAnnotation>) = annotations.map(::lowerMixinAnnotation)
@@ -238,11 +229,35 @@ class Lowering(
         }
     }
 
-    private fun lowerTargetType(targetType: TargetType) = IrTargetType(
-        typeName = targetType.typeName,
-        isObjectCastRequired = !targetType.isInterface,
-        isTargetTypeCastRequired = !targetType.isAny,
+    private fun lowerTargetCompatType(targetCompatType: TargetCompatType) = IrTargetCompatType(
+        typeName = targetCompatType.typeName,
+        isUnsafeCastRequired = !targetCompatType.isInterface,
+        isTargetCastRequired = !targetCompatType.isAny,
     )
+
+    private fun lowerShadowModifiers(
+        modifiers: EnumSet<Modifier>,
+        isInterface: Boolean,
+        isField: Boolean,
+    ): List<JPModifier> {
+        val result = EnumSet.copyOf(modifiers)
+        if (isField) {
+            result.remove(FINAL)
+        } else if (isInterface) {
+            result.remove(DEFAULT)
+            if (PRIVATE !in result && STATIC !in result) {
+                result.add(ABSTRACT)
+            }
+        } else if (STATIC !in result) {
+            result.add(ABSTRACT)
+            if (PRIVATE in result) {
+                result.remove(PRIVATE)
+                result.add(PROTECTED)
+            }
+            result.removeAll(JavaModifiers.ABSTRACT_ILLEGALS)
+        }
+        return result.toList()
+    }
 
     private fun findMixinSourcePackageLCP(patches: List<Patch>): String =
         patches.map { it.className.packageName }.reduceOrNull { lcp, next ->

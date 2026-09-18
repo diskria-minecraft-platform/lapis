@@ -6,8 +6,12 @@ import io.github.diskria.poetesse.interop.XClassName
 import io.github.diskria.poetesse.interop.XTypeName
 import io.github.diskria.poetesse.java.JPModifier
 
-class IrMixinDuck(val patchOriginatingFile: KSFile?, val className: XClassName, val entries: List<Entry>) {
-
+class IrMixinDuck(
+    val patchOriginatingFile: KSFile?,
+    val className: XClassName,
+    val shadows: List<Shadow>,
+    val extensions: List<Extension>,
+) {
     sealed interface Entry {
 
         val sourceName: String
@@ -69,7 +73,7 @@ class IrMixinDuck(val patchOriginatingFile: KSFile?, val className: XClassName, 
 
     sealed interface Extension : Entry {
 
-        val receiverType: IrTargetType
+        val receiverType: IrTargetCompatType
 
         class Property(
             override val sourceName: String,
@@ -78,7 +82,7 @@ class IrMixinDuck(val patchOriginatingFile: KSFile?, val className: XClassName, 
             override val sourceSetterJvmName: String?,
             override val getterName: String,
             override val setterName: String?,
-            override val receiverType: IrTargetType,
+            override val receiverType: IrTargetCompatType,
         ) : IrMixinDuck.Property,
             Extension
 
@@ -88,14 +92,14 @@ class IrMixinDuck(val patchOriginatingFile: KSFile?, val className: XClassName, 
             override val sourceJvmName: String,
             override val parameters: List<IrFunctionParameter>,
             override val returnTypeName: XTypeName?,
-            override val receiverType: IrTargetType,
+            override val receiverType: IrTargetCompatType,
         ) : IrMixinDuck.Function,
             Extension
     }
 
     sealed interface Shadow : Entry {
 
-        val modifiers: Set<JPModifier>
+        val modifiers: List<JPModifier>
         val mappingName: String
         val mixinAnnotations: List<IrMixinAnnotation>
 
@@ -106,7 +110,7 @@ class IrMixinDuck(val patchOriginatingFile: KSFile?, val className: XClassName, 
             override val sourceGetterJvmName: String,
             override val setterName: String?,
             override val sourceSetterJvmName: String?,
-            override val modifiers: Set<JPModifier>,
+            override val modifiers: List<JPModifier>,
             override val mappingName: String,
             override val mixinAnnotations: List<IrMixinAnnotation>,
             val isFinal: Boolean,
@@ -119,7 +123,7 @@ class IrMixinDuck(val patchOriginatingFile: KSFile?, val className: XClassName, 
             override val sourceJvmName: String,
             override val parameters: List<IrFunctionParameter>,
             override val returnTypeName: XTypeName?,
-            override val modifiers: Set<JPModifier>,
+            override val modifiers: List<JPModifier>,
             override val mappingName: String,
             override val mixinAnnotations: List<IrMixinAnnotation>,
         ) : IrMixinDuck.Function,

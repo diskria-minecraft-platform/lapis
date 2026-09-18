@@ -24,7 +24,7 @@ class Generator(
     fun generate(patches: List<IrPatch>) {
         patches.forEach { patch ->
             patch.mixin.duck?.let {
-                generateMixinDuck(it)
+                generateMixinDuck(it, patch as? IrPatchInterface)
                 generateExtensions(it, patch)
             }
             when (patch) {
@@ -33,23 +33,52 @@ class Generator(
                     generateMixinClass(patch.mixin, patch)
                 }
 
-                is IrPatchInterface -> generateMixinInterface()
+                is IrPatchInterface -> {
+                    generateMixinInterface(patch.mixin, patch)
+                }
             }
         }
         generateMixinConfig(patches.map { it.mixin })
     }
 
-    private fun generateMixinDuck(duck: IrMixinDuck) {
+    private fun generateMixinDuck(duck: IrMixinDuck, patchInterface: IrPatchInterface?) {
         kspPoetesse {
             java.file(duck.className) {
-                interface_(fileName) {
+                interface_(fileName) { _ ->
                     public()
-                    duck.entries.flatMap { it.kinds }.forEach { kind ->
-                        method(kind.name) {
-                            public()
-                            abstract()
-                            kind.parameters.forEach { parameter(it.name, it.typeName) }
-                            kind.returnTypeName?.let { returns(it) }
+                    patchInterface?.let { superinterface(it.className) }
+                    duck.shadows.forEach { shadow ->
+                        shadow.kinds.forEach { kind ->
+                            val prefixedMethod = method(kind.name) {
+                                public()
+                                abstract()
+                                kind.parameters.forEach { parameter(it.name, it.typeName) }
+                                kind.returnTypeName?.let { returns(it) }
+                            }
+                            if (patchInterface != null) {
+                                method(kind.sourceJvmName) {
+                                    annotation<Override>()
+                                    public()
+                                    default()
+                                    kind.parameters.forEach { parameter(it.name, it.typeName) }
+                                    kind.returnTypeName?.let { returns(it) }
+                                    body {
+                                        val maybeReturn = if (kind.returnTypeName != null) "return " else ""
+                                        val parameters = code { kind.parameters.joinToString { N(it.name) } }
+                                        line { "$maybeReturn${N(prefixedMethod)}(${L(parameters)})" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    duck.extensions.forEach { extension ->
+                        extension.kinds.forEach { kind ->
+                            method(kind.name) {
+                                public()
+                                abstract()
+                                kind.parameters.forEach { parameter(it.name, it.typeName) }
+                                kind.returnTypeName?.let { returns(it) }
+                            }
                         }
                     }
                 }
@@ -57,9 +86,9 @@ class Generator(
         }.writeWith(aggregating = false, listOfNotNull(duck.patchOriginatingFile))
     }
 
-    // todo migrate to FIR plugin
+    // TODO: migrate to FIR plugin
     private fun generateExtensions(duck: IrMixinDuck, patch: IrPatch) {
-        val entries = duck.entries.filterIsInstance<IrMixinDuck.Extension>().ifEmpty { return }
+        val entries = duck.extensions.ifEmpty { return }
         kspPoetesse {
             kotlin.file(patch.className.withSuffix("_Extensions")) {
                 entries.forEach { entry ->
@@ -109,7 +138,7 @@ class Generator(
     private fun generatePatchImpl(patchImpl: IrPatchImpl, patch: IrPatchClass) {
         kspPoetesse {
             kotlin.file(patchImpl.className) {
-                class_(fileName) {
+                class_(fileName) { _ ->
                     public()
                     if (patchImpl.constructorParameters.isNotEmpty()) {
                         constructor(primary = true) {
@@ -137,18 +166,18 @@ class Generator(
                             }
                         }
                     }
-                    patch.mixin.duck?.entries?.filterIsInstance<IrMixinDuck.Shadow>()?.forEach { entry ->
-                        when (entry) {
+                    patch.mixin.duck?.shadows?.forEach { shadow ->
+                        when (shadow) {
                             is IrMixinDuck.Property -> {
-                                property(entry.sourceName, entry.typeName) {
+                                property(shadow.sourceName, shadow.typeName) {
                                     public()
                                     override()
                                     getter {
                                         expression {
-                                            "${N("duck")}.${(N(entry.getter.name))}()"
+                                            "${N("duck")}.${(N(shadow.getter.name))}()"
                                         }
                                     }
-                                    entry.setter?.let { setter ->
+                                    shadow.setter?.let { setter ->
                                         setter { newValue ->
                                             body {
                                                 line { "${N("duck")}.${N(setter.name)}(${N(newValue)})" }
@@ -159,15 +188,15 @@ class Generator(
                             }
 
                             is IrMixinDuck.Function -> {
-                                function(entry.sourceName) {
+                                function(shadow.sourceName) {
                                     public()
                                     override()
-                                    entry.parameters.forEach { parameter(it.name, it.typeName) }
-                                    entry.returnTypeName?.let { returns(it) }
+                                    shadow.parameters.forEach { parameter(it.name, it.typeName) }
+                                    shadow.returnTypeName?.let { returns(it) }
                                     body {
-                                        val maybeReturn = if (entry.returnTypeName != null) "return " else ""
-                                        val parameters = code { entry.parameters.joinToString { N(it.name) } }
-                                        line { "$maybeReturn${N("duck")}.${N(entry.name)}(${L(parameters)})" }
+                                        val maybeReturn = if (shadow.returnTypeName != null) "return " else ""
+                                        val parameters = code { shadow.parameters.joinToString { N(it.name) } }
+                                        line { "$maybeReturn${N("duck")}.${N(shadow.name)}(${L(parameters)})" }
                                     }
                                 }
                             }
@@ -181,7 +210,7 @@ class Generator(
     private fun generateMixinClass(mixin: IrMixin, patch: IrPatchClass) {
         kspPoetesse {
             java.file(mixin.className) {
-                class_(fileName) {
+                class_(fileName) { _ ->
                     public()
                     abstract()
                     if (mixin.annotations.isNotEmpty()) {
@@ -192,38 +221,38 @@ class Generator(
                         }
                     }
                     mixin.duck?.let { superinterface(it.className) }
-                    val duckExtensionEntries = mixin.duck?.entries?.filterIsInstance<IrMixinDuck.Extension>().orEmpty()
+                    val extensions = mixin.duck?.extensions.orEmpty()
                     val memberInjections = mixin.injections.filterIsInstance<IrMixin.MemberInjection>()
-                    val patchMember = if (duckExtensionEntries.isNotEmpty() || memberInjections.isNotEmpty()) {
+                    val patchMember = if (extensions.isNotEmpty() || memberInjections.isNotEmpty()) {
                         patchMember(patch)
                     } else null
-                    mixin.duck?.entries?.filterIsInstance<IrMixinDuck.Shadow>()?.forEach { shadowEntry ->
-                        when (shadowEntry) {
+                    mixin.duck?.shadows?.forEach { shadow ->
+                        when (shadow) {
                             is IrMixinDuck.Shadow.Property -> {
-                                val shadowField = field(shadowEntry.mappingName, shadowEntry.typeName) {
-                                    if (shadowEntry.mixinAnnotations.isNotEmpty()) {
-                                        mixinAnnotations(shadowEntry.mixinAnnotations)
+                                val shadowField = field(shadow.mappingName, shadow.typeName) {
+                                    if (shadow.mixinAnnotations.isNotEmpty()) {
+                                        mixinAnnotations(shadow.mixinAnnotations)
                                     } else {
-                                        if (shadowEntry.setter != null) annotation<Mutable>()
-                                        if (shadowEntry.isFinal) annotation<Final>()
+                                        if (shadow.setter != null) annotation<Mutable>()
+                                        if (shadow.isFinal) annotation<Final>()
                                         annotation<Shadow>()
                                     }
-                                    shadowEntry.modifiers.forEach { modifier(it) }
+                                    shadow.modifiers.forEach { modifier(it) }
                                 }
-                                shadowEntry.kinds.forEach { kind ->
+                                shadow.kinds.forEach { kind ->
                                     method(kind.name) {
-                                        public()
                                         annotation<Override>()
+                                        public()
                                         kind.parameters.forEach { parameter(it.name, it.typeName) }
                                         kind.returnTypeName?.let { returns(it) }
                                         body {
                                             when (kind) {
                                                 is IrMixinDuck.Property.Getter -> {
-                                                    line { "return $shadowField" }
+                                                    line { "return ${N(shadowField)}" }
                                                 }
 
                                                 is IrMixinDuck.Property.Setter -> {
-                                                    line { "$shadowField = ${kind.parameter.name}" }
+                                                    line { "${N(shadowField)} = ${kind.parameter.name}" }
                                                 }
                                             }
                                         }
@@ -232,48 +261,50 @@ class Generator(
                             }
 
                             is IrMixinDuck.Shadow.Function -> {
-                                val shadowMethod = method(shadowEntry.mappingName) {
-                                    val isStatic = JPModifier.STATIC in shadowEntry.modifiers
-                                    if (isStatic) public()
-                                    if (shadowEntry.mixinAnnotations.isNotEmpty()) {
-                                        mixinAnnotations(shadowEntry.mixinAnnotations)
+                                val shadowMethod = method(shadow.mappingName) {
+                                    if (shadow.mixinAnnotations.isNotEmpty()) {
+                                        mixinAnnotations(shadow.mixinAnnotations)
                                     } else {
                                         annotation<Shadow>()
                                     }
-                                    shadowEntry.modifiers.forEach { modifier(it) }
-                                    shadowEntry.parameters.forEach { parameter(it.name, it.typeName) }
-                                    shadowEntry.returnTypeName?.let { returns(it) }
-                                    if (isStatic) {
+                                    shadow.modifiers.forEach { modifier(it) }
+                                    shadow.parameters.forEach { parameter(it.name, it.typeName) }
+                                    shadow.returnTypeName?.let { returns(it) }
+                                    if (JPModifier.STATIC in shadow.modifiers) {
                                         body {
-                                            line { "throw ${T<AssertionError>()}(${S("Stub!")})" }
+                                            line { "throw new ${T<AssertionError>()}(${S("Stub!")})" }
                                         }
                                     }
                                 }
-                                method(shadowEntry.name) {
-                                    public()
+                                method(shadow.name) {
                                     annotation<Override>()
-                                    shadowEntry.parameters.forEach { parameter(it.name, it.typeName) }
-                                    shadowEntry.returnTypeName?.let { returns(it) }
+                                    public()
+                                    shadow.parameters.forEach { parameter(it.name, it.typeName) }
+                                    shadow.returnTypeName?.let { returns(it) }
                                     body {
-                                        val maybeReturn = if (shadowEntry.returnTypeName != null) "return " else ""
-                                        val parameters = code { shadowEntry.parameters.joinToString { it.name } }
-                                        line { "$maybeReturn$shadowMethod(${L(parameters)})" }
+                                        val maybeReturn = if (shadow.returnTypeName != null) "return " else ""
+                                        val parameters = code { shadow.parameters.joinToString { N(it.name) } }
+                                        line { "$maybeReturn${N(shadowMethod)}(${L(parameters)})" }
                                     }
                                 }
                             }
                         }
                     }
                     if (patchMember != null) {
-                        duckExtensionEntries.flatMap { it.kinds }.forEach { kind ->
-                            method(kind.name) {
-                                public()
-                                annotation<Override>()
-                                kind.parameters.forEach { parameter(it.name, it.typeName) }
-                                kind.returnTypeName?.let { returns(it) }
-                                body {
-                                    val maybeReturn = if (kind.returnTypeName != null) "return " else ""
-                                    val parameters = code { kind.parameters.joinToString { it.name } }
-                                    line { "$maybeReturn$patchMember.${L(kind.sourceJvmName)}(${L(parameters)})" }
+                        extensions.forEach { extension ->
+                            extension.kinds.forEach { kind ->
+                                method(kind.name) {
+                                    annotation<Override>()
+                                    public()
+                                    kind.parameters.forEach { parameter(it.name, it.typeName) }
+                                    kind.returnTypeName?.let { returns(it) }
+                                    body {
+                                        val maybeReturn = if (kind.returnTypeName != null) "return " else ""
+                                        val parameters = code { kind.parameters.joinToString { N(it.name) } }
+                                        line {
+                                            "$maybeReturn${N(patchMember)}.${N(kind.sourceJvmName)}(${L(parameters)})"
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -281,7 +312,7 @@ class Generator(
                     }
                     mixin.injections.filterIsInstance<IrMixin.StaticInjection>().forEach { staticInjection ->
                         mixinInjection(staticInjection) {
-                            "${T(patch.className)}.${L(staticInjection.patchCompanionName)}"
+                            "${T(patch.className)}.${N(staticInjection.patchCompanionObjectName)}"
                         }
                     }
                 }
@@ -315,12 +346,13 @@ class Generator(
         val isEager = patch.initStrategy == InitStrategy.Eager
         val isSynchronized = patch.initStrategy == InitStrategy.Synchronized
         val isThreadSafe = patch.initStrategy == InitStrategy.Volatile || isSynchronized
+        val initializer = kspPoetesse.java.code { patchInitializer(patch) }
         val patchField = field("patch", patch.className) {
             private()
             annotation<Unique>()
             if (isEager) {
                 final()
-                initializer { patchInitializer(patch) }
+                initializer { L(initializer) }
             } else if (isThreadSafe) {
                 volatile()
             }
@@ -339,35 +371,35 @@ class Generator(
             annotation<Unique>()
             body {
                 if (isThreadSafe) {
-                    val local by var_(patch.className) { "this.$patchField" }
+                    val local by var_(patch.className) { "this.${N(patchField)}" }
                     controlFlow {
-                        branch("if ($local == null)") {
+                        branch({ "if (${N(local)} == null)" }) {
                             if (isSynchronized && patchLockField != null) {
                                 controlFlow {
-                                    branch("synchronized (this.$patchLockField)") {
-                                        line { "$local = this.$patchField" }
+                                    branch({ "synchronized (this.${N(patchLockField)})" }) {
+                                        line { "${N(local)} = this.${N(patchField)}" }
                                         controlFlow {
-                                            branch("if ($local == null)") {
-                                                line { "$local = ${L { patchInitializer(patch) }}" }
-                                                line { "this.$patchField = $local" }
+                                            branch({ "if (${N(local)} == null)" }) {
+                                                line { "${N(local)} = ${L(initializer)}" }
+                                                line { "this.${N(patchField)} = ${N(local)}" }
                                             }
                                         }
                                     }
                                 }
                             } else {
-                                line { "$local = ${L { patchInitializer(patch) }}" }
-                                line { "this.$patchField = $local" }
+                                line { "${N(local)} = ${L(initializer)}" }
+                                line { "this.${N(patchField)} = ${N(local)}" }
                             }
                         }
                     }
-                    line { "return $local" }
+                    line { "return ${N(local)}" }
                 } else {
                     controlFlow {
-                        branch("if (this.$patchField == null)") {
-                            line { "this.$patchField = ${L { patchInitializer(patch) }}" }
+                        branch({ "if (this.${N(patchField)} == null)" }) {
+                            line { "this.${N(patchField)} = ${L(initializer)}" }
                         }
                     }
-                    line { "return this.$patchField" }
+                    line { "return this.${N(patchField)}" }
                 }
             }
             returns(patch.className)
@@ -375,8 +407,80 @@ class Generator(
         return "$getOrInitPatchMethod()"
     }
 
-    private fun generateMixinInterface() {
-
+    private fun generateMixinInterface(mixin: IrMixin, patch: IrPatchInterface) {
+        kspPoetesse {
+            val patchReceiver = java.code { "${T(mixin.duck?.className ?: patch.className)}.super" }
+            java.file(mixin.className) {
+                interface_(fileName) { _ ->
+                    public()
+                    if (mixin.annotations.isNotEmpty()) {
+                        mixinAnnotations(mixin.annotations)
+                    } else {
+                        annotation<Mixin> {
+                            member(Mixin::value, mixin.targetTypeName)
+                        }
+                    }
+                    superinterface(mixin.duck?.className ?: patch.className)
+                    mixin.duck?.shadows?.filterIsInstance<IrMixinDuck.Shadow.Function>()?.forEach { shadowFunction ->
+                        val shadowMethod = method(shadowFunction.mappingName) {
+                            if (shadowFunction.mixinAnnotations.isNotEmpty()) {
+                                mixinAnnotations(shadowFunction.mixinAnnotations)
+                            } else {
+                                annotation<Shadow>()
+                            }
+                            shadowFunction.modifiers.forEach { modifier(it) }
+                            shadowFunction.parameters.forEach { parameter(it.name, it.typeName) }
+                            shadowFunction.returnTypeName?.let { returns(it) }
+                            if (JPModifier.STATIC in shadowFunction.modifiers ||
+                                JPModifier.PRIVATE in shadowFunction.modifiers
+                            ) {
+                                body {
+                                    line { "throw new ${T<AssertionError>()}(${S("Stub!")})" }
+                                }
+                            }
+                        }
+                        method(shadowFunction.name) {
+                            annotation<Override>()
+                            public()
+                            default()
+                            shadowFunction.parameters.forEach { parameter(it.name, it.typeName) }
+                            shadowFunction.returnTypeName?.let { returns(it) }
+                            body {
+                                val maybeReturn = if (shadowFunction.returnTypeName != null) "return " else ""
+                                val parameters = code { shadowFunction.parameters.joinToString { N(it.name) } }
+                                line { "$maybeReturn${N(shadowMethod)}(${L(parameters)})" }
+                            }
+                        }
+                    }
+                    mixin.duck?.extensions?.forEach { extension ->
+                        extension.kinds.forEach { kind ->
+                            method(kind.name) {
+                                annotation<Override>()
+                                public()
+                                abstract()
+                                kind.parameters.forEach { parameter(it.name, it.typeName) }
+                                kind.returnTypeName?.let { returns(it) }
+                                body {
+                                    val maybeReturn = if (kind.returnTypeName != null) "return " else ""
+                                    val parameters = code { kind.parameters.joinToString { N(it.name) } }
+                                    line {
+                                        "$maybeReturn${L(patchReceiver)}.${N(kind.sourceJvmName)}(${L(parameters)})"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    mixin.injections.filterIsInstance<IrMixin.MemberInjection>().forEach { memberInjection ->
+                        mixinInjection(memberInjection) { L(patchReceiver) }
+                    }
+                    mixin.injections.filterIsInstance<IrMixin.StaticInjection>().forEach { staticInjection ->
+                        mixinInjection(staticInjection) {
+                            "${T(patch.className)}.${N(staticInjection.patchCompanionObjectName)}"
+                        }
+                    }
+                }
+            }
+        }.writeWith(aggregating = false, listOfNotNull(mixin.patchOriginatingFile))
     }
 
     private fun JavaTypeScope.mixinInjection(injection: IrMixin.Injection, patchReceiver: JavaCodeScope.() -> String) {
@@ -396,11 +500,11 @@ class Generator(
                         if (injection is IrMixin.MemberInjection) {
                             injection.extensionReceiverType?.let { add(targetTypeCast(it)) }
                         }
-                        addAll(injection.parameters.map { it.name })
+                        addAll(injection.parameters.map { N(it.name) })
                     }.joinToString()
                 }
                 val maybeReturn = if (injection.returnTypeName != null) "return " else ""
-                line { "$maybeReturn${L(patchReceiver)}.${L(injection.sourceJvmName)}(${L(functionArguments)})" }
+                line { "$maybeReturn${L(patchReceiver)}.${N(injection.sourceJvmName)}(${L(functionArguments)})" }
             }
         }
     }
@@ -436,16 +540,16 @@ class Generator(
             is IrMixinAnnotation.Argument.FloatValue -> L(value.float)
             is IrMixinAnnotation.Argument.DoubleValue -> L(value.double)
             is IrMixinAnnotation.Argument.StringValue -> S(value.string)
-            is IrMixinAnnotation.Argument.EnumValue -> "${T(value.className)}.${L(value.entryName)}"
+            is IrMixinAnnotation.Argument.EnumValue -> "${T(value.className)}.${N(value.entryName)}"
             is IrMixinAnnotation.Argument.TypeValue -> "${T(value.typeName)}.class"
             is IrMixinAnnotation.Argument.AnnotationValue -> L(mixinAnnotation(value.annotation))
         }
 
-    private fun JavaCodeScope.targetTypeCast(targetType: IrTargetType): String =
+    private fun JavaCodeScope.targetTypeCast(targetRelatedType: IrTargetCompatType): String =
         when {
-            !targetType.isTargetTypeCastRequired -> "this"
-            targetType.isObjectCastRequired -> "(${T(targetType.typeName)}) (${T<Any>()}) this"
-            else -> "(${T(targetType.typeName)}) this"
+            !targetRelatedType.isTargetCastRequired -> "this"
+            targetRelatedType.isUnsafeCastRequired -> "(${T(targetRelatedType.typeName)}) (${T<Any>()}) this"
+            else -> "(${T(targetRelatedType.typeName)}) this"
         }
 
     private fun PoetesseFile.writeWith(aggregating: Boolean, originatingFiles: Iterable<KSFile>) {

@@ -9,7 +9,7 @@ class IrPatchImpl(
     val constructorParameters: List<ConstructorParameter>,
 ) {
     sealed interface ConstructorParameter {
-        class Instance(val name: String, val type: IrTargetType) : ConstructorParameter
+        class Instance(val name: String, val type: IrTargetCompatType) : ConstructorParameter
         class Duck(val className: XClassName) : ConstructorParameter
     }
 }
