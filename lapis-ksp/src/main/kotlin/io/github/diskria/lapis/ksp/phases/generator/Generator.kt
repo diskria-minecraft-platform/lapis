@@ -4,12 +4,11 @@ import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.Dependencies
 import com.google.devtools.ksp.symbol.KSFile
 import io.github.diskria.lapis.annotations.InitStrategy
+import io.github.diskria.lapis.ksp.KspLogger
 import io.github.diskria.lapis.ksp.KspOptions
-import io.github.diskria.lapis.ksp.Logger
-import io.github.diskria.lapis.ksp.kspPoetesse
 import io.github.diskria.lapis.ksp.phases.generator.models.GeneratedMixinsJson
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
-import io.github.diskria.lapis.ksp.phases.lowering.withSuffix
+import io.github.diskria.poetesse.Poetesse
 import io.github.diskria.poetesse.PoetesseFile
 import io.github.diskria.poetesse.java.*
 import io.github.diskria.poetesse.kotlin.*
@@ -18,8 +17,9 @@ import org.spongepowered.asm.mixin.*
 
 class Generator(
     private val kspOptions: KspOptions,
+    private val poetesse: Poetesse,
     private val codeGenerator: CodeGenerator,
-    @Suppress("unused") private val logger: Logger,
+    @Suppress("unused") private val logger: KspLogger,
 ) {
     fun generate(patches: List<IrPatch>) {
         patches.forEach { patch ->
@@ -42,7 +42,7 @@ class Generator(
     }
 
     private fun generateMixinDuck(duck: IrMixinDuck, patchInterface: IrPatchInterface?) {
-        kspPoetesse {
+        poetesse {
             java.file(duck.className) {
                 interface_(fileName) { _ ->
                     public()
@@ -99,7 +99,7 @@ class Generator(
     // TODO: migrate to FIR plugin
     private fun generateExtensions(duck: IrMixinDuck, patch: IrPatch) {
         val entries = duck.extensions.ifEmpty { return }
-        kspPoetesse {
+        poetesse {
             kotlin.file(patch.className.withSuffix("_Extensions")) {
                 entries.forEach { entry ->
                     when (entry) {
@@ -146,7 +146,7 @@ class Generator(
     }
 
     private fun generatePatchImpl(patchImpl: IrPatchImpl, patch: IrPatchClass) {
-        kspPoetesse {
+        poetesse {
             kotlin.file(patchImpl.className) {
                 class_(fileName) { _ ->
                     public()
@@ -218,7 +218,7 @@ class Generator(
     }
 
     private fun generateMixinClass(mixin: IrMixin, patch: IrPatchClass) {
-        kspPoetesse {
+        poetesse {
             java.file(mixin.className) {
                 class_(fileName) { _ ->
                     public()
@@ -356,7 +356,7 @@ class Generator(
         val isEager = patch.initStrategy == InitStrategy.Eager
         val isSynchronized = patch.initStrategy == InitStrategy.Synchronized
         val isThreadSafe = patch.initStrategy == InitStrategy.Volatile || isSynchronized
-        val initializer = kspPoetesse.java.code { patchInitializer(patch) }
+        val initializer = poetesse.java.code { patchInitializer(patch) }
         val patchField = field("patch", patch.className) {
             private()
             annotation<Unique>()
@@ -418,7 +418,7 @@ class Generator(
     }
 
     private fun generateMixinInterface(mixin: IrMixin, patch: IrPatchInterface) {
-        kspPoetesse {
+        poetesse {
             java.file(mixin.className) {
                 interface_(fileName) { _ ->
                     public()
@@ -507,7 +507,7 @@ class Generator(
     }
 
     private fun mixinAnnotation(annotation: IrMixinAnnotation): JavaTypedAnnotationRef<Annotation> =
-        kspPoetesse.java.annotation(annotation.typeClassName) {
+        poetesse.java.annotation(annotation.typeClassName) {
             annotation.arguments.forEach { argument ->
                 member(argument.name) {
                     when (argument) {

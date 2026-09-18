@@ -10,6 +10,8 @@ data class KspOptions(
     val mixinPackage: String,
     val mixinGeneratedSubpackage: String? = null,
     val disableLCP: Boolean = false,
+    val nullableAnnotation: String? = null,
+    val nonNullAnnotation: String? = null,
 ) {
     fun validate(): List<String> = buildList {
         if (!SourceVersion.isIdentifier(uniqueModPrefix)) {
@@ -32,6 +34,24 @@ data class KspOptions(
                     "Invalid '${::mixinGeneratedSubpackage.name}': " +
                         "expected a valid Java subpackage name (e.g. ${"generated".quoted()}), " +
                         "but got ${subpackage.quoted()}."
+                )
+            }
+        }
+        nullableAnnotation?.let { annotation ->
+            if (!SourceVersion.isName(annotation)) {
+                add(
+                    "Invalid '${::nullableAnnotation.name}': " +
+                        "expected a valid Java FQCN (e.g. ${"org.jspecify.annotations.Nullable".quoted()}), " +
+                        "but got ${annotation.quoted()}."
+                )
+            }
+        }
+        nonNullAnnotation?.let { annotation ->
+            if (!SourceVersion.isName(annotation)) {
+                add(
+                    "Invalid '${::nonNullAnnotation.name}': " +
+                        "expected a valid Java FQCN (e.g. ${"org.jspecify.annotations.NonNull".quoted()}), " +
+                        "but got ${annotation.quoted()}."
                 )
             }
         }

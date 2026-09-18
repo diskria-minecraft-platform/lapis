@@ -6,7 +6,7 @@ import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.Variance
 import com.google.devtools.ksp.validate
-import io.github.diskria.lapis.ksp.Logger
+import io.github.diskria.lapis.ksp.KspLogger
 import io.github.diskria.lapis.ksp.extensions.internalError
 import io.github.diskria.lapis.ksp.phases.parser.models.ParsedAnnotation
 import io.github.diskria.lapis.ksp.phases.parser.models.ParsedPatch
@@ -22,7 +22,7 @@ import javax.lang.model.element.Modifier.*
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.contract
 
-class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: Logger) {
+class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: KspLogger) {
 
     fun validate(patches: List<ParsedPatch>): List<Patch> =
         patches.mapNotNull {
@@ -209,7 +209,6 @@ class FrontendValidator(private val builtIns: KSBuiltIns, private val logger: Lo
             jvmName = jvmName,
             extensionReceiverType = extensionReceiverType?.let { validateTargetTypeCompatibility(it, targetType) },
             mixinAnnotations = validateMixinAnnotations(annotations),
-            isStatic = isInCompanionObject,
             parameters = parameters.map { it.validateAsInjectionParameter() },
             returnType = returnType,
         )

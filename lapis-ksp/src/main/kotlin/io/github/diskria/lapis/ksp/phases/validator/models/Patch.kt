@@ -5,21 +5,14 @@ import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSFile
 import com.google.devtools.ksp.symbol.KSNode
 import com.google.devtools.ksp.symbol.KSType
-import com.squareup.kotlinpoet.ksp.toClassName
-import com.squareup.kotlinpoet.ksp.toTypeName
 import io.github.diskria.lapis.annotations.Env
 import io.github.diskria.lapis.annotations.InitStrategy
-import io.github.diskria.lapis.ksp.kspPoetesse
-import io.github.diskria.poetesse.interop.XClassName
-import io.github.diskria.poetesse.interop.XTypeName
-import io.github.diskria.poetesse.interop.xClass
-import io.github.diskria.poetesse.interop.xType
 import io.github.diskria.poetesse.java.JPModifier
 import java.util.*
 
 class Patch(
     private val symbol: KSNode,
-    private val classDeclaration: KSClassDeclaration,
+    val classDeclaration: KSClassDeclaration,
     val name: String,
     val env: Env,
     val initStrategy: InitStrategy,
@@ -28,12 +21,10 @@ class Patch(
     val extensionSources: List<Extension>,
     val injections: List<Injection>,
     val companionObject: CompanionObject?,
-    private val targetType: KSType,
+    val targetType: KSType,
     val mixinAnnotations: List<MixinAnnotation>,
 ) {
     val containingFile: KSFile? get() = symbol.containingFile
-    val className: XClassName get() = classDeclaration.toXClassName()
-    val targetTypeName: XTypeName get() = targetType.toXTypeName()
 
     sealed interface ClassKind
     class Class(
@@ -103,34 +94,21 @@ class Patch(
         val jvmName: String,
         val extensionReceiverType: TargetCompatType?,
         val mixinAnnotations: List<MixinAnnotation>,
-        val isStatic: Boolean,
         val parameters: List<Parameter>,
-        private val returnType: KSType?,
+        val returnType: KSType?,
     ) {
-        val returnTypeName: XTypeName? get() = returnType?.toXTypeName()
-
         class Parameter(
             val name: String,
-            private val type: KSType,
+            val type: KSType,
             val mixinAnnotations: List<MixinAnnotation>,
-        ) {
-            val typeName: XTypeName get() = type.toXTypeName()
-        }
+        )
     }
 
     class CompanionObject(val name: String, val injections: List<Injection>)
 }
 
 class TargetCompatType(
-    private val type: KSType,
+    val type: KSType,
     val isInterface: Boolean,
     val isAny: Boolean,
-) {
-    val typeName: XTypeName get() = type.toXTypeName()
-}
-
-fun KSType.toXTypeName(): XTypeName =
-    kspPoetesse.xType(toTypeName())
-
-fun KSClassDeclaration.toXClassName(): XClassName =
-    kspPoetesse.xClass(toClassName())
+)

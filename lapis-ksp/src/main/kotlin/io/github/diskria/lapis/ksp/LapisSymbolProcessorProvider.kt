@@ -16,12 +16,12 @@ import kotlinx.serialization.json.decodeFromJsonElement
 class LapisSymbolProcessorProvider : SymbolProcessorProvider {
 
     override fun create(environment: SymbolProcessorEnvironment): SymbolProcessor {
-        val logger = Logger(environment.logger)
+        val logger = KspLogger(environment.logger)
         val kspOptions = parseOptions(environment.options, logger)
         return LapisSymbolProcessor(kspOptions, environment.codeGenerator, logger)
     }
 
-    private fun parseOptions(options: Map<String, String>, logger: Logger): KspOptions {
+    private fun parseOptions(options: Map<String, String>, logger: KspLogger): KspOptions {
         val scopedOptions = options.filterKeys { it.startsWith(ARGUMENT_PREFIX) }
         val descriptorElements = serialDescriptor<KspOptions>().elements
         val existingKeys = descriptorElements.map { it.name.withArgumentPrefix() }.toSet()

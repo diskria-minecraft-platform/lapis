@@ -1,15 +1,21 @@
 package io.github.diskria.lapis.ksp.phases.lowering
 
+import com.google.devtools.ksp.symbol.KSClassDeclaration
+import com.google.devtools.ksp.symbol.KSType
+import com.squareup.kotlinpoet.ksp.toClassName
+import com.squareup.kotlinpoet.ksp.toTypeName
+import io.github.diskria.lapis.ksp.KspLogger
 import io.github.diskria.lapis.ksp.KspOptions
-import io.github.diskria.lapis.ksp.Logger
-import io.github.diskria.lapis.ksp.kspPoetesse
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
 import io.github.diskria.lapis.ksp.phases.validator.models.MixinAnnotation
 import io.github.diskria.lapis.ksp.phases.validator.models.Patch
 import io.github.diskria.lapis.ksp.phases.validator.models.TargetCompatType
 import io.github.diskria.lapis.ksp.utils.JavaModifiers
+import io.github.diskria.poetesse.Poetesse
 import io.github.diskria.poetesse.interop.XClassName
+import io.github.diskria.poetesse.interop.XTypeName
 import io.github.diskria.poetesse.interop.xClass
+import io.github.diskria.poetesse.interop.xType
 import io.github.diskria.poetesse.java.JPModifier
 import java.util.*
 import javax.lang.model.element.Modifier
@@ -17,7 +23,8 @@ import javax.lang.model.element.Modifier.*
 
 class Lowering(
     private val kspOptions: KspOptions,
-    @Suppress("unused") private val logger: Logger,
+    private val poetesse: Poetesse,
+    @Suppress("unused") private val logger: KspLogger,
 ) {
     fun lower(patches: List<Patch>): List<IrPatch> {
         val mixinSourcePackageLCP = if (kspOptions.disableLCP) null else {
@@ -32,7 +39,7 @@ class Lowering(
             is Patch.Class -> {
                 val constructorParameters = classKind.constructorParameters.map(::lowerPatchConstructorParameter)
                 IrPatchClass(
-                    className = patch.className,
+                    className = patch.classDeclaration.toXClassName(),
                     mixin = mixin,
                     impl = if (classKind.isAbstract) lowerPatchImpl(patch, mixin, constructorParameters) else null,
                     constructorParameters = constructorParameters,
@@ -41,7 +48,7 @@ class Lowering(
             }
 
             Patch.Interface -> IrPatchInterface(
-                className = patch.className,
+                className = patch.classDeclaration.toXClassName(),
                 mixin = mixin,
             )
         }
@@ -58,7 +65,7 @@ class Lowering(
         patch: Patch, mixin: IrMixin, constructorParameters: List<IrPatchClass.ConstructorParameter>,
     ) = IrPatchImpl(
         patchOriginatingFile = patch.containingFile,
-        className = patch.className.withSuffix("_Impl"),
+        className = patch.classDeclaration.toXClassName().withSuffix("_Impl"),
         constructorParameters = buildList {
             constructorParameters.firstNotNullOfOrNull { it as? IrPatchClass.ConstructorParameter.Origin }?.let {
                 add(IrPatchImpl.ConstructorParameter.Instance(it.name, it.type))
@@ -71,7 +78,7 @@ class Lowering(
 
     private fun lowerMixin(patch: Patch, sourcePackageLCP: String?) = IrMixin(
         patchOriginatingFile = patch.containingFile,
-        className = resolveMixinClassName(patch.className, sourcePackageLCP),
+        className = resolveMixinClassName(patch.classDeclaration.toXClassName(), sourcePackageLCP),
         env = patch.env,
         injections = buildList {
             addAll(patch.injections.map(::lowerMemberInjection))
@@ -80,7 +87,7 @@ class Lowering(
             }
         },
         duck = lowerMixinDuck(patch),
-        targetTypeName = patch.targetTypeName,
+        targetTypeName = patch.targetType.toXTypeName(),
         annotations = lowerMixinAnnotations(patch.mixinAnnotations),
     )
 
@@ -93,7 +100,7 @@ class Lowering(
                 append(".${sourcePackageName.removePrefix("$sourcePackageLCP.")}")
             }
         }
-        return kspPoetesse.xClass(mixinPackageName, sourceClassName.simpleName).withSuffix("_Generated")
+        return poetesse.xClass(mixinPackageName, sourceClassName.simpleName).withSuffix("_Generated")
     }
 
     private fun lowerMixinDuck(patch: Patch): IrMixinDuck? {
@@ -102,7 +109,7 @@ class Lowering(
         return if (shadows.isNotEmpty() || extensions.isNotEmpty()) {
             IrMixinDuck(
                 patchOriginatingFile = patch.containingFile,
-                className = patch.className.withSuffix("_Duck"),
+                className = patch.classDeclaration.toXClassName().withSuffix("_Duck"),
                 shadows = shadows,
                 extensions = extensions,
             )
@@ -111,7 +118,7 @@ class Lowering(
 
     private fun lowerMixinDuckExtensionEntry(source: Patch.Extension) = when (source) {
         is Patch.Extension.Property -> IrMixinDuck.Extension.Property(
-            typeName = source.typeName,
+            typeName = source.type.toXTypeName(),
             sourceName = source.name,
             sourceGetterJvmName = source.getterJvmName,
             sourceSetterJvmName = source.setterJvmName,
@@ -124,15 +131,15 @@ class Lowering(
             sourceName = source.name,
             sourceJvmName = source.jvmName,
             name = source.jvmName.withUniqueModPrefix(),
-            parameters = source.parameters.map { it.asIrFunctionParameter() },
-            returnTypeName = source.returnTypeName,
+            parameters = source.parameters.map { IrFunctionParameter(it.name, it.type.toXTypeName()) },
+            returnTypeName = source.returnType?.toXTypeName(),
             receiverType = lowerTargetCompatType(source.receiverType),
         )
     }
 
     private fun lowerMixinDuckShadowEntry(source: Patch.Shadow, isInterface: Boolean) = when (source) {
         is Patch.Shadow.Property -> IrMixinDuck.Shadow.Property(
-            typeName = source.typeName,
+            typeName = source.type.toXTypeName(),
             sourceName = source.name,
             sourceGetterJvmName = source.getterJvmName,
             sourceSetterJvmName = source.setterJvmName,
@@ -149,8 +156,8 @@ class Lowering(
                 sourceName = source.name,
                 sourceJvmName = source.jvmName,
                 name = source.jvmName.withUniqueModPrefix(),
-                parameters = source.parameters.map { it.asIrFunctionParameter() },
-                returnTypeName = source.returnTypeName,
+                parameters = source.parameters.map { IrFunctionParameter(it.name, it.type.toXTypeName()) },
+                returnTypeName = source.returnType?.toXTypeName(),
                 mappingName = source.mappingName,
                 mixinAnnotations = lowerMixinAnnotations(source.mixinAnnotations),
                 modifiers = lowerShadowModifiers(source.modifiers, isInterface, isField = false),
@@ -165,11 +172,11 @@ class Lowering(
         parameters = injection.parameters.map { parameter ->
             IrMixin.Injection.Parameter(
                 parameter.name,
-                parameter.typeName,
+                parameter.type.toXTypeName(),
                 lowerMixinAnnotations(parameter.mixinAnnotations),
             )
         },
-        returnTypeName = injection.returnTypeName,
+        returnTypeName = injection.returnType?.toXTypeName(),
         extensionReceiverType = injection.extensionReceiverType?.let { lowerTargetCompatType(it) },
     )
 
@@ -183,18 +190,18 @@ class Lowering(
         parameters = injection.parameters.map { parameter ->
             IrMixin.Injection.Parameter(
                 parameter.name,
-                parameter.typeName,
+                parameter.type.toXTypeName(),
                 lowerMixinAnnotations(parameter.mixinAnnotations),
             )
         },
-        returnTypeName = injection.returnTypeName,
+        returnTypeName = injection.returnType?.toXTypeName(),
         patchCompanionObjectName = companionObject.name,
     )
 
     private fun lowerMixinAnnotations(annotations: List<MixinAnnotation>) = annotations.map(::lowerMixinAnnotation)
 
     private fun lowerMixinAnnotation(annotation: MixinAnnotation) = IrMixinAnnotation(
-        typeClassName = annotation.typeClassName,
+        typeClassName = annotation.typeClassDeclaration.toXClassName(),
         arguments = annotation.arguments.map { argument ->
             when (argument) {
                 is MixinAnnotation.ScalarArgument -> IrMixinAnnotation.ScalarArgument(
@@ -222,15 +229,18 @@ class Lowering(
         is MixinAnnotation.Argument.FloatValue -> IrMixinAnnotation.Argument.FloatValue(value.float)
         is MixinAnnotation.Argument.DoubleValue -> IrMixinAnnotation.Argument.DoubleValue(value.double)
         is MixinAnnotation.Argument.StringValue -> IrMixinAnnotation.Argument.StringValue(value.string)
-        is MixinAnnotation.Argument.TypeValue -> IrMixinAnnotation.Argument.TypeValue(value.typeName)
-        is MixinAnnotation.Argument.EnumValue -> IrMixinAnnotation.Argument.EnumValue(value.className, value.entryName)
+        is MixinAnnotation.Argument.TypeValue -> IrMixinAnnotation.Argument.TypeValue(value.type.toXTypeName())
+        is MixinAnnotation.Argument.EnumValue -> IrMixinAnnotation.Argument.EnumValue(
+            value.classDeclaration.toXClassName(), value.entryName
+        )
+
         is MixinAnnotation.Argument.AnnotationValue -> {
             IrMixinAnnotation.Argument.AnnotationValue(lowerMixinAnnotation(value.annotation))
         }
     }
 
     private fun lowerTargetCompatType(targetCompatType: TargetCompatType) = IrTargetCompatType(
-        typeName = targetCompatType.typeName,
+        typeName = targetCompatType.type.toXTypeName(),
         isUnsafeCastRequired = !targetCompatType.isInterface,
         isTargetCastRequired = !targetCompatType.isAny,
     )
@@ -260,7 +270,7 @@ class Lowering(
     }
 
     private fun findMixinSourcePackageLCP(patches: List<Patch>): String =
-        patches.map { it.className.packageName }.reduceOrNull { lcp, next ->
+        patches.map { it.classDeclaration.toXClassName().packageName }.reduceOrNull { lcp, next ->
             val currentParts = lcp.orEmpty().split('.')
             val nextParts = next.orEmpty().split('.')
             currentParts.zip(nextParts).takeWhile { (current, next) -> current == next }.joinToString(".") { it.first }
@@ -268,7 +278,10 @@ class Lowering(
 
     private fun String.withUniqueModPrefix(): String =
         kspOptions.uniqueModPrefix + this
-}
 
-fun XClassName.withSuffix(name: String): XClassName =
-    kspPoetesse.xClass(packageName, "$simpleName$name")
+    private fun KSType.toXTypeName(): XTypeName =
+        poetesse.xType(toTypeName())
+
+    private fun KSClassDeclaration.toXClassName(): XClassName =
+        poetesse.xClass(toClassName())
+}

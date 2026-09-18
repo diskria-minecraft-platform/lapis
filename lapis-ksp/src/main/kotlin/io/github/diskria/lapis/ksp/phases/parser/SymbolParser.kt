@@ -5,7 +5,7 @@ import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.symbol.*
 import io.github.diskria.lapis.annotations.*
 import io.github.diskria.lapis.annotations.Origin
-import io.github.diskria.lapis.ksp.Logger
+import io.github.diskria.lapis.ksp.KspLogger
 import io.github.diskria.lapis.ksp.extensions.internalError
 import io.github.diskria.lapis.ksp.extensions.requireQualifiedName
 import io.github.diskria.lapis.ksp.phases.parser.models.ParsedAnnotation
@@ -15,7 +15,7 @@ import io.github.diskria.lapis.ksp.phases.parser.models.findLapisApiAnnotation
 
 class SymbolParser(
     private val resolver: Resolver,
-    @Suppress("unused") private val logger: Logger,
+    @Suppress("unused") private val logger: KspLogger,
 ) {
     fun parse(): List<ParsedPatch> =
         resolver

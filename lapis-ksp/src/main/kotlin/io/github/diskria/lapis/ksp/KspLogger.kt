@@ -5,7 +5,7 @@ import com.google.devtools.ksp.symbol.FileLocation
 import com.google.devtools.ksp.symbol.KSNode
 import com.google.devtools.ksp.symbol.NonExistLocation
 
-class Logger(private val logger: KSPLogger) {
+class KspLogger(private val logger: KSPLogger) {
 
     private var currentPhase: Phase = Phase.BOOTSTRAP
 
