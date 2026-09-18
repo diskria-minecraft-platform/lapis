@@ -66,16 +66,28 @@ private class KspJavaNullabilityResolver(
     private val nonNullAnnotationClassName: JPClassName?,
 ) : Poetesse.JavaNullabilityResolver {
 
-    override fun isNullable(typeName: JPTypeName): Boolean =
-        nullableAnnotationClassName != null && typeName.annotations().any { it.type() == nullableAnnotationClassName }
+    override fun isNullable(typeName: JPTypeName): Boolean {
+        val current = typeName.annotations()
+        if (nonNullAnnotationClassName != null && current.any { it.type() == nonNullAnnotationClassName }) {
+            return false
+        }
+        if (nullableAnnotationClassName != null && current.any { it.type() == nullableAnnotationClassName }) {
+            return true
+        }
+        return nonNullAnnotationClassName != null
+    }
 
     override fun setNullable(typeName: JPTypeName, nullable: Boolean): JPTypeName {
-        val annotationToApply = if (nullable) nullableAnnotationClassName else nonNullAnnotationClassName
-
-        return if (annotationToApply != null) {
-            typeName.annotated(JPAnnotation.builder(annotationToApply).build())
-        } else {
-            typeName
+        if (nullableAnnotationClassName == null && nonNullAnnotationClassName == null) return typeName
+        val targetAnnotation = if (nullable) nullableAnnotationClassName else nonNullAnnotationClassName
+        val cleanAnnotations = typeName.annotations().filterNot {
+            it.type() == nullableAnnotationClassName || it.type() == nonNullAnnotationClassName
         }
+        val finalAnnotations = if (targetAnnotation != null) {
+            cleanAnnotations + JPAnnotation.builder(targetAnnotation).build()
+        } else {
+            cleanAnnotations
+        }
+        return typeName.withoutAnnotations().annotated(finalAnnotations)
     }
 }
