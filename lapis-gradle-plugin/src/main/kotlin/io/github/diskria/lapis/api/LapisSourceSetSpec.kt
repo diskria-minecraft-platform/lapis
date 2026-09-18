@@ -25,6 +25,21 @@ abstract class LapisSourceSetSpec @Inject constructor(
     fun getEffectiveNonNullAnnotation(lapisExtension: LapisExtension): Provider<String> =
         nonNullAnnotation.orElse(lapisExtension.nonNullAnnotation)
 
+    fun getEffectiveMixinAnnotation(lapisExtension: LapisExtension): Provider<String> =
+        mixinAnnotation.orElse(lapisExtension.mixinAnnotation)
+
+    fun getEffectiveUniqueAnnotation(lapisExtension: LapisExtension): Provider<String> =
+        uniqueAnnotation.orElse(lapisExtension.uniqueAnnotation)
+
+    fun getEffectiveShadowAnnotation(lapisExtension: LapisExtension): Provider<String> =
+        shadowAnnotation.orElse(lapisExtension.shadowAnnotation)
+
+    fun getEffectiveMutableAnnotation(lapisExtension: LapisExtension): Provider<String> =
+        mutableAnnotation.orElse(lapisExtension.mutableAnnotation)
+
+    fun getEffectiveFinalAnnotation(lapisExtension: LapisExtension): Provider<String> =
+        finalAnnotation.orElse(lapisExtension.finalAnnotation)
+
     fun getEffectiveMixinConfig(lapisExtension: LapisExtension): Provider<RegularFile> =
         mixinConfig.orElse(lapisExtension.mixinConfig)
 }

@@ -37,6 +37,26 @@ abstract class KspArgumentProvider @Inject constructor(layout: ProjectLayout) : 
     abstract val nonNullAnnotation: Property<String>
 
     @get:Optional
+    @get:Input
+    abstract val mixinAnnotation: Property<String>
+
+    @get:Optional
+    @get:Input
+    abstract val uniqueAnnotation: Property<String>
+
+    @get:Optional
+    @get:Input
+    abstract val shadowAnnotation: Property<String>
+
+    @get:Optional
+    @get:Input
+    abstract val mutableAnnotation: Property<String>
+
+    @get:Optional
+    @get:Input
+    abstract val finalAnnotation: Property<String>
+
+    @get:Optional
     @get:PathSensitive(PathSensitivity.RELATIVE)
     @get:InputFiles
     abstract val mixinConfig: RegularFileProperty
@@ -78,6 +98,11 @@ abstract class KspArgumentProvider @Inject constructor(layout: ProjectLayout) : 
             disableLCP.orNull?.let { "disableLCP" to it },
             nullableAnnotation.orNull?.let { "nullableAnnotation" to it },
             nonNullAnnotation.orNull?.let { "nonNullAnnotation" to it },
+            mixinAnnotation.orNull?.let { "mixinAnnotation" to it },
+            uniqueAnnotation.orNull?.let { "uniqueAnnotation" to it },
+            shadowAnnotation.orNull?.let { "shadowAnnotation" to it },
+            mutableAnnotation.orNull?.let { "mutableAnnotation" to it },
+            finalAnnotation.orNull?.let { "finalAnnotation" to it },
         ).map { (key, value) ->
             val prefixedKey = "lapis.$key"
             val valueStr = value.toString()

@@ -52,6 +52,11 @@ class LapisGradlePlugin : Plugin<Project> {
                     disableLCP.set(spec.getEffectiveDisableLCP(lapisExtension))
                     nullableAnnotation.set(spec.getEffectiveNullableAnnotation(lapisExtension))
                     nonNullAnnotation.set(spec.getEffectiveNonNullAnnotation(lapisExtension))
+                    mixinAnnotation.set(spec.getEffectiveMixinAnnotation(lapisExtension))
+                    uniqueAnnotation.set(spec.getEffectiveUniqueAnnotation(lapisExtension))
+                    shadowAnnotation.set(spec.getEffectiveShadowAnnotation(lapisExtension))
+                    mutableAnnotation.set(spec.getEffectiveMutableAnnotation(lapisExtension))
+                    finalAnnotation.set(spec.getEffectiveFinalAnnotation(lapisExtension))
                     this.mixinConfig.set(mixinConfig)
                 }
             )
