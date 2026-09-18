@@ -74,7 +74,7 @@ private class KspJavaNullabilityResolver(
         if (nullableAnnotationClassName != null && current.any { it.type() == nullableAnnotationClassName }) {
             return true
         }
-        return nonNullAnnotationClassName != null
+        return nonNullAnnotationClassName != null && nullableAnnotationClassName == null
     }
 
     override fun setNullable(typeName: JPTypeName, nullable: Boolean): JPTypeName {
