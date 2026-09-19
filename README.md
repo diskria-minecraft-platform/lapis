@@ -53,6 +53,8 @@ abstract class AdvancementsScreenMixin(@Origin val screen: AdvancementsScreen) :
 }
 ```
 
+For more real-world examples, check out these mod repositories: [advancements-fullscreen](https://github.com/diskria-minecraft/advancements-fullscreen) and [advancements-search](https://github.com/diskria-minecraft/advancements-search). For real-world examples, check out my mod repositories: [advancements-fullscreen](https://github.com/diskria-minecraft/advancements-fullscreen) and [advancements-search](https://github.com/diskria-minecraft/advancements-search). I develop them as dogfooding projects for this KSP plugin—they're actively running in production right now, even though version 1.0.0 hasn't officially launched yet.
+
 ## 🛠️ Configuration
 
 > [!NOTE]
