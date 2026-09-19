@@ -24,7 +24,7 @@ Lapis handle the bytecode orchestration under the hood.
 ## 🚀 Quick Showcase
 
 ```kotlin
-@KMixin(AdvancementsScreen::class)
+@KMixin(AdvancementsScreen::class, Env.Client)
 abstract class AdvancementsScreenMixin(@Origin val screen: AdvancementsScreen) : BaseScreenPatch() {
 
     // 1. Declarative shadow: Copy modifiers as-is
