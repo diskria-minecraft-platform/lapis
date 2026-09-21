@@ -200,7 +200,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
     context(parent: SymbolSource)
     private fun ParsedType.validate(): Type {
         parent.kspRequire(this is ValidType) { "" }
-        return Type(type, isInterface, isAny)
+        return Type(type = type, isAny = isAny, isUnit = isUnit, isInterface = isInterface)
     }
 
     private fun SymbolSource.validateClassDeclaration(classDeclaration: KSClassDeclaration?): KSClassDeclaration {

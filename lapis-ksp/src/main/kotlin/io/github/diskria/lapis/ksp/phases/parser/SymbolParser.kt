@@ -213,8 +213,8 @@ class SymbolParser(private val resolver: Resolver) {
             val qualifiedName = parseName(classDeclaration.qualifiedName) as? ValidName ?: return InvalidType
             ValidType(
                 type = type,
-                isAny = type == resolver.builtIns.anyType,
-                isUnit = type == resolver.builtIns.unitType,
+                isAny = type.makeNotNullable() == resolver.builtIns.anyType,
+                isUnit = type.makeNotNullable() == resolver.builtIns.unitType,
                 isInterface = classDeclaration.classKind == ClassKind.INTERFACE,
                 packageName = packageName,
                 qualifiedName = qualifiedName,

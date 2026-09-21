@@ -109,6 +109,7 @@ class Patch(
 
 class Type(
     val type: KSType,
-    val isInterface: Boolean,
     val isAny: Boolean,
+    val isUnit: Boolean,
+    val isInterface: Boolean,
 )

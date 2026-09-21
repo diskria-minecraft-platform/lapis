@@ -131,7 +131,7 @@ class Lowering(private val options: KspOptions, private val poetesse: PoetesseSc
             sourceJvmName = source.jvmName,
             name = source.jvmName.withUniqueModPrefix(),
             parameters = source.parameters.map { IrFunctionParameter(it.name, it.type.toXTypeName()) },
-            returnTypeName = source.returnType?.toXTypeName(),
+            returnTypeName = source.returnType?.takeIf { !it.isUnit }?.toXTypeName(),
             receiverTargetTypeCast = lowerTargetTypeCast(source.receiverType),
         )
     }
@@ -171,7 +171,7 @@ class Lowering(private val options: KspOptions, private val poetesse: PoetesseSc
                 sourceJvmName = source.jvmName,
                 name = source.jvmName.withUniqueModPrefix(),
                 parameters = source.parameters.map { IrFunctionParameter(it.name, it.type.toXTypeName()) },
-                returnTypeName = source.returnType?.toXTypeName(),
+                returnTypeName = source.returnType?.takeIf { !it.isUnit }?.toXTypeName(),
                 mappingName = source.mappingName,
                 modifiers = lowerShadowModifiers(source.modifiers, isInterface, isField = false),
                 mixinAnnotations = effectiveMixinAnnotations,
@@ -190,7 +190,7 @@ class Lowering(private val options: KspOptions, private val poetesse: PoetesseSc
                 lowerMixinAnnotations(parameter.mixinAnnotations),
             )
         },
-        returnTypeName = injection.returnType?.toXTypeName(),
+        returnTypeName = injection.returnType?.takeIf { !it.isUnit }?.takeIf { !it.isUnit }?.toXTypeName(),
         extensionReceiverTargetTypeCast = injection.extensionReceiverType?.let { lowerTargetTypeCast(it) },
     )
 
@@ -208,7 +208,7 @@ class Lowering(private val options: KspOptions, private val poetesse: PoetesseSc
                 lowerMixinAnnotations(parameter.mixinAnnotations),
             )
         },
-        returnTypeName = injection.returnType?.toXTypeName(),
+        returnTypeName = injection.returnType?.takeIf { !it.isUnit }?.toXTypeName(),
         patchCompanionObjectName = companionObject.name,
     )
 
