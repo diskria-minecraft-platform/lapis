@@ -343,7 +343,7 @@ class Generator(
         val isSynchronized = patch.initStrategy == InitStrategy.Synchronized
         val isThreadSafe = patch.initStrategy == InitStrategy.Volatile || isSynchronized
         val initializer = poetesse.java.code { patchInitializer(patch) }
-        val patchField = field("patch", patch.className.nullable()) {
+        val patchField = field("patch", patch.className.nullable(!isEager)) {
             private()
             annotation<Annotation>(xClass(options.uniqueAnnotation))
             if (isEager) {
