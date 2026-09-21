@@ -29,19 +29,19 @@ class LapisSymbolProcessor(
         )
     }
 
-    private val lowering: Lowering by lazy { Lowering(options, poetesse, logger) }
+    private val lowering: Lowering by lazy { Lowering(options, poetesse) }
     private val patches: SortedMap<String, IrPatch> = sortedMapOf()
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
-        val parser = SymbolParser(resolver, logger)
+        val parser = SymbolParser(resolver)
         logger.setPhase(KspLogger.Phase.PARSING)
-        val parsedPatches = parser.parse()
+        val parsedPatches = parser.parsePatches()
 
         logger.setPhase(KspLogger.Phase.VALIDATION)
-        val validatedPatches = FrontendValidator(resolver.builtIns, logger).validate(parsedPatches)
+        val validatedPatches = FrontendValidator(options, logger).validatePatches(parsedPatches)
 
         logger.setPhase(KspLogger.Phase.TRANSFORMATION)
-        val irPatches = lowering.lower(validatedPatches)
+        val irPatches = lowering.lowerPatches(validatedPatches)
         irPatches.forEach { patches[it.className.qualifiedName] = it }
 
         return emptyList()
@@ -57,7 +57,7 @@ class LapisSymbolProcessor(
 
     private fun generate() {
         logger.setPhase(KspLogger.Phase.GENERATION)
-        Generator(options, poetesse, codeGenerator, logger).generate(patches.values.toList())
+        Generator(options, poetesse, codeGenerator).generate(patches.values.toList())
     }
 }
 

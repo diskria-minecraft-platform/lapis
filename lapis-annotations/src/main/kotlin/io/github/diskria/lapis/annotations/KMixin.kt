@@ -1,5 +1,3 @@
-@file:Suppress("unused", "EnumEntryName")
-
 package io.github.diskria.lapis.annotations
 
 import javax.lang.model.element.Modifier

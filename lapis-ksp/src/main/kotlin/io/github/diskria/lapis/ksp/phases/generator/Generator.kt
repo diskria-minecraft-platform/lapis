@@ -21,7 +21,6 @@ class Generator(
     private val options: KspOptions,
     private val poetesse: Poetesse,
     private val codeGenerator: CodeGenerator,
-    @Suppress("unused") private val logger: KspLogger,
 ) {
     fun generate(patches: List<IrPatch>) {
         patches.forEach { patch ->
@@ -98,46 +97,42 @@ class Generator(
         }.writeWith(aggregating = false, listOfNotNull(duck.patchOriginatingFile))
     }
 
-    // TODO: migrate to FIR plugin
+    // TODO: Migrate to FIR plugin
     private fun generateExtensions(duck: IrMixinDuck, patch: IrPatch) {
-        val entries = duck.extensions.ifEmpty { return }
+        val extensions = duck.extensions.ifEmpty { return }
         poetesse {
             kotlin.file(patch.className.withSuffix("_Extensions")) {
-                entries.forEach { entry ->
-                    when (entry) {
-                        is IrMixinDuck.Extension.Property -> {
-                            property(entry.sourceName, entry.typeName) {
-                                public()
-                                inline()
-                                extensionReceiver(entry.receiverType.typeName)
-                                getter {
-                                    expression {
-                                        "(this as ${T(duck.className)}).${(N(entry.getter.name))}()"
-                                    }
+                extensions.forEach { extension ->
+                    when (extension) {
+                        is IrMixinDuck.Extension.Property -> property(extension.sourceName, extension.typeName) {
+                            public()
+                            inline()
+                            extensionReceiver(extension.receiverTargetTypeCast.typeName)
+                            getter {
+                                expression {
+                                    "(this as ${T(duck.className)}).${(N(extension.getter.name))}()"
                                 }
-                                entry.setter?.let { setter ->
-                                    setter { newValue ->
-                                        body {
-                                            line { "(this as ${T(duck.className)}).${N(setter.name)}(${N(newValue)})" }
-                                        }
+                            }
+                            extension.setter?.let { setter ->
+                                setter { newValue ->
+                                    body {
+                                        line { "(this as ${T(duck.className)}).${N(setter.name)}(${N(newValue)})" }
                                     }
                                 }
                             }
                         }
 
-                        is IrMixinDuck.Extension.Function -> {
-                            function(entry.sourceName) {
-                                public()
-                                inline()
-                                extensionReceiver(entry.receiverType.typeName)
-                                entry.parameters.forEach { parameter(it.name, it.typeName) }
-                                entry.returnTypeName?.let { returns(it) }
-                                body {
-                                    val maybeReturn = if (entry.returnTypeName != null) "return " else ""
-                                    val parameters = code { entry.parameters.joinToString { N(it.name) } }
-                                    line {
-                                        "$maybeReturn(this as ${T(duck.className)}).${N(entry.name)}(${L(parameters)})"
-                                    }
+                        is IrMixinDuck.Extension.Function -> function(extension.sourceName) {
+                            public()
+                            inline()
+                            extensionReceiver(extension.receiverTargetTypeCast.typeName)
+                            extension.parameters.forEach { parameter(it.name, it.typeName) }
+                            extension.returnTypeName?.let { returns(it) }
+                            body {
+                                val maybeReturn = if (extension.returnTypeName != null) "return " else ""
+                                val parameters = code { extension.parameters.joinToString { N(it.name) } }
+                                line {
+                                    "$maybeReturn(this as ${T(duck.className)}).${N(extension.name)}(${L(parameters)})"
                                 }
                             }
                         }
@@ -158,7 +153,7 @@ class Generator(
                             patchImpl.constructorParameters.forEach { parameter ->
                                 when (parameter) {
                                     is IrPatchImpl.ConstructorParameter.Instance -> {
-                                        parameter(parameter.name, parameter.type.typeName)
+                                        parameter(parameter.name, parameter.targetTypeCast.typeName)
                                     }
 
                                     is IrPatchImpl.ConstructorParameter.Duck -> {
@@ -321,7 +316,7 @@ class Generator(
             patch.impl.className to code {
                 patch.impl.constructorParameters.joinToString { parameter ->
                     when (parameter) {
-                        is IrPatchImpl.ConstructorParameter.Instance -> targetTypeCast(parameter.type)
+                        is IrPatchImpl.ConstructorParameter.Instance -> targetTypeCast(parameter.targetTypeCast)
                         is IrPatchImpl.ConstructorParameter.Duck -> "this"
                     }
                 }
@@ -330,7 +325,7 @@ class Generator(
             patch.className to code {
                 patch.constructorParameters.joinToString { parameter ->
                     when (parameter) {
-                        is IrPatchClass.ConstructorParameter.Origin -> targetTypeCast(parameter.type)
+                        is IrPatchClass.ConstructorParameter.Origin -> targetTypeCast(parameter.targetTypeCast)
                     }
                 }
             }
@@ -467,7 +462,7 @@ class Generator(
                 val functionArguments = code {
                     buildList {
                         if (injection is IrMixin.MemberInjection) {
-                            injection.extensionReceiverType?.let { add(targetTypeCast(it)) }
+                            injection.extensionReceiverTargetTypeCast?.let { add(targetTypeCast(it)) }
                         }
                         addAll(injection.parameters.map { N(it.name) })
                     }.joinToString()
@@ -514,11 +509,11 @@ class Generator(
             is IrMixinAnnotation.Argument.AnnotationValue -> L(mixinAnnotation(value.annotation))
         }
 
-    private fun JavaCodeScope.targetTypeCast(targetRelatedType: IrTargetCompatType): String =
+    private fun JavaCodeScope.targetTypeCast(cast: IrTargetTypeCast): String =
         when {
-            !targetRelatedType.isTargetCastRequired -> "this"
-            targetRelatedType.isUnsafeCastRequired -> "(${T(targetRelatedType.typeName)}) (${T<Any>()}) this"
-            else -> "(${T(targetRelatedType.typeName)}) this"
+            !cast.isTargetCastRequired -> "this"
+            cast.isUnsafeCastRequired -> "(${T(cast.typeName)}) (${T<Any>()}) this"
+            else -> "(${T(cast.typeName)}) this"
         }
 
     private fun PoetesseFile.writeWith(aggregating: Boolean, originatingFiles: Iterable<KSFile>) {

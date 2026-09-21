@@ -1,81 +1,119 @@
 package io.github.diskria.lapis.ksp.phases.parser.models
 
 import com.google.devtools.ksp.symbol.KSClassDeclaration
-import com.google.devtools.ksp.symbol.KSType
+import com.google.devtools.ksp.symbol.KSNode
 import io.github.diskria.lapis.ksp.extensions.requireQualifiedName
+import io.github.diskria.lapis.ksp.phases.parser.models.ParsedAnnotation.Argument
 import kotlin.enums.enumEntries
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 
-class ParsedAnnotation(
-    val typeClassDeclaration: KSClassDeclaration?,
-    val isLapisApi: Boolean,
-    val qualifiedName: String?,
-    val arguments: List<Argument>
-) {
-    sealed interface Argument {
+sealed interface ParsedAnnotation : SymbolSource {
 
-        val name: String
-        val isExplicit: Boolean
+    sealed interface Argument : SymbolSource {
 
         sealed interface Value
-        class BooleanValue(val boolean: Boolean) : Value
-        class ByteValue(val byte: Byte) : Value
-        class ShortValue(val short: Short) : Value
-        class IntValue(val int: Int) : Value
-        class LongValue(val long: Long) : Value
-        class CharValue(val char: Char) : Value
-        class FloatValue(val float: Float) : Value
-        class DoubleValue(val double: Double) : Value
-        class StringValue(val string: String) : Value
-        class TypeValue(val type: KSType) : Value
+
+        sealed interface ValidValue : Value
+        class BooleanValue(val boolean: Boolean) : ValidValue
+        class ByteValue(val byte: Byte) : ValidValue
+        class ShortValue(val short: Short) : ValidValue
+        class IntValue(val int: Int) : ValidValue
+        class LongValue(val long: Long) : ValidValue
+        class CharValue(val char: Char) : ValidValue
+        class FloatValue(val float: Float) : ValidValue
+        class DoubleValue(val double: Double) : ValidValue
+        class StringValue(val string: String) : ValidValue
+        class TypeValue(val type: ValidType) : ValidValue
         class EnumValue(
             val enumClassDeclaration: KSClassDeclaration,
             val enumQualifiedName: String?,
-            val entryName: String
-        ) : Value
+            val entryName: String,
+        ) : ValidValue {
+            inline fun <reified E : Enum<E>> asEnum(): E? {
+                if (enumQualifiedName != requireQualifiedName<E>()) return null
+                return enumEntries<E>().find { it.name == entryName }
+            }
+        }
 
-        class AnnotationValue(val annotation: ParsedAnnotation) : Value
+        class AnnotationValue(val annotation: ParsedAnnotation) : ValidValue
+
+        object InvalidValue : Value
+    }
+
+    sealed interface ValidArgument : Argument {
+        val name: String
+        val isExplicit: Boolean
     }
 
     class ScalarArgument(
         override val name: String,
         override val isExplicit: Boolean,
         val value: Argument.Value,
-    ) : Argument
+        override val symbol: KSNode,
+    ) : ValidArgument
 
     class ArrayArgument(
         override val name: String,
         override val isExplicit: Boolean,
         val elements: List<Argument.Value>,
-    ) : Argument
+        override val symbol: KSNode,
+    ) : ValidArgument
+
+    class InvalidArgument(override val symbol: KSNode) : Argument
 }
 
-inline fun <reified A : Annotation> List<ParsedAnnotation?>.findLapisApiAnnotation(): ParsedAnnotation? =
-    find { it != null && it.isLapisApi && it.qualifiedName == requireQualifiedName<A>() }
+class ValidAnnotation(
+    val typeClassDeclaration: KSClassDeclaration,
+    val packageName: String,
+    val qualifiedName: String,
+    val arguments: List<Argument>,
+    override val symbol: KSNode,
+) : ParsedAnnotation
 
-inline fun <reified A : Annotation> ParsedAnnotation.findArgument(property: KProperty1<A, String>): String? =
-    arguments.find { it.name == property.name }?.let { it as? ParsedAnnotation.ScalarArgument }?.value
-        ?.let { it as? ParsedAnnotation.Argument.StringValue }?.string
+class InvalidAnnotation(override val symbol: KSNode) : ParsedAnnotation
 
-inline fun <reified A : Annotation> ParsedAnnotation.findArgument(property: KProperty1<A, KClass<*>>): KSType? =
-    arguments.find { it.name == property.name }?.let { it as? ParsedAnnotation.ScalarArgument }?.value
-        ?.let { it as? ParsedAnnotation.Argument.TypeValue }?.type
+class ParsedAnnotations(
+    val api: List<ValidAnnotation>,
+    val external: List<ParsedAnnotation>,
+) {
+    inline fun <reified A : Annotation> findApiAnnotation(): ValidAnnotation? =
+        api.firstNotNullOfOrNull { if (it.qualifiedName == requireQualifiedName<A>()) it else null }
+}
 
-inline fun <reified A : Annotation, reified E : Enum<E>> ParsedAnnotation.findArgument(
+inline fun <reified A : Annotation> ValidAnnotation.findArgument(
+    property: KProperty1<A, String>
+): String? = findScalarArgumentValue<ParsedAnnotation.Argument.StringValue, String>(property) { it.string }
+
+inline fun <reified A : Annotation> ValidAnnotation.findArgument(
+    property: KProperty1<A, KClass<*>>
+): ValidType? = findScalarArgumentValue<ParsedAnnotation.Argument.TypeValue, ValidType>(property) { it.type }
+
+inline fun <reified A : Annotation, reified E : Enum<E>> ValidAnnotation.findArgument(
     property: KProperty1<A, E>
-): E? =
-    arguments.find { it.name == property.name }?.let { it as ParsedAnnotation.ScalarArgument }?.value?.let {
-        val enumValue = it as? ParsedAnnotation.Argument.EnumValue ?: return null
-        if (enumValue.enumQualifiedName != requireQualifiedName<E>()) return null
-        enumEntries<E>().find { entry -> entry.name == enumValue.entryName } ?: return null
-    }
+): E? = findScalarArgumentValue<ParsedAnnotation.Argument.EnumValue, E>(property) { it.asEnum() }
 
-inline fun <reified A : Annotation, reified E : Enum<E>> ParsedAnnotation.findArgument(
+inline fun <reified A : Annotation, reified E : Enum<E>> ValidAnnotation.findArgument(
     property: KProperty1<A, Array<out E>>,
-): List<E>? =
-    arguments.find { it.name == property.name }?.let { it as ParsedAnnotation.ArrayArgument }?.elements?.map {
-        val enumValue = it as? ParsedAnnotation.Argument.EnumValue ?: return null
-        if (enumValue.enumQualifiedName != requireQualifiedName<E>()) return null
-        enumEntries<E>().find { entry -> entry.name == enumValue.entryName } ?: return null
-    }
+): List<E>? = findArrayArgumentValue<ParsedAnnotation.Argument.EnumValue, E>(property) { it.asEnum() }
+
+inline fun <reified V : ParsedAnnotation.Argument.Value, R> ValidAnnotation.findScalarArgumentValue(
+    property: KProperty1<out Annotation, Any>,
+    transform: (V) -> R?,
+): R? = arguments.firstNotNullOfOrNull { argument ->
+    if (argument is ParsedAnnotation.ScalarArgument && argument.name == property.name && argument.value is V) {
+        transform(argument.value)
+    } else null
+}
+
+inline fun <reified V, R> ValidAnnotation.findArrayArgumentValue(
+    property: KProperty1<out Annotation, Array<out Any>>,
+    transform: (V) -> R?,
+): List<R>? = arguments.firstNotNullOfOrNull { argument ->
+    if (argument is ParsedAnnotation.ArrayArgument && argument.name == property.name) {
+        argument.elements.map {
+            val value = it as? V ?: return@firstNotNullOfOrNull null
+            transform(value) ?: return@firstNotNullOfOrNull null
+        }
+    } else null
+}

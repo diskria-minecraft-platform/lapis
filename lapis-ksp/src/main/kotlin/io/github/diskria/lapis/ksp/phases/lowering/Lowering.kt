@@ -1,29 +1,23 @@
 package io.github.diskria.lapis.ksp.phases.lowering
 
 import com.google.devtools.ksp.symbol.KSClassDeclaration
-import com.google.devtools.ksp.symbol.KSType
 import com.squareup.kotlinpoet.ksp.toClassName
 import com.squareup.kotlinpoet.ksp.toTypeName
-import io.github.diskria.lapis.ksp.KspLogger
 import io.github.diskria.lapis.ksp.KspOptions
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
 import io.github.diskria.lapis.ksp.phases.validator.models.MixinAnnotation
 import io.github.diskria.lapis.ksp.phases.validator.models.Patch
-import io.github.diskria.lapis.ksp.phases.validator.models.TargetCompatType
+import io.github.diskria.lapis.ksp.phases.validator.models.Type
 import io.github.diskria.lapis.ksp.utils.JavaModifiers
-import io.github.diskria.poetesse.Poetesse
 import io.github.diskria.poetesse.interop.*
 import io.github.diskria.poetesse.java.JPModifier
 import java.util.*
 import javax.lang.model.element.Modifier
 import javax.lang.model.element.Modifier.*
 
-class Lowering(
-    private val options: KspOptions,
-    private val poetesse: Poetesse,
-    @Suppress("unused") private val logger: KspLogger,
-) {
-    fun lower(patches: List<Patch>): List<IrPatch> {
+class Lowering(private val options: KspOptions, private val poetesse: PoetesseScope) {
+
+    fun lowerPatches(patches: List<Patch>): List<IrPatch> {
         val mixinSourcePackageLCP = if (options.disableLCP) null else {
             findMixinSourcePackageLCP(patches)
         }
@@ -34,7 +28,7 @@ class Lowering(
         val mixin = lowerMixin(patch, mixinSourcePackageLCP)
         return when (val classKind = patch.classKind) {
             is Patch.Class -> {
-                val constructorParameters = classKind.constructorParameters.map(::lowerPatchConstructorParameter)
+                val constructorParameters = classKind.constructorParameters.map(::lowerPatchClassConstructorParameter)
                 IrPatchClass(
                     className = patch.classDeclaration.toXClassName(),
                     mixin = mixin,
@@ -51,10 +45,10 @@ class Lowering(
         }
     }
 
-    private fun lowerPatchConstructorParameter(parameter: Patch.Class.ConstructorParameter) = when (parameter) {
+    private fun lowerPatchClassConstructorParameter(parameter: Patch.Class.ConstructorParameter) = when (parameter) {
         is Patch.Class.ConstructorParameter.Origin -> IrPatchClass.ConstructorParameter.Origin(
             name = parameter.name,
-            type = lowerTargetCompatType(parameter.type),
+            targetTypeCast = lowerTargetTypeCast(parameter.type),
         )
     }
 
@@ -65,7 +59,7 @@ class Lowering(
         className = patch.classDeclaration.toXClassName().withSuffix("_Impl"),
         constructorParameters = buildList {
             constructorParameters.firstNotNullOfOrNull { it as? IrPatchClass.ConstructorParameter.Origin }?.let {
-                add(IrPatchImpl.ConstructorParameter.Instance(it.name, it.type))
+                add(IrPatchImpl.ConstructorParameter.Instance(it.name, it.targetTypeCast))
             }
             if (mixin.duck != null && patch.shadowSources.isNotEmpty()) {
                 add(IrPatchImpl.ConstructorParameter.Duck(mixin.duck.className))
@@ -129,7 +123,7 @@ class Lowering(
             sourceSetterJvmName = source.setterJvmName,
             getterName = source.getterJvmName.withUniqueModPrefix(),
             setterName = source.setterJvmName?.withUniqueModPrefix(),
-            receiverType = lowerTargetCompatType(source.receiverType),
+            receiverTargetTypeCast = lowerTargetTypeCast(source.receiverType),
         )
 
         is Patch.Extension.Function -> IrMixinDuck.Extension.Function(
@@ -138,7 +132,7 @@ class Lowering(
             name = source.jvmName.withUniqueModPrefix(),
             parameters = source.parameters.map { IrFunctionParameter(it.name, it.type.toXTypeName()) },
             returnTypeName = source.returnType?.toXTypeName(),
-            receiverType = lowerTargetCompatType(source.receiverType),
+            receiverTargetTypeCast = lowerTargetTypeCast(source.receiverType),
         )
     }
 
@@ -197,7 +191,7 @@ class Lowering(
             )
         },
         returnTypeName = injection.returnType?.toXTypeName(),
-        extensionReceiverType = injection.extensionReceiverType?.let { lowerTargetCompatType(it) },
+        extensionReceiverTargetTypeCast = injection.extensionReceiverType?.let { lowerTargetTypeCast(it) },
     )
 
     private fun lowerStaticInjection(
@@ -259,10 +253,10 @@ class Lowering(
         }
     }
 
-    private fun lowerTargetCompatType(targetCompatType: TargetCompatType) = IrTargetCompatType(
-        typeName = targetCompatType.type.toXTypeName(),
-        isUnsafeCastRequired = !targetCompatType.isInterface,
-        isTargetCastRequired = !targetCompatType.isAny,
+    private fun lowerTargetTypeCast(targetCompatibleType: Type) = IrTargetTypeCast(
+        typeName = targetCompatibleType.toXTypeName(),
+        isUnsafeCastRequired = !targetCompatibleType.isInterface,
+        isTargetCastRequired = !targetCompatibleType.isAny,
     )
 
     private fun lowerShadowModifiers(
@@ -299,8 +293,8 @@ class Lowering(
     private fun String.withUniqueModPrefix(): String =
         options.uniqueModPrefix + this
 
-    private fun KSType.toXTypeName(): XTypeName =
-        poetesse.xType(toTypeName())
+    private fun Type.toXTypeName(): XTypeName =
+        poetesse.xType(type.toTypeName())
 
     private fun KSClassDeclaration.toXClassName(): XClassName =
         poetesse.xClass(toClassName())

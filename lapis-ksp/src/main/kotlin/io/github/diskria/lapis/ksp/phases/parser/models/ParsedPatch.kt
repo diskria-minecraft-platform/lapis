@@ -3,13 +3,9 @@ package io.github.diskria.lapis.ksp.phases.parser.models
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSNode
 import com.google.devtools.ksp.symbol.KSType
-import io.github.diskria.lapis.annotations.Env
-import io.github.diskria.lapis.annotations.InitStrategy
-import javax.lang.model.element.Modifier
 
 class ParsedPatch(
-    val name: String?,
-    val env: Env?,
+    val name: String,
     val isClass: Boolean,
     val isInterface: Boolean,
     val isOpen: Boolean,
@@ -18,14 +14,12 @@ class ParsedPatch(
     val isTopLevel: Boolean,
     val hasPackageName: Boolean,
     val isPublic: Boolean,
-    val initStrategy: InitStrategy?,
     val classDeclaration: KSClassDeclaration,
-    val targetType: KSType?,
     val companionObject: CompanionObject?,
     val constructors: List<Constructor>,
     val properties: List<Property>,
     val functions: List<Function>,
-    val annotations: List<ParsedAnnotation?>,
+    val annotations: ParsedAnnotations,
     override val symbol: KSNode = classDeclaration,
 ) : SymbolSource {
 
@@ -36,25 +30,21 @@ class ParsedPatch(
     ) : SymbolSource {
 
         class Parameter(
-            val name: String?,
-            val type: KSType?,
-            val hasOriginAnnotation: Boolean,
+            val name: ParsedName,
+            val type: ParsedType,
+            val annotations: ParsedAnnotations,
             override val symbol: KSNode,
         ) : SymbolSource
     }
 
     class Property(
         val name: String,
-        val type: KSType?,
+        val type: ParsedType,
         val isPublic: Boolean,
         val isOpen: Boolean,
         val isAbstract: Boolean,
         val hasExtensionReceiver: Boolean,
-        val explicitMappingName: String?,
-        val hasExtensionAnnotation: Boolean,
-        val hasShadowAnnotation: Boolean,
-        val shadowModifiers: List<Modifier>,
-        val annotations: List<ParsedAnnotation?>,
+        val annotations: ParsedAnnotations,
         val getter: Getter?,
         val setter: Setter?,
         override val symbol: KSNode,
@@ -62,7 +52,7 @@ class ParsedPatch(
 
         class Getter(
             val jvmName: String?,
-            val annotations: List<ParsedAnnotation?>,
+            val annotations: ParsedAnnotations,
         )
 
         class Setter(
@@ -74,24 +64,20 @@ class ParsedPatch(
         val name: String,
         val jvmName: String?,
         val parameters: List<Parameter>,
-        val returnType: KSType?,
+        val returnType: ParsedType,
         val hasTypeParameters: Boolean,
         val isPublic: Boolean,
         val isOpen: Boolean,
         val isAbstract: Boolean,
-        val extensionReceiverType: KSType?,
-        val hasExtensionAnnotation: Boolean,
-        val hasShadowAnnotation: Boolean,
-        val explicitMappingName: String?,
-        val shadowModifiers: List<Modifier>,
-        val annotations: List<ParsedAnnotation?>,
+        val extensionReceiverType: ParsedType?,
+        val annotations: ParsedAnnotations,
         override val symbol: KSNode,
     ) : SymbolSource {
 
         class Parameter(
-            val name: String?,
-            val type: KSType?,
-            val annotations: List<ParsedAnnotation?>,
+            val name: ParsedName,
+            val type: ParsedType,
+            val annotations: ParsedAnnotations,
             override val symbol: KSNode,
         ) : SymbolSource
     }
@@ -103,3 +89,22 @@ class ParsedPatch(
         override val symbol: KSNode,
     ) : SymbolSource
 }
+
+sealed interface ParsedName
+class ValidName(val name: String) : ParsedName
+object InvalidName : ParsedName
+
+sealed interface ParsedType
+class ValidType(
+    val type: KSType,
+    val isAny: Boolean,
+    val isUnit: Boolean,
+    val isInterface: Boolean,
+    val packageName: ValidName,
+    val qualifiedName: ValidName,
+    val classDeclaration: KSClassDeclaration,
+) : ParsedType {
+    fun isAssignableFrom(parent: ValidType): Boolean = type.isAssignableFrom(parent.type)
+}
+
+object InvalidType : ParsedType

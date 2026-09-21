@@ -16,7 +16,7 @@ class IrPatchClass(
     val initStrategy: InitStrategy,
 ) : IrPatch {
     sealed interface ConstructorParameter {
-        class Origin(val name: String, val type: IrTargetCompatType) : ConstructorParameter
+        class Origin(val name: String, val targetTypeCast: IrTargetTypeCast) : ConstructorParameter
     }
 }
 

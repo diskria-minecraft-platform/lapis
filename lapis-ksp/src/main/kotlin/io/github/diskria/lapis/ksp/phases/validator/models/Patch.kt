@@ -21,7 +21,7 @@ class Patch(
     val extensionSources: List<Extension>,
     val injections: List<Injection>,
     val companionObject: CompanionObject?,
-    val targetType: KSType,
+    val targetType: Type,
     val mixinAnnotations: List<MixinAnnotation>,
 ) {
     val containingFile: KSFile? get() = symbol.containingFile
@@ -32,7 +32,7 @@ class Patch(
         val constructorParameters: List<ConstructorParameter>,
     ) : ClassKind {
         sealed interface ConstructorParameter {
-            class Origin(val name: String, val type: TargetCompatType) : ConstructorParameter
+            class Origin(val name: String, val type: Type) : ConstructorParameter
         }
     }
 
@@ -40,14 +40,14 @@ class Patch(
 
     sealed interface Extension {
 
-        val receiverType: TargetCompatType
+        val receiverType: Type
 
         class Property(
             override val name: String,
             override val getterJvmName: String,
             override val setterJvmName: String?,
-            override val type: KSType,
-            override val receiverType: TargetCompatType,
+            override val type: Type,
+            override val receiverType: Type,
         ) : DuckSource.Property,
             Extension
 
@@ -55,8 +55,8 @@ class Patch(
             override val name: String,
             override val jvmName: String,
             override val parameters: List<FunctionParameter>,
-            override val returnType: KSType?,
-            override val receiverType: TargetCompatType,
+            override val returnType: Type?,
+            override val receiverType: Type,
         ) : DuckSource.Function,
             Extension
     }
@@ -71,7 +71,7 @@ class Patch(
             override val name: String,
             override val getterJvmName: String,
             override val setterJvmName: String?,
-            override val type: KSType,
+            override val type: Type,
             override val modifiers: EnumSet<JPModifier>,
             override val mappingName: String,
             override val mixinAnnotations: List<MixinAnnotation>,
@@ -82,7 +82,7 @@ class Patch(
             override val name: String,
             override val jvmName: String,
             override val parameters: List<FunctionParameter>,
-            override val returnType: KSType?,
+            override val returnType: Type?,
             override val modifiers: EnumSet<JPModifier>,
             override val mappingName: String,
             override val mixinAnnotations: List<MixinAnnotation>,
@@ -92,14 +92,14 @@ class Patch(
 
     class Injection(
         val jvmName: String,
-        val extensionReceiverType: TargetCompatType?,
+        val extensionReceiverType: Type?,
         val mixinAnnotations: List<MixinAnnotation>,
         val parameters: List<Parameter>,
-        val returnType: KSType?,
+        val returnType: Type?,
     ) {
         class Parameter(
             val name: String,
-            val type: KSType,
+            val type: Type,
             val mixinAnnotations: List<MixinAnnotation>,
         )
     }
@@ -107,7 +107,7 @@ class Patch(
     class CompanionObject(val name: String, val injections: List<Injection>)
 }
 
-class TargetCompatType(
+class Type(
     val type: KSType,
     val isInterface: Boolean,
     val isAny: Boolean,
