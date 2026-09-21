@@ -86,7 +86,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
     private fun ParsedPatch.Constructor.Parameter.validate(targetType: Type) = when {
         annotations.findApiAnnotation<Origin>() != null -> Patch.Class.ConstructorParameter.Origin(
             name = name.validate(),
-            type = validateTargetTypeCompatibility(type.validate(), targetType),
+            type = validateTargetTypeCompatibility(type.validate(), targetType, "@Origin parameter"),
         )
 
         else -> kspError { "" }
@@ -103,7 +103,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             getterJvmName = getter.jvmName,
             setterJvmName = if (setter != null) kspRequireNotNull(setter.jvmName) { "" } else null,
             type = type.validate(),
-            receiverType = validateTargetTypeCompatibility(targetType, targetType),
+            receiverType = targetType,
         )
     }
 
@@ -123,7 +123,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             jvmName = jvmName,
             parameters = parameters,
             returnType = returnType.validate(),
-            receiverType = validateTargetTypeCompatibility(targetType, targetType),
+            receiverType = targetType,
         )
     }
 
@@ -177,7 +177,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         return Patch.Injection(
             jvmName = jvmName,
             extensionReceiverType = extensionReceiverType?.let {
-                validateTargetTypeCompatibility(it.validate(), targetType)
+                validateTargetTypeCompatibility(it.validate(), targetType, "Injection extension receiver")
             },
             mixinAnnotations = annotations.normalize().filterValid { it.validate() },
             parameters = parameters.map { it.validateAsInjectionParameter() },
@@ -311,8 +311,28 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         }
     }
 
-    private fun SymbolSource.validateTargetTypeCompatibility(type: Type, targetType: Type): Type {
-        kspRequire(type.type.isAssignableFrom(targetType.type)) { "" }
+    private fun SymbolSource.validateTargetTypeCompatibility(
+        type: Type,
+        targetType: Type,
+        roleDescription: String,
+    ): Type {
+        kspRequire(type.isSubtypeOf(targetType)) {
+            val typeName = type.type.toString()
+            val targetTypeName = targetType.type.toString()
+            """
+            $roleDescription type '$typeName' must be a subtype of target type '$targetTypeName'.
+            Why: This type will be used in a Mixin for an unsafe cast of 'this'.
+            How to fix: Ensure '$typeName' is a subtype of '$targetTypeName'.
+            """.trimIndent()
+        }
+        kspRequire(!type.type.isMarkedNullable) {
+            val typeName = type.type.toString()
+            """
+            $roleDescription type '$typeName' cannot be nullable.
+            Why: An instance of the target type is always initialized in Mixin and is guaranteed to be non-null.
+            How to fix: Remove the nullable mark ('?') from '$typeName'.
+            """.trimIndent()
+        }
         return type
     }
 

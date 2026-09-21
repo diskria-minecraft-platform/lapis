@@ -157,8 +157,7 @@ class Generator(
                                     }
 
                                     is IrPatchImpl.ConstructorParameter.Duck -> {
-                                        parameter("duck", requireNotNull(patch.mixin.duck?.className))
-                                            .property { private() }
+                                        parameter("duck", parameter.className).property { private() }
                                     }
                                 }
                             }

@@ -38,8 +38,7 @@ class KspLogger(private val logger: KSPLogger) {
                 is FileLocation -> location.ideaLink
                 is NonExistLocation -> "<no physical location>"
             }
-            appendLine("├── symbol: $symbol")
-            appendLine("└── at $locationText")
+            appendLine("└── '$symbol' at $locationText")
         }
     }
 

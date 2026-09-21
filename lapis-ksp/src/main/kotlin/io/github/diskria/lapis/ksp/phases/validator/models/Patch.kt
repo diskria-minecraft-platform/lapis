@@ -112,4 +112,6 @@ class Type(
     val isAny: Boolean,
     val isUnit: Boolean,
     val isInterface: Boolean,
-)
+) {
+    fun isSubtypeOf(other: Type): Boolean = type.isAssignableFrom(other.type)
+}

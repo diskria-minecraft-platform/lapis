@@ -103,8 +103,6 @@ class ValidType(
     val packageName: ValidName,
     val qualifiedName: ValidName,
     val classDeclaration: KSClassDeclaration,
-) : ParsedType {
-    fun isAssignableFrom(parent: ValidType): Boolean = type.isAssignableFrom(parent.type)
-}
+) : ParsedType
 
 object InvalidType : ParsedType
