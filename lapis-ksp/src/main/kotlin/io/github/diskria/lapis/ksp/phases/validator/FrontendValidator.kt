@@ -23,12 +23,12 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         patches.filterValid { it.validate() }
 
     private fun ParsedPatch.validate(): Patch {
-        kspRequire(classDeclaration.typeParameters.isEmpty()) { "216" }
-        kspRequire(isTopLevel) { "217" }
-        kspRequire(hasPackageName) { "218" }
-        kspRequire(isPublic) { "219" }
-        kspRequire(!isSealed) { "237" }
-        kspRequire(!isOpen) { "238" }
+        kspRequire(classDeclaration.typeParameters.isEmpty()) { "" }
+        kspRequire(isTopLevel) { "" }
+        kspRequire(hasPackageName) { "" }
+        kspRequire(isPublic) { "" }
+        kspRequire(!isSealed) { "" }
+        kspRequire(!isOpen) { "" }
         val kMixinAnnotation = kspRequireNotNull(annotations.findApiAnnotation<KMixin>()) { "" }
         val targetArgument = kspRequireNotNull(kMixinAnnotation.findArgument(KMixin::target)) { "" }
         val targetType = targetArgument.validate()
@@ -53,14 +53,14 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             Patch.CompanionObject(name = companionObject.name, injections = injections)
         }
         val classKind = if (isClass) {
-            val constructor = kspRequireNotNull(constructors.singleOrNull()) { "239" }
-            constructor.kspRequire(constructor.isPublic) { "240" }
+            val constructor = kspRequireNotNull(constructors.singleOrNull()) { "" }
+            constructor.kspRequire(constructor.isPublic) { "" }
             val constructorParameters = constructor.parameters.filterValid { it.validate(targetType) }
             Patch.Class(isAbstract, constructorParameters)
         } else if (isInterface) {
             Patch.Interface
         } else {
-            kspError { "53" }
+            kspError { "" }
         }
         return Patch(
             symbol = symbol,
@@ -79,7 +79,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
     }
 
     private fun ParsedPatch.CompanionObject.validate(): ParsedPatch.CompanionObject {
-        kspRequire(isPublic) { "296" }
+        kspRequire(isPublic) { "" }
         return this
     }
 
@@ -89,29 +89,29 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             type = validateTargetTypeCompatibility(type.validate(), targetType),
         )
 
-        else -> kspError { "313" }
+        else -> kspError { "" }
     }
 
     private fun ParsedPatch.Property.validateAsExtension(targetType: Type): Patch.Extension.Property {
-        kspRequireNotNull(getter) { "322" }
-        kspRequireNotNull(getter.jvmName) { "323" }
-        kspRequire(isPublic) { "324" }
-        kspRequire(!hasExtensionReceiver) { "325" }
-        kspRequire(!isOpen && !isAbstract) { "327" }
+        kspRequireNotNull(getter) { "" }
+        kspRequireNotNull(getter.jvmName) { "" }
+        kspRequire(isPublic) { "" }
+        kspRequire(!hasExtensionReceiver) { "" }
+        kspRequire(!isOpen && !isAbstract) { "" }
         return Patch.Extension.Property(
             name = name,
             getterJvmName = getter.jvmName,
-            setterJvmName = if (setter != null) kspRequireNotNull(setter.jvmName) { "332" } else null,
+            setterJvmName = if (setter != null) kspRequireNotNull(setter.jvmName) { "" } else null,
             type = type.validate(),
             receiverType = validateTargetTypeCompatibility(targetType, targetType),
         )
     }
 
     private fun ParsedPatch.Function.validateAsExtension(targetType: Type): Patch.Extension.Function {
-        kspRequire(isPublic) { "342" }
-        kspRequireNotNull(jvmName) { "343" }
-        kspRequire(extensionReceiverType == null) { "361" }
-        kspRequire(!isOpen && !isAbstract) { "346" }
+        kspRequire(isPublic) { "" }
+        kspRequireNotNull(jvmName) { "" }
+        kspRequire(extensionReceiverType == null) { "" }
+        kspRequire(!isOpen && !isAbstract) { "" }
         val parameters = parameters.map {
             FunctionParameter(
                 name = it.name.validate(),
@@ -128,17 +128,17 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
     }
 
     private fun ParsedPatch.Property.validateAsShadow(isInterface: Boolean): Patch.Shadow.Property {
-        kspRequire(isPublic) { "365" }
-        kspRequire(isAbstract) { "366" }
-        kspRequire(!hasExtensionReceiver) { "367" }
-        kspRequireNotNull(getter) { "368" }
-        kspRequireNotNull(getter.jvmName) { "369" }
+        kspRequire(isPublic) { "" }
+        kspRequire(isAbstract) { "" }
+        kspRequire(!hasExtensionReceiver) { "" }
+        kspRequireNotNull(getter) { "" }
+        kspRequireNotNull(getter.jvmName) { "" }
         val explicitMappingName = annotations.findApiAnnotation<MappingName>()?.findArgument(MappingName::name)
         val shadowModifiers = annotations.findApiAnnotation<KShadow>()?.findArgument(KShadow::modifiers).orEmpty()
         return Patch.Shadow.Property(
             name = name,
             getterJvmName = getter.jvmName,
-            setterJvmName = if (setter != null) kspRequireNotNull(setter.jvmName) { "375" } else null,
+            setterJvmName = if (setter != null) kspRequireNotNull(setter.jvmName) { "" } else null,
             mappingName = validateMappingName(explicitMappingName, name),
             modifiers = validateModifiers(shadowModifiers, isInterface, isField = true),
             type = type.validate(),
@@ -147,10 +147,10 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
     }
 
     private fun ParsedPatch.Function.validateAsShadow(isInterface: Boolean): Patch.Shadow.Function {
-        kspRequire(isPublic) { "384" }
-        kspRequireNotNull(jvmName) { "385" }
-        kspRequire(isAbstract) { "386" }
-        kspRequire(extensionReceiverType == null) { "387" }
+        kspRequire(isPublic) { "" }
+        kspRequireNotNull(jvmName) { "" }
+        kspRequire(isAbstract) { "" }
+        kspRequire(extensionReceiverType == null) { "" }
         val explicitMappingName = annotations.findApiAnnotation<MappingName>()?.findArgument(MappingName::name)
         val shadowModifiers = annotations.findApiAnnotation<KShadow>()?.findArgument(KShadow::modifiers).orEmpty()
         return Patch.Shadow.Function(
@@ -168,11 +168,11 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         isInCompanionObject: Boolean,
         targetType: Type,
     ): Patch.Injection {
-        kspRequireNotNull(jvmName) { "408" }
-        kspRequire(!hasTypeParameters) { "409" }
-        kspRequire(!isOpen) { "410" }
+        kspRequireNotNull(jvmName) { "" }
+        kspRequire(!hasTypeParameters) { "" }
+        kspRequire(!isOpen) { "" }
         if (isInCompanionObject) {
-            kspRequire(extensionReceiverType == null) { "438" }
+            kspRequire(extensionReceiverType == null) { "" }
         }
         return Patch.Injection(
             jvmName = jvmName,
@@ -193,18 +193,18 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
 
     context(parent: SymbolSource)
     private fun ParsedName.validate(): String {
-        parent.kspRequire(this is ValidName) { "228" }
+        parent.kspRequire(this is ValidName) { "" }
         return name
     }
 
     context(parent: SymbolSource)
     private fun ParsedType.validate(): Type {
-        parent.kspRequire(this is ValidType) { "770" }
+        parent.kspRequire(this is ValidType) { "" }
         return Type(type, isInterface, isAny)
     }
 
     private fun SymbolSource.validateClassDeclaration(classDeclaration: KSClassDeclaration?): KSClassDeclaration {
-        kspRequire(classDeclaration?.validate(enableNewFeatures = true) == true) { "777" }
+        kspRequire(classDeclaration?.validate(enableNewFeatures = true) == true) { "" }
         return classDeclaration
     }
 
@@ -226,28 +226,28 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             }
         }
         val allowed = if (isField) JavaModifiers.FIELD_ALLOWED else JavaModifiers.METHOD_ALLOWED
-        kspRequire(allowed.containsAll(result)) { "862" }
-        kspRequire(result.count { it in JavaModifiers.VISIBILITIES } <= 1) { "863" }
+        kspRequire(allowed.containsAll(result)) { "" }
+        kspRequire(result.count { it in JavaModifiers.VISIBILITIES } <= 1) { "" }
         if (isField) {
             if (FINAL in result) {
-                kspRequire(VOLATILE !in result) { "874" }
+                kspRequire(VOLATILE !in result) { "" }
             }
         } else {
             if (ABSTRACT in result) {
-                kspRequire(result.none { it in JavaModifiers.ABSTRACT_ILLEGALS }) { "865" }
+                kspRequire(result.none { it in JavaModifiers.ABSTRACT_ILLEGALS }) { "" }
             }
             if (NATIVE in result) {
-                kspRequire(DEFAULT !in result) { "870" }
+                kspRequire(DEFAULT !in result) { "" }
             }
             if (isInterface) {
                 if (PRIVATE in result) {
-                    kspRequire(DEFAULT !in result) { "866" }
-                    kspRequire(ABSTRACT !in result) { "867" }
+                    kspRequire(DEFAULT !in result) { "" }
+                    kspRequire(ABSTRACT !in result) { "" }
                 } else {
-                    kspRequire(result.count { it in EnumSet.of(ABSTRACT, STATIC, DEFAULT) } == 1) { "868" }
+                    kspRequire(result.count { it in EnumSet.of(ABSTRACT, STATIC, DEFAULT) } == 1) { "" }
                 }
             } else {
-                kspRequire(DEFAULT !in result) { "869" }
+                kspRequire(DEFAULT !in result) { "" }
             }
         }
         return result
@@ -255,7 +255,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
 
     private fun SymbolSource.validateMappingName(explicitName: String?, implicitName: String): String =
         if (explicitName != null) {
-            kspRequire(explicitName.isNotEmpty()) { "913" }
+            kspRequire(explicitName.isNotEmpty()) { "" }
             explicitName
         } else {
             implicitName
@@ -267,7 +267,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
     }
 
     private fun ParsedAnnotation.validate(): MixinAnnotation {
-        kspRequire(this is ValidAnnotation) { "303" }
+        kspRequire(this is ValidAnnotation) { "" }
         return MixinAnnotation(
             typeClassDeclaration = validateClassDeclaration(typeClassDeclaration),
             arguments = arguments.normalize().filterValid { it.validate() },
@@ -278,7 +278,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         filter { it !is ParsedAnnotation.ValidArgument || it.isExplicit }
 
     private fun ParsedAnnotation.Argument.validate(): MixinAnnotation.Argument {
-        kspRequire(this is ParsedAnnotation.ValidArgument) { "322" }
+        kspRequire(this is ParsedAnnotation.ValidArgument) { "" }
         return when (this) {
             is ParsedAnnotation.ScalarArgument -> MixinAnnotation.ScalarArgument(name, value.validate())
             is ParsedAnnotation.ArrayArgument -> {
@@ -289,7 +289,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
 
     context(parent: SymbolSource)
     private fun ParsedAnnotation.Argument.Value.validate(): MixinAnnotation.Argument.Value {
-        parent.kspRequire(this is ParsedAnnotation.Argument.ValidValue) { "313" }
+        parent.kspRequire(this is ParsedAnnotation.Argument.ValidValue) { "" }
         return when (this) {
             is ParsedAnnotation.Argument.BooleanValue -> MixinAnnotation.Argument.BooleanValue(boolean)
             is ParsedAnnotation.Argument.ByteValue -> MixinAnnotation.Argument.ByteValue(byte)
@@ -312,7 +312,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
     }
 
     private fun SymbolSource.validateTargetTypeCompatibility(type: Type, targetType: Type): Type {
-        kspRequire(type.type.isAssignableFrom(targetType.type)) { "441" }
+        kspRequire(type.type.isAssignableFrom(targetType.type)) { "" }
         return type
     }
 
