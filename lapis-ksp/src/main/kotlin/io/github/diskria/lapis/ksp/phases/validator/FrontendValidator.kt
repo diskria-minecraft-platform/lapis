@@ -280,9 +280,10 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         return name
     }
 
-    private fun ParsedAnnotations.normalize() = external.filter {
-        // TODO: Filter annotations by mixin packages from options
-        it !is ValidAnnotation || it.type.packageName.isNotBlank()
+    private fun ParsedAnnotations.normalize() = external.filter { annotation ->
+        if (annotation !is ValidAnnotation) return@filter true
+        val packageName = annotation.type.packageName
+        options.mixinAnnotationPackages.any { packageName == it || packageName.startsWith("$it.") }
     }
 
     private fun ParsedAnnotation.validate(): MixinAnnotation {
