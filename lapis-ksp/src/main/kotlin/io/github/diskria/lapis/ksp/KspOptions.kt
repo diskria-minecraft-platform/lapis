@@ -1,7 +1,6 @@
 package io.github.diskria.lapis.ksp
 
 import io.github.diskria.lapis.ksp.extensions.quoted
-import io.github.diskria.poetesse.java.JPClassName
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.descriptors.PrimitiveKind
@@ -32,13 +31,13 @@ data class KspOptions(
         validateJavaIdentifierName(::uniqueModPrefix, "modid$")
         validateJavaPackageName(::mixinPackage, "com.example.modid.mixin")
         validateJavaPackageName(::mixinGeneratedSubpackage, "generated")
-        validateJavaClassName(::nullableAnnotation, "org.jspecify.annotations.Nullable")
-        validateJavaClassName(::nonNullAnnotation, "org.jspecify.annotations.NonNull")
-        validateJavaClassName(::mixinAnnotation, MIXIN_ANNOTATION)
-        validateJavaClassName(::uniqueAnnotation, UNIQUE_ANNOTATION)
-        validateJavaClassName(::shadowAnnotation, SHADOW_ANNOTATION)
-        validateJavaClassName(::mutableAnnotation, MUTABLE_ANNOTATION)
-        validateJavaClassName(::finalAnnotation, FINAL_ANNOTATION)
+        validateJavaFQCN(::nullableAnnotation, "org.jspecify.annotations.Nullable")
+        validateJavaFQCN(::nonNullAnnotation, "org.jspecify.annotations.NonNull")
+        validateJavaFQCN(::mixinAnnotation, MIXIN_ANNOTATION)
+        validateJavaFQCN(::uniqueAnnotation, UNIQUE_ANNOTATION)
+        validateJavaFQCN(::shadowAnnotation, SHADOW_ANNOTATION)
+        validateJavaFQCN(::mutableAnnotation, MUTABLE_ANNOTATION)
+        validateJavaFQCN(::finalAnnotation, FINAL_ANNOTATION)
         validateJavaPackageNames(::mixinAnnotationPackages, SPONGE_ANNOTATIONS_PACKAGE)
     }
 
@@ -74,11 +73,11 @@ data class KspOptions(
         }
     }
 
-    private fun MutableList<String>.validateJavaClassName(property: KProperty0<String?>, example: String) {
+    private fun MutableList<String>.validateJavaFQCN(property: KProperty0<String?>, example: String) {
         val value = property.get() ?: return
-        if (value.isInvalidClassName()) {
+        if (!value.isValidClassName()) {
             add(
-                "Invalid '${property.name}': expected a valid fully-qualified name " +
+                "Invalid '${property.name}': expected a valid FQCN " +
                     "(e.g. ${example.quoted()}), but got ${value.quoted()}."
             )
         }
@@ -97,7 +96,11 @@ data class KspOptions(
     }
 }
 
-private fun String.isInvalidClassName(): Boolean = runCatching { JPClassName.bestGuess(this) }.isFailure
+private fun String.isValidClassName(): Boolean {
+    if (!SourceVersion.isName(this)) return false
+    val dotIndex = lastIndexOf('.').takeIf { it > 0 } ?: return false
+    return getOrNull(dotIndex + 1)?.isUpperCase() == true
+}
 
 object DelimitedStringListSerializer : KSerializer<List<String>> {
 
