@@ -100,8 +100,8 @@ class ValidType(
     val isAny: Boolean,
     val isUnit: Boolean,
     val isInterface: Boolean,
-    val packageName: ValidName,
-    val qualifiedName: ValidName,
+    val packageName: String,
+    val qualifiedName: String,
     val classDeclaration: KSClassDeclaration,
 ) : ParsedType
 

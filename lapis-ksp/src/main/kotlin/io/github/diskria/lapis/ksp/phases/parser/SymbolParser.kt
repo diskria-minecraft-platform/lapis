@@ -117,7 +117,7 @@ class SymbolParser(private val resolver: Resolver) {
         val external = mutableListOf<ParsedAnnotation>()
         annotated.annotations.forEach {
             val annotation = parseAnnotation(it)
-            if (annotation is ValidAnnotation && annotation.packageName == "io.github.diskria.lapis.annotations") {
+            if (annotation is ValidAnnotation && annotation.type.packageName == "io.github.diskria.lapis.annotations") {
                 api += annotation
             } else {
                 external += annotation
@@ -129,9 +129,7 @@ class SymbolParser(private val resolver: Resolver) {
     private fun parseAnnotation(annotation: KSAnnotation): ParsedAnnotation {
         val type = parseType(annotation.annotationType) as? ValidType ?: return InvalidAnnotation(annotation)
         return ValidAnnotation(
-            typeClassDeclaration = type.classDeclaration,
-            packageName = type.packageName.name,
-            qualifiedName = type.qualifiedName.name,
+            type = type,
             arguments = annotation.arguments.map { parseAnnotationArgument(it) },
             symbol = annotation,
         )
@@ -192,9 +190,10 @@ class SymbolParser(private val resolver: Resolver) {
                         "but found: '${rawValue.parentDeclaration?.qualifiedName?.asString() ?: "null"}' "
                 )
             ParsedAnnotation.Argument.EnumValue(
-                enumClassDeclaration,
-                enumClassDeclaration.qualifiedName?.asString(),
-                rawValue.simpleName.asString(),
+                enumClassDeclaration = enumClassDeclaration,
+                enumQualifiedName = enumClassDeclaration.qualifiedName?.asString(),
+                entryClassDeclaration = rawValue,
+                entryName = rawValue.simpleName.asString(),
             )
         }
 
@@ -216,8 +215,8 @@ class SymbolParser(private val resolver: Resolver) {
                 isAny = type.makeNotNullable() == resolver.builtIns.anyType,
                 isUnit = type.makeNotNullable() == resolver.builtIns.unitType,
                 isInterface = classDeclaration.classKind == ClassKind.INTERFACE,
-                packageName = packageName,
-                qualifiedName = qualifiedName,
+                packageName = packageName.name,
+                qualifiedName = qualifiedName.name,
                 classDeclaration = classDeclaration,
             )
         }

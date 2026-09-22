@@ -4,7 +4,6 @@ import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.Dependencies
 import com.google.devtools.ksp.symbol.KSFile
 import io.github.diskria.lapis.annotations.InitStrategy
-import io.github.diskria.lapis.ksp.KspLogger
 import io.github.diskria.lapis.ksp.KspOptions
 import io.github.diskria.lapis.ksp.phases.generator.models.GeneratedMixinsJson
 import io.github.diskria.lapis.ksp.phases.lowering.models.*

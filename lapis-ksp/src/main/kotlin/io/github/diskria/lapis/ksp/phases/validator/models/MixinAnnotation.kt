@@ -1,7 +1,6 @@
 package io.github.diskria.lapis.ksp.phases.validator.models
 
 import com.google.devtools.ksp.symbol.KSClassDeclaration
-import com.google.devtools.ksp.symbol.KSType
 
 class MixinAnnotation(val typeClassDeclaration: KSClassDeclaration, val arguments: List<Argument>) {
 
