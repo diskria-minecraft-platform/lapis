@@ -32,7 +32,6 @@ data class KspOptions(
         validateJavaIdentifierName(::uniqueModPrefix, "modid$")
         validateJavaPackageName(::mixinPackage, "com.example.modid.mixin")
         validateJavaPackageName(::mixinGeneratedSubpackage, "generated")
-        validateJavaPackageNames(::mixinAnnotationPackages, SPONGE_ANNOTATIONS_PACKAGE)
         validateJavaClassName(::nullableAnnotation, "org.jspecify.annotations.Nullable")
         validateJavaClassName(::nonNullAnnotation, "org.jspecify.annotations.NonNull")
         validateJavaClassName(::mixinAnnotation, MIXIN_ANNOTATION)
@@ -40,6 +39,7 @@ data class KspOptions(
         validateJavaClassName(::shadowAnnotation, SHADOW_ANNOTATION)
         validateJavaClassName(::mutableAnnotation, MUTABLE_ANNOTATION)
         validateJavaClassName(::finalAnnotation, FINAL_ANNOTATION)
+        validateJavaPackageNames(::mixinAnnotationPackages, SPONGE_ANNOTATIONS_PACKAGE)
     }
 
     private fun MutableList<String>.validateJavaIdentifierName(property: KProperty0<String?>, example: String) {

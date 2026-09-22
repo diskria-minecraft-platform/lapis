@@ -9,7 +9,7 @@ import javax.inject.Inject
 abstract class LapisExtension @Inject internal constructor(
     objects: ObjectFactory,
     private val layout: ProjectLayout,
-) : LapisConfigurationHolder(objects), LapisDslScope {
+) : LapisConfigurationHolder(), LapisDslScope {
 
     internal val sourceSetSpecs: NamedDomainObjectContainer<LapisSourceSetSpec> =
         objects.domainObjectContainer(LapisSourceSetSpec::class.java).apply {

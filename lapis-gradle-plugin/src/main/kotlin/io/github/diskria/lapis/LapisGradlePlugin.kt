@@ -57,6 +57,7 @@ class LapisGradlePlugin : Plugin<Project> {
                     shadowAnnotation.set(spec.getEffectiveShadowAnnotation(lapisExtension))
                     mutableAnnotation.set(spec.getEffectiveMutableAnnotation(lapisExtension))
                     finalAnnotation.set(spec.getEffectiveFinalAnnotation(lapisExtension))
+                    mixinAnnotationPackages.set(spec.getEffectiveMixinAnnotationPackages(lapisExtension))
                     this.mixinConfig.set(mixinConfig)
                 }
             )

@@ -1,14 +1,10 @@
 package io.github.diskria.lapis.api
 
 import org.gradle.api.file.RegularFile
-import org.gradle.api.model.ObjectFactory
 import org.gradle.api.provider.Provider
 import javax.inject.Inject
 
-abstract class LapisSourceSetSpec @Inject constructor(
-    val name: String,
-    objects: ObjectFactory,
-) : LapisConfigurationHolder(objects) {
+abstract class LapisSourceSetSpec @Inject constructor(val name: String) : LapisConfigurationHolder() {
 
     fun getEffectiveUniqueModPrefix(lapisExtension: LapisExtension): Provider<String> =
         uniqueModPrefix.orElse(lapisExtension.uniqueModPrefix)
@@ -39,6 +35,12 @@ abstract class LapisSourceSetSpec @Inject constructor(
 
     fun getEffectiveFinalAnnotation(lapisExtension: LapisExtension): Provider<String> =
         finalAnnotation.orElse(lapisExtension.finalAnnotation)
+
+    fun getEffectiveMixinAnnotationPackages(lapisExtension: LapisExtension): Provider<List<String>> =
+        mixinAnnotationPackages.flatMap { list ->
+            if (list.isEmpty()) lapisExtension.mixinAnnotationPackages
+            else mixinAnnotationPackages
+        }
 
     fun getEffectiveMixinConfig(lapisExtension: LapisExtension): Provider<RegularFile> =
         mixinConfig.orElse(lapisExtension.mixinConfig)

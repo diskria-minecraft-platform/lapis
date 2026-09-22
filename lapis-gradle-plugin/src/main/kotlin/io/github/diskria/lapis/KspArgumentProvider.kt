@@ -8,6 +8,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.gradle.api.file.ProjectLayout
 import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.*
@@ -57,6 +58,10 @@ abstract class KspArgumentProvider @Inject constructor(layout: ProjectLayout) : 
     abstract val finalAnnotation: Property<String>
 
     @get:Optional
+    @get:Input
+    abstract val mixinAnnotationPackages: ListProperty<String>
+
+    @get:Optional
     @get:PathSensitive(PathSensitivity.RELATIVE)
     @get:InputFiles
     abstract val mixinConfig: RegularFileProperty
@@ -103,6 +108,7 @@ abstract class KspArgumentProvider @Inject constructor(layout: ProjectLayout) : 
             shadowAnnotation.orNull?.let { "shadowAnnotation" to it },
             mutableAnnotation.orNull?.let { "mutableAnnotation" to it },
             finalAnnotation.orNull?.let { "finalAnnotation" to it },
+            mixinAnnotationPackages.orNull?.ifEmpty { null }?.let { "mixinAnnotationPackages" to it.joinToString(",") },
         ).map { (key, value) ->
             val prefixedKey = "lapis.$key"
             val valueStr = value.toString()

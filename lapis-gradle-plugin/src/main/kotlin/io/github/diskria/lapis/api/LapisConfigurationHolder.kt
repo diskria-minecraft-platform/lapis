@@ -1,21 +1,30 @@
 package io.github.diskria.lapis.api
 
 import org.gradle.api.file.RegularFileProperty
-import org.gradle.api.model.ObjectFactory
+import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
-import org.gradle.kotlin.dsl.property
-import javax.inject.Inject
 
-abstract class LapisConfigurationHolder @Inject constructor(objects: ObjectFactory) {
-    val uniqueModPrefix: Property<String> = objects.property<String>()
-    val mixinGeneratedSubpackage: Property<String> = objects.property<String>()
-    val disableLCP: Property<Boolean> = objects.property<Boolean>()
-    val nullableAnnotation: Property<String> = objects.property<String>()
-    val nonNullAnnotation: Property<String> = objects.property<String>()
-    val mixinAnnotation: Property<String> = objects.property<String>()
-    val uniqueAnnotation: Property<String> = objects.property<String>()
-    val shadowAnnotation: Property<String> = objects.property<String>()
-    val mutableAnnotation: Property<String> = objects.property<String>()
-    val finalAnnotation: Property<String> = objects.property<String>()
-    val mixinConfig: RegularFileProperty = objects.fileProperty()
+abstract class LapisConfigurationHolder {
+
+    abstract val uniqueModPrefix: Property<String>
+    abstract val mixinGeneratedSubpackage: Property<String>
+    abstract val disableLCP: Property<Boolean>
+    abstract val nullableAnnotation: Property<String>
+    abstract val nonNullAnnotation: Property<String>
+    abstract val mixinAnnotation: Property<String>
+    abstract val uniqueAnnotation: Property<String>
+    abstract val shadowAnnotation: Property<String>
+    abstract val mutableAnnotation: Property<String>
+    abstract val finalAnnotation: Property<String>
+    abstract val mixinConfig: RegularFileProperty
+
+    internal abstract val mixinAnnotationPackages: ListProperty<String>
+
+    fun mixinAnnotationPackages(packages: Iterable<String>) {
+        mixinAnnotationPackages.set(packages.toList())
+    }
+
+    fun mixinAnnotationPackages(vararg packages: String) {
+        mixinAnnotationPackages(packages.toList())
+    }
 }
