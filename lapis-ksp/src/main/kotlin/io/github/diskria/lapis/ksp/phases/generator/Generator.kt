@@ -21,19 +21,19 @@ class Generator(
     private val poetesse: Poetesse,
     private val codeGenerator: CodeGenerator,
 ) {
-    fun generate(patches: List<IrPatch>) {
+    fun generate(patches: List<FirPatch>) {
         patches.forEach { patch ->
             patch.mixin.duck?.let {
-                generateMixinDuck(it, patch as? IrPatchInterface)
+                generateMixinDuck(it, patch as? FirPatchInterface)
                 generateExtensions(it, patch)
             }
             when (patch) {
-                is IrPatchClass -> {
+                is FirPatchClass -> {
                     patch.impl?.let { generatePatchImpl(it, patch) }
                     generateMixinClass(patch.mixin, patch)
                 }
 
-                is IrPatchInterface -> {
+                is FirPatchInterface -> {
                     generateMixinInterface(patch.mixin, patch)
                 }
             }
@@ -41,7 +41,7 @@ class Generator(
         generateMixinConfig(patches.map { it.mixin })
     }
 
-    private fun generateMixinDuck(duck: IrMixinDuck, patchInterface: IrPatchInterface?) {
+    private fun generateMixinDuck(duck: IrMixinDuck, patchInterface: FirPatchInterface?) {
         poetesse {
             java.file(duck.className) {
                 interface_(fileName) { _ ->
@@ -97,7 +97,7 @@ class Generator(
     }
 
     // TODO: Migrate to FIR plugin
-    private fun generateExtensions(duck: IrMixinDuck, patch: IrPatch) {
+    private fun generateExtensions(duck: IrMixinDuck, patch: FirPatch) {
         val extensions = duck.extensions.ifEmpty { return }
         poetesse {
             kotlin.file(patch.className.withSuffix("_Extensions")) {
@@ -141,7 +141,7 @@ class Generator(
         }.writeWith(aggregating = false, listOfNotNull(duck.patchOriginatingFile))
     }
 
-    private fun generatePatchImpl(patchImpl: IrPatchImpl, patch: IrPatchClass) {
+    private fun generatePatchImpl(patchImpl: IrPatchImpl, patch: FirPatchClass) {
         poetesse {
             kotlin.file(patchImpl.className) {
                 class_(fileName) { _ ->
@@ -166,7 +166,7 @@ class Generator(
                         patch.constructorParameters.forEach { parameter ->
                             argument {
                                 when (parameter) {
-                                    is IrPatchClass.ConstructorParameter.Origin -> N(parameter.name)
+                                    is FirPatchClass.ConstructorParameter.Origin -> N(parameter.name)
                                 }
                             }
                         }
@@ -212,7 +212,7 @@ class Generator(
         }.writeWith(aggregating = false, listOfNotNull(patchImpl.patchOriginatingFile))
     }
 
-    private fun generateMixinClass(mixin: IrMixin, patch: IrPatchClass) {
+    private fun generateMixinClass(mixin: IrMixin, patch: FirPatchClass) {
         poetesse {
             java.file(mixin.className) {
                 class_(fileName) { _ ->
@@ -309,7 +309,7 @@ class Generator(
         }.writeWith(aggregating = false, listOfNotNull(mixin.patchOriginatingFile))
     }
 
-    private fun JavaCodeScope.patchInitializer(patch: IrPatchClass): String {
+    private fun JavaCodeScope.patchInitializer(patch: FirPatchClass): String {
         val (className, arguments) = if (patch.impl != null) {
             patch.impl.className to code {
                 patch.impl.constructorParameters.joinToString { parameter ->
@@ -323,7 +323,7 @@ class Generator(
             patch.className to code {
                 patch.constructorParameters.joinToString { parameter ->
                     when (parameter) {
-                        is IrPatchClass.ConstructorParameter.Origin -> targetTypeCast(parameter.targetTypeCast)
+                        is FirPatchClass.ConstructorParameter.Origin -> targetTypeCast(parameter.targetTypeCast)
                     }
                 }
             }
@@ -331,7 +331,7 @@ class Generator(
         return "new ${T(className)}(${L(arguments)})"
     }
 
-    private fun JavaTypeScope.patchMember(patch: IrPatchClass): String {
+    private fun JavaTypeScope.patchMember(patch: FirPatchClass): String {
         val isEager = patch.initStrategy == InitStrategy.Eager
         val isSynchronized = patch.initStrategy == InitStrategy.Synchronized
         val isThreadSafe = patch.initStrategy == InitStrategy.Volatile || isSynchronized
@@ -396,7 +396,7 @@ class Generator(
         return "$getOrInitPatchMethod()"
     }
 
-    private fun generateMixinInterface(mixin: IrMixin, patch: IrPatchInterface) {
+    private fun generateMixinInterface(mixin: IrMixin, patch: FirPatchInterface) {
         poetesse {
             java.file(mixin.className) {
                 interface_(fileName) { _ ->
@@ -507,7 +507,7 @@ class Generator(
             is IrMixinAnnotation.Argument.AnnotationValue -> L(mixinAnnotation(value.annotation))
         }
 
-    private fun JavaCodeScope.targetTypeCast(cast: IrTargetTypeCast): String =
+    private fun JavaCodeScope.targetTypeCast(cast: IrTargetSubtypeCast): String =
         when {
             !cast.isTargetCastRequired -> "this"
             cast.isUnsafeCastRequired -> "(${T(cast.typeName)}) (${T<Any>()}) this"
@@ -529,8 +529,8 @@ class Generator(
             mixinBlueprints.mapNotNull { it.patchOriginatingFile },
             aggregating = true,
         ) {
-            val envClassNames = mixinBlueprints.groupBy({ it.env }, { it.className })
-            Json.encodeToString(GeneratedMixinsJson.of(options.mixinPackage, envClassNames))
+            val classNames = mixinBlueprints.groupBy({ it.side }, { it.className })
+            Json.encodeToString(GeneratedMixinsJson.of(options.mixinPackage, classNames))
         }
     }
 

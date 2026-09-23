@@ -1,20 +1,18 @@
 package io.github.diskria.lapis.ksp.phases.validator.models
 
-import com.google.devtools.ksp.containingFile
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSFile
-import com.google.devtools.ksp.symbol.KSNode
 import com.google.devtools.ksp.symbol.KSType
-import io.github.diskria.lapis.annotations.Env
 import io.github.diskria.lapis.annotations.InitStrategy
-import io.github.diskria.poetesse.java.JPModifier
+import io.github.diskria.lapis.annotations.Side
 import java.util.*
+import javax.lang.model.element.Modifier
 
 class Patch(
-    private val symbol: KSNode,
+    val containingFile: KSFile?,
     val classDeclaration: KSClassDeclaration,
     val name: String,
-    val env: Env,
+    val side: Side,
     val initStrategy: InitStrategy,
     val classKind: ClassKind,
     val shadowSources: List<Shadow>,
@@ -24,8 +22,6 @@ class Patch(
     val targetType: Type,
     val mixinAnnotations: List<MixinAnnotation>,
 ) {
-    val containingFile: KSFile? get() = symbol.containingFile
-
     sealed interface ClassKind
     class Class(
         val isAbstract: Boolean,
@@ -63,7 +59,7 @@ class Patch(
 
     sealed interface Shadow {
 
-        val modifiers: EnumSet<JPModifier>
+        val modifiers: EnumSet<Modifier>
         val mappingName: String
         val mixinAnnotations: List<MixinAnnotation>
 
@@ -72,7 +68,7 @@ class Patch(
             override val getterJvmName: String,
             override val setterJvmName: String?,
             override val type: Type,
-            override val modifiers: EnumSet<JPModifier>,
+            override val modifiers: EnumSet<Modifier>,
             override val mappingName: String,
             override val mixinAnnotations: List<MixinAnnotation>,
         ) : DuckSource.Property,
@@ -83,7 +79,7 @@ class Patch(
             override val jvmName: String,
             override val parameters: List<FunctionParameter>,
             override val returnType: Type?,
-            override val modifiers: EnumSet<JPModifier>,
+            override val modifiers: EnumSet<Modifier>,
             override val mappingName: String,
             override val mixinAnnotations: List<MixinAnnotation>,
         ) : DuckSource.Function,

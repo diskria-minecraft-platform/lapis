@@ -6,7 +6,7 @@ import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.symbol.KSAnnotated
 import io.github.diskria.lapis.ksp.phases.generator.Generator
 import io.github.diskria.lapis.ksp.phases.lowering.Lowering
-import io.github.diskria.lapis.ksp.phases.lowering.models.IrPatch
+import io.github.diskria.lapis.ksp.phases.lowering.models.FirPatch
 import io.github.diskria.lapis.ksp.phases.parser.SymbolParser
 import io.github.diskria.lapis.ksp.phases.validator.FrontendValidator
 import io.github.diskria.poetesse.Poetesse
@@ -30,7 +30,7 @@ class LapisSymbolProcessor(
     }
 
     private val lowering: Lowering by lazy { Lowering(options, poetesse) }
-    private val patches: SortedMap<String, IrPatch> = sortedMapOf()
+    private val patches: SortedMap<String, FirPatch> = sortedMapOf()
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
         val parser = SymbolParser(resolver)
@@ -40,7 +40,7 @@ class LapisSymbolProcessor(
         logger.setPhase(KspLogger.Phase.VALIDATION)
         val validatedPatches = FrontendValidator(options, logger).validatePatches(parsedPatches)
 
-        logger.setPhase(KspLogger.Phase.TRANSFORMATION)
+        logger.setPhase(KspLogger.Phase.LOWERING)
         val irPatches = lowering.lowerPatches(validatedPatches)
         irPatches.forEach { patches[it.className.qualifiedName] = it }
 

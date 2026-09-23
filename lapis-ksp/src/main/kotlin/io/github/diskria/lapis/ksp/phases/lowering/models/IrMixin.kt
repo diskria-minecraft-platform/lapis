@@ -1,7 +1,7 @@
 package io.github.diskria.lapis.ksp.phases.lowering.models
 
 import com.google.devtools.ksp.symbol.KSFile
-import io.github.diskria.lapis.annotations.Env
+import io.github.diskria.lapis.annotations.Side
 import io.github.diskria.lapis.ksp.phases.lowering.models.IrMixin.Injection.Parameter
 import io.github.diskria.poetesse.interop.XClassName
 import io.github.diskria.poetesse.interop.XTypeName
@@ -9,7 +9,7 @@ import io.github.diskria.poetesse.interop.XTypeName
 class IrMixin(
     val patchOriginatingFile: KSFile?,
     val className: XClassName,
-    val env: Env,
+    val side: Side,
     val injections: List<Injection>,
     val duck: IrMixinDuck?,
     val annotations: List<IrMixinAnnotation>,
@@ -35,7 +35,7 @@ class IrMixin(
         override val mixinAnnotations: List<IrMixinAnnotation>,
         override val parameters: List<Parameter>,
         override val returnTypeName: XTypeName?,
-        val extensionReceiverTargetTypeCast: IrTargetTypeCast?
+        val extensionReceiverTargetTypeCast: IrTargetSubtypeCast?
     ) : Injection
 
     class StaticInjection(

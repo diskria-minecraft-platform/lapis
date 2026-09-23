@@ -1,6 +1,6 @@
 package io.github.diskria.lapis.ksp.phases.generator.models
 
-import io.github.diskria.lapis.annotations.Env
+import io.github.diskria.lapis.annotations.Side
 import io.github.diskria.poetesse.interop.XClassName
 import kotlinx.serialization.Serializable
 
@@ -11,14 +11,16 @@ data class GeneratedMixinsJson(
     val server: List<String>? = null,
 ) {
     companion object {
-        fun of(basePackage: String, envClassNames: Map<Env, List<XClassName>>): GeneratedMixinsJson =
+        fun of(basePackage: String, classNames: Map<Side, List<XClassName>>): GeneratedMixinsJson =
             GeneratedMixinsJson(
-                mixins = envClassNames.getRelativeNames(Env.Common, basePackage),
-                client = envClassNames.getRelativeNames(Env.Client, basePackage),
-                server = envClassNames.getRelativeNames(Env.Server, basePackage),
+                mixins = classNames.getRelativeNames(Side.Common, basePackage),
+                client = classNames.getRelativeNames(Side.Client, basePackage),
+                server = classNames.getRelativeNames(Side.Server, basePackage),
             )
 
-        private fun Map<Env, List<XClassName>>.getRelativeNames(env: Env, basePackage: String): List<String>? =
-            get(env)?.takeIf { it.isNotEmpty() }?.map { it.qualifiedName.removePrefix("$basePackage.") }
+        private fun Map<Side, List<XClassName>>.getRelativeNames(
+            side: Side,
+            basePackage: String,
+        ) = get(side)?.takeIf { it.isNotEmpty() }?.map { it.qualifiedName.removePrefix("$basePackage.") }
     }
 }

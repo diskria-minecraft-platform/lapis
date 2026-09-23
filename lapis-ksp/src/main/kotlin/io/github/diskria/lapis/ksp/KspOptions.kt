@@ -75,7 +75,7 @@ data class KspOptions(
 
     private fun MutableList<String>.validateJavaFQCN(property: KProperty0<String?>, example: String) {
         val value = property.get() ?: return
-        if (!value.isValidClassName()) {
+        if (!value.isValidJavaFQCN()) {
             add(
                 "Invalid '${property.name}': expected a valid FQCN " +
                     "(e.g. ${example.quoted()}), but got ${value.quoted()}."
@@ -96,7 +96,7 @@ data class KspOptions(
     }
 }
 
-private fun String.isValidClassName(): Boolean {
+private fun String.isValidJavaFQCN(): Boolean {
     if (!SourceVersion.isName(this)) return false
     val dotIndex = lastIndexOf('.').takeIf { it > 0 } ?: return false
     return getOrNull(dotIndex + 1)?.isUpperCase() == true
@@ -112,5 +112,5 @@ object DelimitedStringListSerializer : KSerializer<List<String>> {
         decoder.decodeString().split(DELIMITERS_REGEX)
 
     override fun serialize(encoder: Encoder, value: List<String>) =
-        error("Serialization is not supported for KspOptions")
+        throw UnsupportedOperationException("Serialization is not supported for KspOptions")
 }

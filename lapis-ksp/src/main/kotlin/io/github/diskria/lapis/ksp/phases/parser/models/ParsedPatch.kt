@@ -3,6 +3,7 @@ package io.github.diskria.lapis.ksp.phases.parser.models
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSNode
 import com.google.devtools.ksp.symbol.KSType
+import com.google.devtools.ksp.symbol.Variance
 
 class ParsedPatch(
     val name: String,
@@ -15,26 +16,27 @@ class ParsedPatch(
     val hasPackageName: Boolean,
     val isPublic: Boolean,
     val classDeclaration: KSClassDeclaration,
+    val typeParameters: List<ParsedTypeParameter>,
     val companionObject: CompanionObject?,
     val constructors: List<Constructor>,
     val properties: List<Property>,
     val functions: List<Function>,
     val annotations: ParsedAnnotations,
-    override val symbol: KSNode = classDeclaration,
-) : SymbolSource {
+    override val node: KSNode = classDeclaration,
+) : KspNode {
 
     class Constructor(
         val isPublic: Boolean,
         val parameters: List<Parameter>,
-        override val symbol: KSNode,
-    ) : SymbolSource {
+        override val node: KSNode,
+    ) : KspNode {
 
         class Parameter(
             val name: ParsedName,
             val type: ParsedType,
             val annotations: ParsedAnnotations,
-            override val symbol: KSNode,
-        ) : SymbolSource
+            override val node: KSNode,
+        ) : KspNode
     }
 
     class Property(
@@ -44,11 +46,12 @@ class ParsedPatch(
         val isOpen: Boolean,
         val isAbstract: Boolean,
         val hasExtensionReceiver: Boolean,
+        val typeParameters: List<ParsedTypeParameter>,
         val annotations: ParsedAnnotations,
         val getter: Getter?,
         val setter: Setter?,
-        override val symbol: KSNode,
-    ) : SymbolSource {
+        override val node: KSNode,
+    ) : KspNode {
 
         class Getter(
             val jvmName: String?,
@@ -65,36 +68,36 @@ class ParsedPatch(
         val jvmName: String?,
         val parameters: List<Parameter>,
         val returnType: ParsedType,
-        val hasTypeParameters: Boolean,
         val isPublic: Boolean,
         val isOpen: Boolean,
         val isAbstract: Boolean,
         val extensionReceiverType: ParsedType?,
         val annotations: ParsedAnnotations,
-        override val symbol: KSNode,
-    ) : SymbolSource {
+        val typeParameters: List<ParsedTypeParameter>,
+        override val node: KSNode,
+    ) : KspNode {
 
         class Parameter(
             val name: ParsedName,
             val type: ParsedType,
             val annotations: ParsedAnnotations,
-            override val symbol: KSNode,
-        ) : SymbolSource
+            override val node: KSNode,
+        ) : KspNode
     }
 
     class CompanionObject(
         val name: String,
         val isPublic: Boolean,
         val functions: List<Function>,
-        override val symbol: KSNode,
-    ) : SymbolSource
+        override val node: KSNode,
+    ) : KspNode
 }
 
 sealed interface ParsedName
 class ValidName(val name: String) : ParsedName
 object InvalidName : ParsedName
 
-sealed interface ParsedType
+sealed interface ParsedType : KspNode
 class ValidType(
     val type: KSType,
     val isAny: Boolean,
@@ -103,6 +106,17 @@ class ValidType(
     val packageName: String,
     val qualifiedName: String,
     val classDeclaration: KSClassDeclaration,
+    override val node: KSNode,
 ) : ParsedType
 
-object InvalidType : ParsedType
+class InvalidType(override val node: KSNode) : ParsedType
+
+sealed interface ParsedTypeParameter
+class ValidTypeParameter(
+    val name: String,
+    val variance: Variance,
+    val isReified: Boolean,
+    val bounds: List<ParsedType>,
+) : ParsedTypeParameter
+
+object InvalidTypeParameter : ParsedTypeParameter

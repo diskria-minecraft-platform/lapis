@@ -8,9 +8,9 @@ import kotlin.enums.enumEntries
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 
-sealed interface ParsedAnnotation : SymbolSource {
+sealed interface ParsedAnnotation : KspNode {
 
-    sealed interface Argument : SymbolSource {
+    sealed interface Argument : KspNode {
 
         sealed interface Value<out T> {
             val raw: T
@@ -54,26 +54,26 @@ sealed interface ParsedAnnotation : SymbolSource {
         override val name: String,
         override val isExplicit: Boolean,
         val value: Argument.Value<*>,
-        override val symbol: KSNode,
+        override val node: KSNode,
     ) : ValidArgument
 
     class ArrayArgument(
         override val name: String,
         override val isExplicit: Boolean,
         val elements: List<Argument.Value<*>>,
-        override val symbol: KSNode,
+        override val node: KSNode,
     ) : ValidArgument
 
-    class InvalidArgument(override val symbol: KSNode) : Argument
+    class InvalidArgument(override val node: KSNode) : Argument
 }
 
 class ValidAnnotation(
     val type: ValidType,
     val arguments: List<Argument>,
-    override val symbol: KSNode,
+    override val node: KSNode,
 ) : ParsedAnnotation
 
-class InvalidAnnotation(override val symbol: KSNode) : ParsedAnnotation
+class InvalidAnnotation(override val node: KSNode) : ParsedAnnotation
 
 class ParsedAnnotations(
     val api: List<ValidAnnotation>,
@@ -130,11 +130,11 @@ class ParsedAnnotations(
 
     data class ApiScalarArgument<T>(
         val value: T,
-        val symbol: SymbolSource,
+        val node: KspNode,
     )
 
     data class ApiArrayArgument<T>(
         val elements: List<T>,
-        val symbol: SymbolSource,
+        val node: KspNode,
     )
 }

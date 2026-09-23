@@ -5,6 +5,7 @@ import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.symbol.*
 import io.github.diskria.lapis.annotations.KMixin
 import io.github.diskria.lapis.ksp.extensions.internalError
+import io.github.diskria.lapis.ksp.extensions.isSubpackageOf
 import io.github.diskria.lapis.ksp.extensions.requireQualifiedName
 import io.github.diskria.lapis.ksp.phases.parser.models.*
 
@@ -43,11 +44,13 @@ class SymbolParser(private val resolver: Resolver) {
             functions = declaration.getDeclaredFunctions().filter { !it.isConstructor() }.map(::parsePatchFunction)
                 .toList(),
             annotations = parseAnnotations(declaration),
+            typeParameters = parseTypeParameters(declaration),
+            node = declaration,
         )
     }
 
     private fun parsePatchConstructor(declaration: KSFunctionDeclaration) = ParsedPatch.Constructor(
-        symbol = declaration,
+        node = declaration,
         isPublic = declaration.isPublic(),
         parameters = declaration.parameters.map(::parsePatchConstructorParameter),
     )
@@ -56,7 +59,7 @@ class SymbolParser(private val resolver: Resolver) {
         name = parseName(parameter.name),
         type = parseType(parameter.type),
         annotations = parseAnnotations(parameter),
-        symbol = parameter,
+        node = parameter,
     )
 
     private fun parsePatchCompanionObject(declaration: KSClassDeclaration) = ParsedPatch.CompanionObject(
@@ -64,7 +67,7 @@ class SymbolParser(private val resolver: Resolver) {
         isPublic = declaration.isPublic(),
         functions = declaration.getDeclaredFunctions().filter { !it.isConstructor() }.map(::parsePatchFunction)
             .toList(),
-        symbol = declaration,
+        node = declaration,
     )
 
     @OptIn(KspExperimental::class)
@@ -86,8 +89,9 @@ class SymbolParser(private val resolver: Resolver) {
                 jvmName = resolver.getJvmName(it),
             )
         },
+        typeParameters = parseTypeParameters(declaration),
         annotations = parseAnnotations(declaration),
-        symbol = declaration,
+        node = declaration,
     )
 
     @OptIn(KspExperimental::class)
@@ -95,21 +99,21 @@ class SymbolParser(private val resolver: Resolver) {
         name = declaration.simpleName.asString(),
         jvmName = resolver.getJvmName(declaration),
         parameters = declaration.parameters.map(::parsePatchFunctionParameter),
-        returnType = parseTypeOrError(declaration.returnType),
-        hasTypeParameters = declaration.typeParameters.isNotEmpty(),
+        returnType = parseTypeOrError(declaration.returnType, declaration),
         isPublic = declaration.isPublic(),
         isOpen = Modifier.OPEN in declaration.modifiers,
         isAbstract = declaration.isAbstract,
         extensionReceiverType = parseOptionalType(declaration.extensionReceiver),
+        typeParameters = parseTypeParameters(declaration),
         annotations = parseAnnotations(declaration),
-        symbol = declaration,
+        node = declaration,
     )
 
     private fun parsePatchFunctionParameter(parameter: KSValueParameter) = ParsedPatch.Function.Parameter(
         name = parseName(parameter.name),
         type = parseType(parameter.type),
         annotations = parseAnnotations(parameter),
-        symbol = parameter,
+        node = parameter,
     )
 
     private fun parseAnnotations(annotated: KSAnnotated): ParsedAnnotations {
@@ -117,7 +121,7 @@ class SymbolParser(private val resolver: Resolver) {
         val external = mutableListOf<ParsedAnnotation>()
         annotated.annotations.forEach {
             val annotation = parseAnnotation(it)
-            if (annotation is ValidAnnotation && annotation.type.packageName == "io.github.diskria.lapis.annotations") {
+            if (annotation is ValidAnnotation && annotation.type.packageName.isSubpackageOf(API_ANNOTATIONS_PACKAGE)) {
                 api += annotation
             } else {
                 external += annotation
@@ -131,12 +135,12 @@ class SymbolParser(private val resolver: Resolver) {
         return ValidAnnotation(
             type = type,
             arguments = annotation.arguments.map { parseAnnotationArgument(it) },
-            symbol = annotation,
+            node = annotation,
         )
     }
 
     private fun parseAnnotationArgument(argument: KSValueArgument): ParsedAnnotation.Argument {
-        val name = (parseName(argument.name) as? ValidName)?.name ?: return ParsedAnnotation.InvalidArgument(argument)
+        val argumentName = parseName(argument.name) as? ValidName ?: return ParsedAnnotation.InvalidArgument(argument)
         val rawValues = when (val value = argument.value) {
             is Collection<*> -> value.toList()
             is Array<*> -> value.toList()
@@ -146,7 +150,8 @@ class SymbolParser(private val resolver: Resolver) {
             var firstClass: Class<*>? = null
             val elements = rawValues.map { rawValue ->
                 rawValue ?: return ParsedAnnotation.InvalidArgument(argument)
-                val value = parseAnnotationArgumentValue(rawValue) ?: return ParsedAnnotation.InvalidArgument(argument)
+                val value = parseAnnotationArgumentValue(rawValue, argument)
+                    ?: return ParsedAnnotation.InvalidArgument(argument)
                 if (firstClass == null) {
                     firstClass = value.javaClass
                 } else if (value.javaClass != firstClass) {
@@ -155,23 +160,24 @@ class SymbolParser(private val resolver: Resolver) {
                 value
             }
             return ParsedAnnotation.ArrayArgument(
-                name = name,
+                name = argumentName.name,
                 isExplicit = argument.origin != com.google.devtools.ksp.symbol.Origin.SYNTHETIC,
                 elements = elements,
-                symbol = argument,
+                node = argument,
             )
         }
         val rawValue = argument.value ?: return ParsedAnnotation.InvalidArgument(argument)
-        val value = parseAnnotationArgumentValue(rawValue) ?: return ParsedAnnotation.InvalidArgument(argument)
+        val value = parseAnnotationArgumentValue(rawValue, argument)
+            ?: return ParsedAnnotation.InvalidArgument(argument)
         return ParsedAnnotation.ScalarArgument(
-            name = name,
+            name = argumentName.name,
             isExplicit = argument.origin != com.google.devtools.ksp.symbol.Origin.SYNTHETIC,
             value = value,
-            symbol = argument,
+            node = argument,
         )
     }
 
-    private fun parseAnnotationArgumentValue(rawValue: Any) = when (rawValue) {
+    private fun parseAnnotationArgumentValue(rawValue: Any, argument: KSValueArgument) = when (rawValue) {
         is Boolean -> ParsedAnnotation.Argument.BooleanValue(rawValue)
         is Byte -> ParsedAnnotation.Argument.ByteValue(rawValue)
         is Short -> ParsedAnnotation.Argument.ShortValue(rawValue)
@@ -181,7 +187,7 @@ class SymbolParser(private val resolver: Resolver) {
         is Float -> ParsedAnnotation.Argument.FloatValue(rawValue)
         is Double -> ParsedAnnotation.Argument.DoubleValue(rawValue)
         is String -> ParsedAnnotation.Argument.StringValue(rawValue)
-        is KSType -> (parseType(rawValue) as? ValidType)?.let { ParsedAnnotation.Argument.TypeValue(it) }
+        is KSType -> (parseType(rawValue, argument) as? ValidType)?.let { ParsedAnnotation.Argument.TypeValue(it) }
         is KSClassDeclaration -> {
             val enumClassDeclaration = rawValue.parentDeclaration as? KSClassDeclaration
                 ?: internalError(
@@ -202,14 +208,14 @@ class SymbolParser(private val resolver: Resolver) {
     }
 
     private fun parseName(name: KSName?): ParsedName =
-        name?.let { ValidName(it.asString()) } ?: InvalidName
+        name?.asString()?.takeIf { it.isNotBlank() }?.let { ValidName(it) } ?: InvalidName
 
-    private fun parseType(type: KSType): ParsedType =
-        if (type.isError) InvalidType
+    private fun parseType(type: KSType, node: KSNode): ParsedType =
+        if (type.isError) InvalidType(node)
         else {
-            val classDeclaration = type.declaration as? KSClassDeclaration ?: return InvalidType
-            val packageName = parseName(classDeclaration.packageName) as? ValidName ?: return InvalidType
-            val qualifiedName = parseName(classDeclaration.qualifiedName) as? ValidName ?: return InvalidType
+            val classDeclaration = type.declaration as? KSClassDeclaration ?: return InvalidType(node)
+            val packageName = parseName(classDeclaration.packageName) as? ValidName ?: return InvalidType(node)
+            val qualifiedName = parseName(classDeclaration.qualifiedName) as? ValidName ?: return InvalidType(node)
             ValidType(
                 type = type,
                 isAny = type.makeNotNullable() == resolver.builtIns.anyType,
@@ -218,11 +224,12 @@ class SymbolParser(private val resolver: Resolver) {
                 packageName = packageName.name,
                 qualifiedName = qualifiedName.name,
                 classDeclaration = classDeclaration,
+                node = node,
             )
         }
 
     private fun parseType(reference: KSTypeReference): ParsedType =
-        parseType(reference.resolve())
+        parseType(reference.resolve(), reference)
 
     @Suppress("unused")
     @Deprecated(
@@ -235,9 +242,24 @@ class SymbolParser(private val resolver: Resolver) {
         throw UnsupportedOperationException("Deprecated function overload cannot be called at runtime.")
     }
 
-    private fun parseTypeOrError(reference: KSTypeReference?): ParsedType =
-        reference?.let { parseType(it) } ?: InvalidType
+    private fun parseTypeOrError(reference: KSTypeReference?, node: KSNode): ParsedType =
+        reference?.let { parseType(it) } ?: InvalidType(node)
 
     private fun parseOptionalType(reference: KSTypeReference?): ParsedType? =
         reference?.let { parseType(it) }
+
+    private fun parseTypeParameters(declaration: KSDeclaration): List<ParsedTypeParameter> =
+        declaration.typeParameters.map { typeParameter ->
+            val typeParameterName = parseName(typeParameter.name) as? ValidName ?: return@map InvalidTypeParameter
+            ValidTypeParameter(
+                name = typeParameterName.name,
+                variance = typeParameter.variance,
+                isReified = typeParameter.isReified,
+                bounds = typeParameter.bounds.map { parseType(it) }.toList(),
+            )
+        }
+
+    companion object {
+        private const val API_ANNOTATIONS_PACKAGE = "io.github.diskria.lapis.annotations"
+    }
 }

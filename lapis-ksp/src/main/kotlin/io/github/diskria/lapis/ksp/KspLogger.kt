@@ -7,46 +7,42 @@ import com.google.devtools.ksp.symbol.NonExistLocation
 
 class KspLogger(private val logger: KSPLogger) {
 
-    private var currentPhase: Phase = Phase.BOOTSTRAP
-
-    fun info(message: String, symbol: KSNode? = null) {
-        logger.info(buildFullMessage(message, symbol))
-    }
-
-    fun warn(message: String, symbol: KSNode? = null) {
-        logger.warn(buildFullMessage(message, symbol))
-    }
-
-    fun error(message: String, symbol: KSNode? = null) {
-        logger.error(buildFullMessage(message, symbol))
-    }
-
-    fun fatal(message: String, symbol: KSNode? = null): Nothing {
-        error(message, symbol)
-        throw LapisException(message)
-    }
+    private var currentPhase: Phase = Phase.INITIALIZATION
 
     fun setPhase(phase: Phase) {
         currentPhase = phase
     }
 
-    private fun buildFullMessage(message: String, symbol: KSNode?): String = buildString {
+    fun warn(message: String, node: KSNode? = null) {
+        logger.warn(buildFullMessage(message, node))
+    }
+
+    fun error(message: String, node: KSNode? = null) {
+        logger.error(buildFullMessage(message, node))
+    }
+
+    fun fatal(message: String, node: KSNode? = null): Nothing {
+        error(message, node)
+        throw LapisException(message)
+    }
+
+    private fun buildFullMessage(message: String, node: KSNode?): String = buildString {
         appendLine("[Lapis] [Phase: $currentPhase]")
         appendLine(message.trimEnd())
-        symbol?.let {
+        node?.let {
             val locationText = when (val location = it.location) {
                 is FileLocation -> location.ideaLink
                 is NonExistLocation -> "<no physical location>"
             }
-            appendLine("└── '$symbol' at $locationText")
+            appendLine("└── '$node' at $locationText")
         }
     }
 
     enum class Phase {
-        BOOTSTRAP,
+        INITIALIZATION,
         PARSING,
         VALIDATION,
-        TRANSFORMATION,
+        LOWERING,
         GENERATION,
     }
 }

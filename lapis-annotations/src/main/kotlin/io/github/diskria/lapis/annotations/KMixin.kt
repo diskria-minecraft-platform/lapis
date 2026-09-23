@@ -9,11 +9,11 @@ import kotlin.reflect.KClass
 @Retention(SOURCE)
 annotation class KMixin(
     val target: KClass<*> = Any::class,
-    val env: Env = Env.Common,
+    val side: Side,
     val initStrategy: InitStrategy = InitStrategy.Lazy,
 )
 
-enum class Env { Common, Client, Server }
+enum class Side { Common, Client, Server }
 enum class InitStrategy { Eager, Lazy, Volatile, Synchronized }
 
 @Target(VALUE_PARAMETER)

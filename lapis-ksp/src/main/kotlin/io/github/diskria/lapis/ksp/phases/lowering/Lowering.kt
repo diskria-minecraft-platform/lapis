@@ -17,19 +17,19 @@ import javax.lang.model.element.Modifier.*
 
 class Lowering(private val options: KspOptions, private val poetesse: PoetesseScope) {
 
-    fun lowerPatches(patches: List<Patch>): List<IrPatch> {
+    fun lowerPatches(patches: List<Patch>): List<FirPatch> {
         val mixinSourcePackageLCP = if (options.disableLCP) null else {
             findMixinSourcePackageLCP(patches)
         }
         return patches.map { lowerPatch(it, mixinSourcePackageLCP) }
     }
 
-    private fun lowerPatch(patch: Patch, mixinSourcePackageLCP: String?): IrPatch {
+    private fun lowerPatch(patch: Patch, mixinSourcePackageLCP: String?): FirPatch {
         val mixin = lowerMixin(patch, mixinSourcePackageLCP)
         return when (val classKind = patch.classKind) {
             is Patch.Class -> {
                 val constructorParameters = classKind.constructorParameters.map(::lowerPatchClassConstructorParameter)
-                IrPatchClass(
+                FirPatchClass(
                     className = patch.classDeclaration.toXClassName(),
                     mixin = mixin,
                     impl = if (classKind.isAbstract) lowerPatchImpl(patch, mixin, constructorParameters) else null,
@@ -38,7 +38,7 @@ class Lowering(private val options: KspOptions, private val poetesse: PoetesseSc
                 )
             }
 
-            Patch.Interface -> IrPatchInterface(
+            Patch.Interface -> FirPatchInterface(
                 className = patch.classDeclaration.toXClassName(),
                 mixin = mixin,
             )
@@ -46,19 +46,19 @@ class Lowering(private val options: KspOptions, private val poetesse: PoetesseSc
     }
 
     private fun lowerPatchClassConstructorParameter(parameter: Patch.Class.ConstructorParameter) = when (parameter) {
-        is Patch.Class.ConstructorParameter.Origin -> IrPatchClass.ConstructorParameter.Origin(
+        is Patch.Class.ConstructorParameter.Origin -> FirPatchClass.ConstructorParameter.Origin(
             name = parameter.name,
-            targetTypeCast = lowerTargetTypeCast(parameter.type),
+            targetTypeCast = lowerTargetSubtypeCast(parameter.type),
         )
     }
 
     private fun lowerPatchImpl(
-        patch: Patch, mixin: IrMixin, constructorParameters: List<IrPatchClass.ConstructorParameter>,
+        patch: Patch, mixin: IrMixin, constructorParameters: List<FirPatchClass.ConstructorParameter>,
     ) = IrPatchImpl(
         patchOriginatingFile = patch.containingFile,
         className = patch.classDeclaration.toXClassName().withSuffix("_Impl"),
         constructorParameters = buildList {
-            constructorParameters.firstNotNullOfOrNull { it as? IrPatchClass.ConstructorParameter.Origin }?.let {
+            constructorParameters.firstNotNullOfOrNull { it as? FirPatchClass.ConstructorParameter.Origin }?.let {
                 add(IrPatchImpl.ConstructorParameter.Instance(it.name, it.targetTypeCast))
             }
             if (mixin.duck != null && patch.shadowSources.isNotEmpty()) {
@@ -78,7 +78,7 @@ class Lowering(private val options: KspOptions, private val poetesse: PoetesseSc
         return IrMixin(
             patchOriginatingFile = patch.containingFile,
             className = resolveMixinClassName(patch.classDeclaration.toXClassName(), sourcePackageLCP),
-            env = patch.env,
+            side = patch.side,
             injections = buildList {
                 addAll(patch.injections.map(::lowerMemberInjection))
                 patch.companionObject?.let { companionObject ->
@@ -123,7 +123,7 @@ class Lowering(private val options: KspOptions, private val poetesse: PoetesseSc
             sourceSetterJvmName = source.setterJvmName,
             getterName = source.getterJvmName.withUniqueModPrefix(),
             setterName = source.setterJvmName?.withUniqueModPrefix(),
-            receiverTargetTypeCast = lowerTargetTypeCast(source.receiverType),
+            receiverTargetTypeCast = lowerTargetSubtypeCast(source.receiverType),
         )
 
         is Patch.Extension.Function -> IrMixinDuck.Extension.Function(
@@ -132,7 +132,7 @@ class Lowering(private val options: KspOptions, private val poetesse: PoetesseSc
             name = source.jvmName.withUniqueModPrefix(),
             parameters = source.parameters.map { IrFunctionParameter(it.name, it.type.toXTypeName()) },
             returnTypeName = source.returnType?.takeIf { !it.isUnit }?.toXTypeName(),
-            receiverTargetTypeCast = lowerTargetTypeCast(source.receiverType),
+            receiverTargetTypeCast = lowerTargetSubtypeCast(source.receiverType),
         )
     }
 
@@ -191,7 +191,7 @@ class Lowering(private val options: KspOptions, private val poetesse: PoetesseSc
             )
         },
         returnTypeName = injection.returnType?.takeIf { !it.isUnit }?.takeIf { !it.isUnit }?.toXTypeName(),
-        extensionReceiverTargetTypeCast = injection.extensionReceiverType?.let { lowerTargetTypeCast(it) },
+        extensionReceiverTargetTypeCast = injection.extensionReceiverType?.let { lowerTargetSubtypeCast(it) },
     )
 
     private fun lowerStaticInjection(
@@ -253,10 +253,10 @@ class Lowering(private val options: KspOptions, private val poetesse: PoetesseSc
         }
     }
 
-    private fun lowerTargetTypeCast(targetCompatibleType: Type) = IrTargetTypeCast(
-        typeName = targetCompatibleType.toXTypeName(),
-        isUnsafeCastRequired = !targetCompatibleType.isInterface,
-        isTargetCastRequired = !targetCompatibleType.isAny,
+    private fun lowerTargetSubtypeCast(targetSubtype: Type) = IrTargetSubtypeCast(
+        typeName = targetSubtype.toXTypeName(),
+        isUnsafeCastRequired = !targetSubtype.isInterface,
+        isTargetCastRequired = !targetSubtype.isAny,
     )
 
     private fun lowerShadowModifiers(
