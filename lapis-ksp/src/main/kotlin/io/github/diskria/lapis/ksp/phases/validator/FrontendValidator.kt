@@ -445,7 +445,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         roleDesc: String,
         sources: Boolean = false,
     ): String {
-        kspRequire(SourceVersion.isName(name)) {
+        kspRequire(SourceVersion.isIdentifier(name)) {
             val ensureDesc = if (sources) {
                 "matches a valid name in the decompiled Minecraft source code"
             } else {
@@ -576,6 +576,13 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             Reified type parameter '$name' is not supported in @KMixin.
             Why: 'reified' type parameters only exist in Kotlin inline functions and cannot be used in Java.
             How to fix: Remove the 'reified' keyword from parameter.
+            """.trimIndent()
+        }
+        kspRequire(SourceVersion.isIdentifier(name)) {
+            """
+            Type parameter name '$name' must be a valid Java identifier.
+            Why: This name is used to generate type parameters in Java Mixin.
+            How to fix: Rename the type parameter to a valid Java identifier (e.g. 'T').
             """.trimIndent()
         }
         return TypeParameter(
