@@ -149,7 +149,7 @@ class SymbolParser(private val resolver: Resolver) {
         if (rawValues != null) {
             val elements = rawValues.map { rawValue ->
                 rawValue ?: return ParsedAnnotation.InvalidArgument(argument)
-                parseAnnotationArgumentValue(rawValue, argument) ?: return ParsedAnnotation.InvalidArgument(argument)
+                parseAnnotationArgumentValue(rawValue, argument)
             }
             if (elements.distinctBy { it::class }.size > 1) {
                 return ParsedAnnotation.InvalidArgument(argument)
@@ -163,7 +163,6 @@ class SymbolParser(private val resolver: Resolver) {
         }
         val rawValue = argument.value ?: return ParsedAnnotation.InvalidArgument(argument)
         val parsedValue = parseAnnotationArgumentValue(rawValue, argument)
-            ?: return ParsedAnnotation.InvalidArgument(argument)
         return ParsedAnnotation.ScalarArgument(
             name = argument.name?.asString().orEmpty(),
             isExplicit = argument.origin != com.google.devtools.ksp.symbol.Origin.SYNTHETIC,
@@ -174,7 +173,7 @@ class SymbolParser(private val resolver: Resolver) {
 
     private fun parseAnnotationArgumentValue(
         rawValue: Any, argument: KSValueArgument
-    ): ParsedAnnotation.Argument.Value? = when (rawValue) {
+    ): ParsedAnnotation.Argument.Value = when (rawValue) {
         is Boolean -> ParsedAnnotation.Argument.BooleanValue(rawValue)
         is Byte -> ParsedAnnotation.Argument.ByteValue(rawValue)
         is Short -> ParsedAnnotation.Argument.ShortValue(rawValue)
@@ -184,13 +183,7 @@ class SymbolParser(private val resolver: Resolver) {
         is Float -> ParsedAnnotation.Argument.FloatValue(rawValue)
         is Double -> ParsedAnnotation.Argument.DoubleValue(rawValue)
         is String -> ParsedAnnotation.Argument.StringValue(rawValue)
-        is KSType -> {
-            val parsedType = parseType(rawValue, argument)
-            if (parsedType is ValidType && parsedType.classDeclaration != null) {
-                ParsedAnnotation.Argument.TypeValue(parsedType, parsedType.classDeclaration)
-            } else null
-        }
-
+        is KSType -> ParsedAnnotation.Argument.TypeValue(parseType(rawValue, argument))
         is KSClassDeclaration -> {
             val classDeclaration = rawValue.parentDeclaration?.unwrapTypealiases() as? KSClassDeclaration
                 ?: internalError(

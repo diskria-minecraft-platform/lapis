@@ -22,7 +22,7 @@ sealed interface ParsedAnnotation : NodeHolder {
         class FloatValue(val float: Float) : Value
         class DoubleValue(val double: Double) : Value
         class StringValue(val string: String) : Value
-        class TypeValue(val type: ParsedType, val classDeclaration: KSClassDeclaration) : Value
+        class TypeValue(val type: ParsedType) : Value
         class EnumValue(val enumClassDeclaration: KSClassDeclaration, val entryName: String) : Value
         class AnnotationValue(val annotation: ParsedAnnotation) : Value
     }

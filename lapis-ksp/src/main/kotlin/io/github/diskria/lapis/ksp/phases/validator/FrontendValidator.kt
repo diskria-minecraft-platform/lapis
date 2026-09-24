@@ -45,7 +45,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         }
         kspRequire(!isSealed) { "" }
         kspRequire(!isOpen) { "" }
-        val mixinAnnotations = annotations.validate()
+        val mixinAnnotations = annotations.filterMixinAnnotations()
         val targetArgument = kspRequireNotNull(annotations.findApiArgument(KMixin::target)) {
             val usedDesc = listOfNotNull(
                 if (mixinAnnotations.isEmpty()) "generating the Java @Mixin annotation" else null,
@@ -57,14 +57,14 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             How to fix: Ensure the target argument in @KMixin has no compilation errors.
             """.trimIndent()
         }
-        val kMixinInitStrategy = kspRequireNotNull(annotations.findApiArgument(KMixin::initStrategy)?.value) {
+        val initStrategy = kspRequireNotNull(annotations.findApiArgument(KMixin::initStrategy)?.value) {
             """
             Init strategy argument must be valid.
             Why: Init strategy is used for generating instantiation logic in Java Mixin. 
             How to fix: Ensure the initStrategy argument in @KMixin has no compilation errors.
             """.trimIndent()
         }
-        val kMixinSide = kspRequireNotNull(annotations.findApiArgument(KMixin::side)?.value) {
+        val side = kspRequireNotNull(annotations.findApiArgument(KMixin::side)?.value) {
             """
             Side argument must be valid and specified explicitly.
             Why: Implicit side risks loading the Java Mixin in the wrong target environment.
@@ -73,27 +73,88 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         }
         val targetType = targetArgument.value.validate()
         val targetClassDeclaration = kspRequireNotNull(targetType.classDeclaration) { "" }
-        val (injectionFunctions, regularFunctions) = functions.partition { function ->
-            function.annotations.validate().isNotEmpty()
+
+        val shadowProperties = mutableListOf<Patch.Shadow.Property>()
+        val extensionProperties = mutableListOf<Patch.Extension.Property>()
+        properties.filterValid { property ->
+            val getterMixinAnnotations = property.getter?.annotations?.filterMixinAnnotations().orEmpty()
+            val hasShadowAnnotation = property.annotations.hasApiAnnotation<KShadow>()
+            val hasExtensionAnnotation = property.annotations.hasApiAnnotation<Extension>()
+            if (hasShadowAnnotation && hasExtensionAnnotation) {
+                property.kspError {
+                    """
+                    Property cannot be marked as both @KShadow and @Extension.
+                    Why: @KShadow targets existing target members, while @Extension introduces new synthetic members.
+                    How to fix: Remove either @KShadow or @Extension annotation from the property.
+                    """.trimIndent()
+                }
+            }
+            if (hasShadowAnnotation) {
+                shadowProperties += property.validateAsShadow(isInterface, getterMixinAnnotations)
+            } else if (hasExtensionAnnotation) {
+                property.kspRequire(getterMixinAnnotations.isEmpty()) {
+                    """
+                    Extension properties cannot have mixin-related annotations on their getter.
+                    Why: Extension members introduce new functionality and cannot be used as injection points.
+                    How to fix: Remove mixin annotations (such as @Inject) from the property getter.
+                    """.trimIndent()
+                }
+                extensionProperties += property.validateAsExtension(targetType)
+            }
         }
-        val extensionProperties = properties.filter { it.annotations.hasApiAnnotation<Extension>() }.filterValid {
-            it.validateAsExtension(targetType)
-        }
-        val extensionFunctions = regularFunctions.filter { it.annotations.hasApiAnnotation<Extension>() }.filterValid {
-            it.validateAsExtension(targetType)
-        }
-        val kShadowProperties = properties.filter { it.annotations.hasApiAnnotation<KShadow>() }.filterValid {
-            it.validateAsShadow(isInterface)
-        }
-        val kShadowFunctions = regularFunctions.filter { it.annotations.hasApiAnnotation<KShadow>() }.filterValid {
-            it.validateAsShadow(isInterface)
-        }
-        val injections = injectionFunctions.filterValid {
-            it.validateAsInjection(isInCompanionObject = false, targetType)
+
+        val shadowFunctions = mutableListOf<Patch.Shadow.Function>()
+        val extensionFunctions = mutableListOf<Patch.Extension.Function>()
+        val injections = mutableListOf<Patch.Injection>()
+        functions.filterValid { function ->
+            val mixinAnnotations = function.annotations.filterMixinAnnotations()
+            val hasShadowAnnotation = function.annotations.hasApiAnnotation<KShadow>()
+            val hasExtensionAnnotation = function.annotations.hasApiAnnotation<Extension>()
+            if (hasShadowAnnotation && hasExtensionAnnotation) {
+                function.kspError {
+                    """
+                    Function cannot be marked as both @KShadow and @Extension.
+                    Why: @KShadow targets existing target members, while @Extension introduces new synthetic members.
+                    How to fix: Remove either @KShadow or @Extension annotation from the function.
+                    """.trimIndent()
+                }
+            }
+            if (hasShadowAnnotation) {
+                shadowFunctions += function.validateAsShadow(isInterface, mixinAnnotations)
+            } else if (hasExtensionAnnotation) {
+                function.kspRequire(mixinAnnotations.isEmpty()) {
+                    """
+                    Extension functions cannot have mixin-related annotations.
+                    Why: Extension members introduce new functionality and cannot be used as injection points.
+                    How to fix: Remove mixin annotations (such as @Inject) from the function.
+                    """.trimIndent()
+                }
+                extensionFunctions += function.validateAsExtension(targetType)
+            } else if (mixinAnnotations.isNotEmpty()) {
+                injections += function.validateAsInjection(isInCompanionObject = false, targetType, mixinAnnotations)
+            }
         }
         val companionObject = companionObject?.validate()?.let { companionObject ->
-            val injections = companionObject.functions.filterValid {
-                it.validateAsInjection(isInCompanionObject = true, targetType)
+            val injections = mutableListOf<Patch.Injection>()
+            companionObject.functions.filterValid { function ->
+                function.kspRequire(!function.annotations.hasApiAnnotation<KShadow>()) {
+                    """
+                    @KShadow functions in companion objects are currently unsupported.
+                    Why: Static shadowing requires generating accessor interfaces, which is planned for a future release.
+                    How to fix: Remove @KShadow from the companion object function for now or access the target member via reflection until static shadowing is implemented.
+                    """.trimIndent()
+                }
+                function.kspRequire(!function.annotations.hasApiAnnotation<Extension>()) {
+                    """
+                    @Extension functions in companion objects are unnecessary and unsupported.
+                    Why: Companion object functions are already globally accessible static members. Extensions are meant for instance-bound members of the target class.
+                    How to fix: Remove @Extension annotation and call the companion object function directly.
+                    """.trimIndent()
+                }
+                val mixinAnnotations = function.annotations.filterMixinAnnotations()
+                if (mixinAnnotations.isNotEmpty()) {
+                    injections += function.validateAsInjection(isInCompanionObject = true, targetType, mixinAnnotations)
+                }
             }
             Patch.CompanionObject(name = companionObject.name, injections = injections)
         }
@@ -131,11 +192,11 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             containingFile = node.containingFile,
             classDeclaration = classDeclaration,
             name = name,
-            side = kMixinSide,
-            initStrategy = kMixinInitStrategy,
+            side = side,
+            initStrategy = initStrategy,
             classKind = classKind,
             targetClassDeclaration = targetClassDeclaration,
-            shadowSources = if (isAbstract || isInterface) kShadowProperties + kShadowFunctions else emptyList(),
+            shadowSources = if (isAbstract || isInterface) shadowProperties + shadowFunctions else emptyList(),
             extensionSources = extensionProperties + extensionFunctions,
             injections = injections,
             companionObject = companionObject,
@@ -195,7 +256,10 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         )
     }
 
-    private fun ParsedPatch.Property.validateAsShadow(isInterface: Boolean): Patch.Shadow.Property {
+    private fun ParsedPatch.Property.validateAsShadow(
+        isInterface: Boolean,
+        mixinAnnotations: List<MixinAnnotation>,
+    ): Patch.Shadow.Property {
         kspRequire(isPublic) { "" }
         kspRequire(isAbstract) { "" }
         kspRequire(!hasExtensionReceiver) { "" }
@@ -206,20 +270,23 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         val mappingName = mappingNameValueArgument?.let { (value, node) ->
             node.validateJavaIdentifierName(value, "@KShadow property's @MappingName value", sources = true)
         } ?: name
-        val kShadowModifiersArgument = annotations.findApiArgument(KShadow::modifiers)
+        val modifiersArgument = annotations.findApiArgument(KShadow::modifiers)
         return Patch.Shadow.Property(
             name = name,
             getterJvmName = getter.jvmName,
             setterJvmName = if (setter != null) kspRequireNotNull(setter.jvmName) { "" } else null,
             mappingName = mappingName,
-            modifiers = validateModifiers(kShadowModifiersArgument?.elements.orEmpty(), isInterface, isField = true),
+            modifiers = validateShadowModifiers(modifiersArgument?.elements.orEmpty(), isInterface, isField = true),
             type = type.validate(),
-            mixinAnnotations = getter.annotations.validate(),
+            mixinAnnotations = mixinAnnotations,
             typeParameters = typeParameters.validate(),
         )
     }
 
-    private fun ParsedPatch.Function.validateAsShadow(isInterface: Boolean): Patch.Shadow.Function {
+    private fun ParsedPatch.Function.validateAsShadow(
+        isInterface: Boolean,
+        mixinAnnotations: List<MixinAnnotation>,
+    ): Patch.Shadow.Function {
         kspRequire(isPublic) { "" }
         kspRequireNotNull(jvmName) { "" }
         kspRequire(isAbstract) { "" }
@@ -229,15 +296,15 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         val mappingName = mappingNameArgument?.let { (value, node) ->
             node.validateJavaIdentifierName(value, "@KShadow function's @MappingName value", sources = true)
         } ?: name
-        val kShadowModifiersArgument = annotations.findApiArgument(KShadow::modifiers)
+        val modifiersArgument = annotations.findApiArgument(KShadow::modifiers)
         return Patch.Shadow.Function(
             name = name,
             jvmName = jvmName,
             parameters = parameters.map { FunctionParameter(name = it.name, type = it.type.validate()) },
             returnType = returnType.validate(),
             mappingName = mappingName,
-            mixinAnnotations = annotations.validate(),
-            modifiers = validateModifiers(kShadowModifiersArgument?.elements.orEmpty(), isInterface, isField = false),
+            mixinAnnotations = mixinAnnotations,
+            modifiers = validateShadowModifiers(modifiersArgument?.elements.orEmpty(), isInterface, isField = false),
             typeParameters = typeParameters.validate(),
         )
     }
@@ -245,6 +312,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
     private fun ParsedPatch.Function.validateAsInjection(
         isInCompanionObject: Boolean,
         targetType: Type,
+        mixinAnnotations: List<MixinAnnotation>,
     ): Patch.Injection {
         kspRequireNotNull(jvmName) { "" }
         kspRequire(!isOpen) { "" }
@@ -260,7 +328,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
                     roleDesc = "Injection extension receiver",
                 )
             },
-            mixinAnnotations = annotations.validate(),
+            mixinAnnotations = mixinAnnotations,
             parameters = parameters.map { it.validateAsInjectionParameter() },
             returnType = returnType.validate(),
             typeParameters = typeParameters.validate(),
@@ -270,7 +338,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
     private fun ParsedPatch.Function.Parameter.validateAsInjectionParameter() = Patch.Injection.Parameter(
         name = name,
         type = type.validate(),
-        mixinAnnotations = annotations.validate(),
+        mixinAnnotations = annotations.filterMixinAnnotations(),
     )
 
     private fun ParsedType.validate(): Type {
@@ -284,7 +352,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         )
     }
 
-    private fun NodeHolder.validateModifiers(
+    private fun NodeHolder.validateShadowModifiers(
         rawModifiers: List<Modifier>,
         isInterface: Boolean,
         isField: Boolean,
@@ -301,29 +369,91 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
                 result.add(ABSTRACT)
             }
         }
+        kspRequire(STATIC !in rawModifiers) {
+            """
+            Static @KShadow members must be declared in the companion object instead of using the STATIC modifier.
+            Why: Java Mixin targets static members through companion object declarations to preserve Kotlin scoping and type safety.
+            How to fix: Remove 'STATIC' modifier and declare the @KShadow member inside the companion object.
+            """.trimIndent()
+        }
         val allowed = if (isField) JavaModifiers.FIELD_ALLOWED else JavaModifiers.METHOD_ALLOWED
-        kspRequire(allowed.containsAll(result)) { "" }
-        kspRequire(result.count { it in JavaModifiers.VISIBILITIES } <= 1) { "" }
+        kspRequire(allowed.containsAll(result)) {
+            val invalidModifiers = result.filter { it !in allowed }
+            """
+            Invalid modifiers specified for @KShadow ${if (isField) "field" else "method"}: ${invalidModifiers.joinToString()}.
+            Why: Only valid Java ${if (isField) "field" else "method"} modifiers are permitted in @KShadow.
+            How to fix: Remove non-applicable modifiers from the @KShadow annotation.
+            """.trimIndent()
+        }
+        kspRequire(result.count { it in JavaModifiers.VISIBILITIES } <= 1) {
+            """
+            Multiple visibility modifiers specified for @KShadow member.
+            Why: A Java member cannot have conflicting visibility levels (e.g., public and private simultaneously).
+            How to fix: Specify at most one visibility modifier (PUBLIC, PROTECTED, or PRIVATE) in @KShadow.
+            """.trimIndent()
+        }
         if (isField) {
             if (FINAL in result) {
-                kspRequire(VOLATILE !in result) { "" }
+                kspRequire(VOLATILE !in result) {
+                    """
+                    Field cannot be marked as both FINAL and VOLATILE in @KShadow.
+                    Why: Java fields cannot be volatile if they are final.
+                    How to fix: Remove either FINAL or VOLATILE from the @KShadow field modifiers.
+                    """.trimIndent()
+                }
             }
         } else {
             if (ABSTRACT in result) {
-                kspRequire(result.none { it in JavaModifiers.ABSTRACT_ILLEGALS }) { "" }
+                kspRequire(result.none { it in JavaModifiers.ABSTRACT_ILLEGALS }) {
+                    """
+                    Abstract @KShadow method has conflicting modifiers.
+                    Why: Abstract methods cannot be marked as private, static, final, native, or synchronized in Java.
+                    How to fix: Remove illegal modifiers from the abstract @KShadow method.
+                    """.trimIndent()
+                }
             }
             if (NATIVE in result) {
-                kspRequire(DEFAULT !in result) { "" }
+                kspRequire(DEFAULT !in result) {
+                    """
+                    Method cannot be marked as both NATIVE and DEFAULT in @KShadow.
+                    Why: Default methods contain bytecode implementations and cannot be native.
+                    How to fix: Remove DEFAULT modifier from the native @KShadow method.
+                    """.trimIndent()
+                }
             }
             if (isInterface) {
                 if (PRIVATE in result) {
-                    kspRequire(DEFAULT !in result) { "" }
-                    kspRequire(ABSTRACT !in result) { "" }
+                    kspRequire(DEFAULT !in result) {
+                        """
+                        Private interface method cannot be marked as DEFAULT in @KShadow.
+                        Why: Default methods in Java interfaces are implicitly public non-static methods.
+                        How to fix: Remove DEFAULT modifier from the private interface method in @KShadow.
+                        """.trimIndent()
+                    }
+                    kspRequire(ABSTRACT !in result) {
+                        """
+                        Private interface method cannot be marked as ABSTRACT in @KShadow.
+                        Why: Abstract interface methods must be overridable and cannot be private.
+                        How to fix: Remove ABSTRACT modifier or change the visibility level in @KShadow.
+                        """.trimIndent()
+                    }
                 } else {
-                    kspRequire(result.count { it in EnumSet.of(ABSTRACT, STATIC, DEFAULT) } == 1) { "" }
+                    kspRequire(result.count { it in EnumSet.of(ABSTRACT, STATIC, DEFAULT) } == 1) {
+                        """
+                        Interface method in @KShadow must specify exactly one execution type (ABSTRACT, STATIC, or DEFAULT).
+                        Why: Interface methods must have a clear structural designation in Java.
+                        How to fix: Ensure exactly one execution modifier is specified in @KShadow.
+                        """.trimIndent()
+                    }
                 }
             } else {
-                kspRequire(DEFAULT !in result) { "" }
+                kspRequire(DEFAULT !in result) {
+                    """
+                    DEFAULT modifier cannot be used outside of interfaces in @KShadow.
+                    Why: Default methods are only applicable to Java interface declarations.
+                    How to fix: Remove DEFAULT modifier from the class-level @KShadow method.
+                    """.trimIndent()
+                }
             }
         }
         return result
@@ -349,7 +479,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         return name
     }
 
-    private fun ParsedAnnotations.validate() =
+    private fun ParsedAnnotations.filterMixinAnnotations() =
         external.filter { annotation ->
             if (annotation !is ValidAnnotation) return@filter true
             options.mixinAnnotationPackages.any { annotation.type.packageName?.isSubpackageOf(it) == true }
@@ -404,12 +534,20 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         is ParsedAnnotation.Argument.StringValue -> MixinAnnotation.Argument.StringValue(string)
         is ParsedAnnotation.Argument.TypeValue -> {
             val validType = type.validate()
-            type.kspRequire(validType.ksType.arguments.none { it.variance != Variance.STAR }) {
+            type.kspRequire(validType.ksType.arguments.all { it.variance == Variance.STAR }) {
                 val typeName = validType.ksType.toString()
                 """
-                Generic type arguments in '$typeName' are not supported.
-                Why: Java annotations only support raw class references.
+                Generic type arguments in class reference '$typeName' are not supported.
+                Why: Generic type arguments cannot be mapped to Java Mixin annotations, as Java only supports raw class references.
                 How to fix: Remove type arguments from the class reference.
+                """.trimIndent()
+            }
+            val classDeclaration = type.kspRequireNotNull(validType.classDeclaration) {
+                val typeName = validType.ksType.toString()
+                """
+                Class reference argument '$typeName' must resolve to a valid class declaration.
+                Why: The specified type could not be resolved by KSP.
+                How to fix: Ensure the class argument has no compilation errors.
                 """.trimIndent()
             }
             MixinAnnotation.Argument.ClassValue(classDeclaration)
