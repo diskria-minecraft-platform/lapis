@@ -13,4 +13,5 @@ object JavaModifiers {
         addAll(EnumSet.of(ABSTRACT, DEFAULT, STATIC, FINAL, SYNCHRONIZED, NATIVE, STRICTFP))
     }
     val ABSTRACT_ILLEGALS: EnumSet<Modifier> = EnumSet.of(PRIVATE, STATIC, FINAL, NATIVE, SYNCHRONIZED, DEFAULT)
+    val EXECUTION_TYPES: EnumSet<Modifier> = EnumSet.of(Modifier.ABSTRACT, Modifier.STATIC, Modifier.DEFAULT)
 }

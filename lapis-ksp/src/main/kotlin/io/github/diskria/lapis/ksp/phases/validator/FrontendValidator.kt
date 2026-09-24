@@ -134,7 +134,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
                 injections += function.validateAsInjection(isInCompanionObject = false, targetType, mixinAnnotations)
             }
         }
-        val companionObject = companionObject?.validate()?.let { companionObject ->
+        val companionObject = companionObject?.let { companionObject ->
             val injections = mutableListOf<Patch.Injection>()
             companionObject.functions.filterValid { function ->
                 function.kspRequire(!function.annotations.hasApiAnnotation<KShadow>()) {
@@ -154,6 +154,15 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
                 val mixinAnnotations = function.annotations.filterMixinAnnotations()
                 if (mixinAnnotations.isNotEmpty()) {
                     injections += function.validateAsInjection(isInCompanionObject = true, targetType, mixinAnnotations)
+                }
+            }
+            if (injections.isNotEmpty()) {
+                companionObject.kspRequire(companionObject.isPublic) {
+                    """
+                    Companion object containing mixin injections must be public.
+                    Why: Target mixin injections in companion objects must be accessible by Java Mixin.
+                    How to fix: Make the companion object public.
+                    """.trimIndent()
                 }
             }
             Patch.CompanionObject(name = companionObject.name, injections = injections)
@@ -203,11 +212,6 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             mixinAnnotations = mixinAnnotations,
             typeParameters = typeParameters.validate(),
         )
-    }
-
-    private fun ParsedPatch.CompanionObject.validate(): ParsedPatch.CompanionObject {
-        kspRequire(isPublic) { "" }
-        return this
     }
 
     private fun ParsedPatch.Constructor.Parameter.validate(targetType: Type) = when {
@@ -276,7 +280,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             getterJvmName = getter.jvmName,
             setterJvmName = if (setter != null) kspRequireNotNull(setter.jvmName) { "" } else null,
             mappingName = mappingName,
-            modifiers = validateShadowModifiers(modifiersArgument?.elements.orEmpty(), isInterface, isField = true),
+            modifiers = validateShadowModifiers(modifiersArgument?.elements.orEmpty(), isInterface, isProperty = true),
             type = type.validate(),
             mixinAnnotations = mixinAnnotations,
             typeParameters = typeParameters.validate(),
@@ -304,7 +308,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             returnType = returnType.validate(),
             mappingName = mappingName,
             mixinAnnotations = mixinAnnotations,
-            modifiers = validateShadowModifiers(modifiersArgument?.elements.orEmpty(), isInterface, isField = false),
+            modifiers = validateShadowModifiers(modifiersArgument?.elements.orEmpty(), isInterface, isProperty = false),
             typeParameters = typeParameters.validate(),
         )
     }
@@ -355,105 +359,82 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
     private fun NodeHolder.validateShadowModifiers(
         rawModifiers: List<Modifier>,
         isInterface: Boolean,
-        isField: Boolean,
+        isProperty: Boolean,
     ): EnumSet<Modifier> {
         val result = if (rawModifiers.isEmpty()) EnumSet.noneOf(Modifier::class.java) else EnumSet.copyOf(rawModifiers)
+
         if (isInterface) {
             if (PRIVATE !in result && PROTECTED !in result) {
                 result.add(PUBLIC)
             }
-            if (isField) {
+            if (isProperty) {
                 result.add(STATIC)
                 result.add(FINAL)
             } else if (DEFAULT !in result && STATIC !in result && PRIVATE !in result) {
                 result.add(ABSTRACT)
             }
         }
+
         kspRequire(STATIC !in rawModifiers) {
             """
             Static @KShadow members must be declared in the companion object instead of using the STATIC modifier.
-            Why: Java Mixin targets static members through companion object declarations to preserve Kotlin scoping and type safety.
+            Why: Java Mixin targets static members through companion object declarations to preserve Kotlin scoping.
             How to fix: Remove 'STATIC' modifier and declare the @KShadow member inside the companion object.
             """.trimIndent()
         }
-        val allowed = if (isField) JavaModifiers.FIELD_ALLOWED else JavaModifiers.METHOD_ALLOWED
-        kspRequire(allowed.containsAll(result)) {
-            val invalidModifiers = result.filter { it !in allowed }
-            """
-            Invalid modifiers specified for @KShadow ${if (isField) "field" else "method"}: ${invalidModifiers.joinToString()}.
-            Why: Only valid Java ${if (isField) "field" else "method"} modifiers are permitted in @KShadow.
-            How to fix: Remove non-applicable modifiers from the @KShadow annotation.
-            """.trimIndent()
+
+        fun requireModifiers(condition: Boolean, problem: () -> String) {
+            kspRequire(condition) {
+                val javaMemberName = if (isProperty) "field" else "method"
+                val kotlinMemberName = if (isProperty) "property" else "function"
+                val containerName = if (isInterface) "interface" else "class"
+                """
+                @KShadow $kotlinMemberName representing Java $javaMemberName ${problem()}.
+                Why: Target bytecode cannot have this modifier combination.
+                How to fix: Check the original $javaMemberName in Minecraft $containerName source code and copy its exact modifiers.
+                """.trimIndent()
+            }
         }
-        kspRequire(result.count { it in JavaModifiers.VISIBILITIES } <= 1) {
-            """
-            Multiple visibility modifiers specified for @KShadow member.
-            Why: A Java member cannot have conflicting visibility levels (e.g., public and private simultaneously).
-            How to fix: Specify at most one visibility modifier (PUBLIC, PROTECTED, or PRIVATE) in @KShadow.
-            """.trimIndent()
+
+        fun Iterable<Modifier>.joinToUppercase(): String = joinToString { it.name }
+
+        val allowedModifiers = if (isProperty) JavaModifiers.FIELD_ALLOWED else JavaModifiers.METHOD_ALLOWED
+        val invalidModifiers = result.filter { it !in allowedModifiers }
+        requireModifiers(invalidModifiers.isEmpty()) {
+            "has invalid modifiers: ${invalidModifiers.joinToUppercase()}"
         }
-        if (isField) {
+        val visibilities = result.filter { it in JavaModifiers.VISIBILITIES }
+        requireModifiers(visibilities.size <= 1) {
+            "has multiple visibility modifiers: ${visibilities.joinToUppercase()}"
+        }
+        if (isProperty) {
             if (FINAL in result) {
-                kspRequire(VOLATILE !in result) {
-                    """
-                    Field cannot be marked as both FINAL and VOLATILE in @KShadow.
-                    Why: Java fields cannot be volatile if they are final.
-                    How to fix: Remove either FINAL or VOLATILE from the @KShadow field modifiers.
-                    """.trimIndent()
-                }
+                requireModifiers(VOLATILE !in result) { "cannot be both FINAL and VOLATILE" }
             }
         } else {
             if (ABSTRACT in result) {
-                kspRequire(result.none { it in JavaModifiers.ABSTRACT_ILLEGALS }) {
-                    """
-                    Abstract @KShadow method has conflicting modifiers.
-                    Why: Abstract methods cannot be marked as private, static, final, native, or synchronized in Java.
-                    How to fix: Remove illegal modifiers from the abstract @KShadow method.
-                    """.trimIndent()
+                val illegalAbstractModifiers = result.filter { it in JavaModifiers.ABSTRACT_ILLEGALS }
+                requireModifiers(illegalAbstractModifiers.isEmpty()) {
+                    "has illegal modifiers for an abstract declaration: ${illegalAbstractModifiers.joinToUppercase()}"
                 }
             }
             if (NATIVE in result) {
-                kspRequire(DEFAULT !in result) {
-                    """
-                    Method cannot be marked as both NATIVE and DEFAULT in @KShadow.
-                    Why: Default methods contain bytecode implementations and cannot be native.
-                    How to fix: Remove DEFAULT modifier from the native @KShadow method.
-                    """.trimIndent()
-                }
+                requireModifiers(DEFAULT !in result) { "cannot be both NATIVE and DEFAULT" }
             }
             if (isInterface) {
                 if (PRIVATE in result) {
-                    kspRequire(DEFAULT !in result) {
-                        """
-                        Private interface method cannot be marked as DEFAULT in @KShadow.
-                        Why: Default methods in Java interfaces are implicitly public non-static methods.
-                        How to fix: Remove DEFAULT modifier from the private interface method in @KShadow.
-                        """.trimIndent()
-                    }
-                    kspRequire(ABSTRACT !in result) {
-                        """
-                        Private interface method cannot be marked as ABSTRACT in @KShadow.
-                        Why: Abstract interface methods must be overridable and cannot be private.
-                        How to fix: Remove ABSTRACT modifier or change the visibility level in @KShadow.
-                        """.trimIndent()
-                    }
+                    requireModifiers(DEFAULT !in result) { "cannot be both PRIVATE and DEFAULT in interface" }
+                    requireModifiers(ABSTRACT !in result) { "cannot be both PRIVATE and ABSTRACT in interface" }
                 } else {
-                    kspRequire(result.count { it in EnumSet.of(ABSTRACT, STATIC, DEFAULT) } == 1) {
-                        """
-                        Interface method in @KShadow must specify exactly one execution type (ABSTRACT, STATIC, or DEFAULT).
-                        Why: Interface methods must have a clear structural designation in Java.
-                        How to fix: Ensure exactly one execution modifier is specified in @KShadow.
-                        """.trimIndent()
+                    val executionTypes = result.filter { it in JavaModifiers.EXECUTION_TYPES }
+                    requireModifiers(executionTypes.size == 1) {
+                        val types = JavaModifiers.EXECUTION_TYPES.joinToUppercase()
+                        "must specify exactly one execution type ($types) in interface, " +
+                            "found: ${executionTypes.joinToUppercase()}"
                     }
                 }
             } else {
-                kspRequire(DEFAULT !in result) {
-                    """
-                    DEFAULT modifier cannot be used outside of interfaces in @KShadow.
-                    Why: Default methods are only applicable to Java interface declarations.
-                    How to fix: Remove DEFAULT modifier from the class-level @KShadow method.
-                    """.trimIndent()
-                }
+                requireModifiers(DEFAULT !in result) { "cannot use DEFAULT modifier outside of interface" }
             }
         }
         return result
