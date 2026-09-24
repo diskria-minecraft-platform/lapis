@@ -7,5 +7,5 @@ fun internalError(message: String): Nothing =
         append("https://github.com/diskria-minecraft-platform/lapis/issues/")
     })
 
-inline fun <reified T : Any> requireQualifiedName(): String =
-    T::class.qualifiedName ?: internalError("Cannot resolve qualified name for '${T::class.simpleName}'.")
+inline fun <reified T : Any> qualifiedNameOf(): String =
+    T::class.qualifiedName ?: internalError("Failed to resolve qualified name for '${T::class.simpleName}'.")

@@ -21,7 +21,7 @@ abstract class LapisExtension @Inject internal constructor(
 
     internal fun validateMixinConfigsSetup() {
         require(sourceSetSpecs.size <= 1 || !mixinConfig.isPresent) {
-            "Cannot configure 'lapis.mixinConfig' property " +
+            "Could not configure 'lapis.mixinConfig' property " +
                 "when multiple sourceSets exist (${sourceSetSpecs.names.joinToString()}). " +
                 "Configure 'mixinConfig' inside individual sourceSet specs instead."
         }

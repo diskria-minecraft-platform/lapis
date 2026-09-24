@@ -3,6 +3,7 @@ package io.github.diskria.lapis.ksp.phases.validator.models
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSFile
 import com.google.devtools.ksp.symbol.KSType
+import com.google.devtools.ksp.symbol.KSTypeParameter
 import io.github.diskria.lapis.annotations.InitStrategy
 import io.github.diskria.lapis.annotations.Side
 import java.util.*
@@ -19,8 +20,9 @@ class Patch(
     val extensionSources: List<Extension>,
     val injections: List<Injection>,
     val companionObject: CompanionObject?,
-    val targetType: Type,
+    val targetClassDeclaration: KSClassDeclaration,
     val mixinAnnotations: List<MixinAnnotation>,
+    val typeParameters: List<TypeParameter>,
 ) {
     sealed interface ClassKind
     class Class(
@@ -37,6 +39,7 @@ class Patch(
     sealed interface Extension {
 
         val receiverType: Type
+        val typeParameters: List<TypeParameter>
 
         class Property(
             override val name: String,
@@ -44,6 +47,7 @@ class Patch(
             override val setterJvmName: String?,
             override val type: Type,
             override val receiverType: Type,
+            override val typeParameters: List<TypeParameter>,
         ) : DuckSource.Property,
             Extension
 
@@ -53,6 +57,7 @@ class Patch(
             override val parameters: List<FunctionParameter>,
             override val returnType: Type?,
             override val receiverType: Type,
+            override val typeParameters: List<TypeParameter>,
         ) : DuckSource.Function,
             Extension
     }
@@ -62,6 +67,7 @@ class Patch(
         val modifiers: EnumSet<Modifier>
         val mappingName: String
         val mixinAnnotations: List<MixinAnnotation>
+        val typeParameters: List<TypeParameter>
 
         class Property(
             override val name: String,
@@ -71,6 +77,7 @@ class Patch(
             override val modifiers: EnumSet<Modifier>,
             override val mappingName: String,
             override val mixinAnnotations: List<MixinAnnotation>,
+            override val typeParameters: List<TypeParameter>,
         ) : DuckSource.Property,
             Shadow
 
@@ -82,6 +89,7 @@ class Patch(
             override val modifiers: EnumSet<Modifier>,
             override val mappingName: String,
             override val mixinAnnotations: List<MixinAnnotation>,
+            override val typeParameters: List<TypeParameter>,
         ) : DuckSource.Function,
             Shadow
     }
@@ -92,6 +100,7 @@ class Patch(
         val mixinAnnotations: List<MixinAnnotation>,
         val parameters: List<Parameter>,
         val returnType: Type?,
+        val typeParameters: List<TypeParameter>,
     ) {
         class Parameter(
             val name: String,
@@ -104,10 +113,15 @@ class Patch(
 }
 
 class Type(
-    val type: KSType,
+    val ksType: KSType,
     val isAny: Boolean,
     val isUnit: Boolean,
     val isInterface: Boolean,
-) {
-    fun isSubtypeOf(other: Type): Boolean = type.isAssignableFrom(other.type)
-}
+    val classDeclaration: KSClassDeclaration?,
+)
+
+class TypeParameter(
+    val name: String,
+    val bounds: List<Type>,
+    val ksTypeParameter: KSTypeParameter,
+)

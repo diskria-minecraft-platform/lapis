@@ -1,9 +1,8 @@
 package io.github.diskria.lapis.ksp.phases.lowering.models
 
 import io.github.diskria.poetesse.interop.XClassName
-import io.github.diskria.poetesse.interop.XTypeName
 
-class IrMixinAnnotation(val typeClassName: XClassName, val arguments: List<Argument>) {
+class IrMixinAnnotation(val className: XClassName, val arguments: List<Argument>) {
 
     sealed interface Argument {
 
@@ -19,8 +18,8 @@ class IrMixinAnnotation(val typeClassName: XClassName, val arguments: List<Argum
         class FloatValue(val float: Float) : Value
         class DoubleValue(val double: Double) : Value
         class StringValue(val string: String) : Value
-        class TypeValue(val typeName: XTypeName) : Value
-        class EnumValue(val className: XClassName, val entryName: String) : Value
+        class ClassValue(val className: XClassName) : Value
+        class EnumValue(val enumClassName: XClassName, val entryName: String) : Value
         class AnnotationValue(val annotation: IrMixinAnnotation) : Value
     }
 

@@ -41,10 +41,8 @@ class LapisSymbolProcessorProvider : SymbolProcessorProvider {
                 }
             })
         }.getOrElse { error ->
-            internalError(
-                "Cannot parse KSP arguments:" +
-                    (error.message?.let { "\n$it" } ?: " failed to deserialize KSP options.")
-            )
+            val message = error.message?.let { "\n$it" } ?: " failed to deserialize KSP options."
+            internalError("Failed to parse KSP arguments:$message")
         }
         val errors = kspOptions.validate()
         if (errors.isNotEmpty()) {

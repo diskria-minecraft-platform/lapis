@@ -83,7 +83,7 @@ abstract class KspArgumentProvider @Inject constructor(layout: ProjectLayout) : 
             Json.parseToJsonElement(mixinConfigFile.readText()).jsonObject
         }.getOrElse { error ->
             error(
-                "Cannot parse mixin config (${mixinConfigPath.get()}):" +
+                "Failed to parse mixin config (${mixinConfigPath.get()}):" +
                     (error.message?.let { "\n$it" } ?: " ensure the file contains valid JSON.")
             )
         }

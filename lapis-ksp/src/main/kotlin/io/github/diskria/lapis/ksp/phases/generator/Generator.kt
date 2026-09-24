@@ -9,9 +9,7 @@ import io.github.diskria.lapis.ksp.phases.generator.models.GeneratedMixinsJson
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
 import io.github.diskria.poetesse.Poetesse
 import io.github.diskria.poetesse.PoetesseFile
-import io.github.diskria.poetesse.interop.nullable
-import io.github.diskria.poetesse.interop.withSuffix
-import io.github.diskria.poetesse.interop.xClass
+import io.github.diskria.poetesse.interop.*
 import io.github.diskria.poetesse.java.*
 import io.github.diskria.poetesse.kotlin.*
 import kotlinx.serialization.json.Json
@@ -46,12 +44,14 @@ class Generator(
             java.file(duck.className) {
                 interface_(fileName) { _ ->
                     public()
+                    duck.typeVariables.forEach { +it }
                     patchInterface?.let { superinterface(it.className) }
                     duck.shadows.forEach { shadow ->
                         shadow.kinds.forEach { kind ->
                             val prefixedMethod = method(kind.name) {
                                 public()
                                 abstract()
+                                shadow.typeVariables.forEach { +it }
                                 kind.parameters.forEach { parameter(it.name, it.typeName) }
                                 kind.returnTypeName?.let { returns(it) }
                             }
@@ -60,6 +60,7 @@ class Generator(
                                     annotation<Override>()
                                     public()
                                     default()
+                                    shadow.typeVariables.forEach { +it }
                                     kind.parameters.forEach { parameter(it.name, it.typeName) }
                                     kind.returnTypeName?.let { returns(it) }
                                     body {
@@ -76,6 +77,7 @@ class Generator(
                             method(kind.name) {
                                 public()
                                 if (patchInterface != null) default() else abstract()
+                                extension.typeVariables.forEach { +it }
                                 kind.parameters.forEach { parameter(it.name, it.typeName) }
                                 kind.returnTypeName?.let { returns(it) }
                                 if (patchInterface != null) {
@@ -101,21 +103,24 @@ class Generator(
         val extensions = duck.extensions.ifEmpty { return }
         poetesse {
             kotlin.file(patch.className.withSuffix("_Extensions")) {
+                val duckClassName = duck.className.optionalGeneric(duck.typeVariables)
                 extensions.forEach { extension ->
                     when (extension) {
                         is IrMixinDuck.Extension.Property -> property(extension.sourceName, extension.typeName) {
                             public()
                             inline()
+                            duck.typeVariables.forEach { +it }
+                            extension.typeVariables.forEach { +it }
                             extensionReceiver(extension.receiverTargetTypeCast.typeName)
                             getter {
                                 expression {
-                                    "(this as ${T(duck.className)}).${(N(extension.getter.name))}()"
+                                    "(this as ${T(duckClassName)}).${(N(extension.getter.name))}()"
                                 }
                             }
                             extension.setter?.let { setter ->
                                 setter { newValue ->
                                     body {
-                                        line { "(this as ${T(duck.className)}).${N(setter.name)}(${N(newValue)})" }
+                                        line { "(this as ${T(duckClassName)}).${N(setter.name)}(${N(newValue)})" }
                                     }
                                 }
                             }
@@ -124,6 +129,8 @@ class Generator(
                         is IrMixinDuck.Extension.Function -> function(extension.sourceName) {
                             public()
                             inline()
+                            duck.typeVariables.forEach { +it }
+                            extension.typeVariables.forEach { +it }
                             extensionReceiver(extension.receiverTargetTypeCast.typeName)
                             extension.parameters.forEach { parameter(it.name, it.typeName) }
                             extension.returnTypeName?.let { returns(it) }
@@ -131,7 +138,7 @@ class Generator(
                                 val maybeReturn = if (extension.returnTypeName != null) "return " else ""
                                 val parameters = code { extension.parameters.joinToString { N(it.name) } }
                                 line {
-                                    "$maybeReturn(this as ${T(duck.className)}).${N(extension.name)}(${L(parameters)})"
+                                    "$maybeReturn(this as ${T(duckClassName)}).${N(extension.name)}(${L(parameters)})"
                                 }
                             }
                         }
@@ -146,6 +153,7 @@ class Generator(
             kotlin.file(patchImpl.className) {
                 class_(fileName) { _ ->
                     public()
+                    patchImpl.typeVariables.forEach { +it }
                     if (patchImpl.constructorParameters.isNotEmpty()) {
                         constructor(primary = true) {
                             public()
@@ -156,13 +164,14 @@ class Generator(
                                     }
 
                                     is IrPatchImpl.ConstructorParameter.Duck -> {
-                                        parameter("duck", parameter.className).property { private() }
+                                        parameter("duck", parameter.className.optionalGeneric(patchImpl.typeVariables))
+                                            .property { private() }
                                     }
                                 }
                             }
                         }
                     }
-                    superclass(patch.className) {
+                    superclass(patch.className.optionalGeneric(patchImpl.typeVariables)) {
                         patch.constructorParameters.forEach { parameter ->
                             argument {
                                 when (parameter) {
@@ -196,12 +205,16 @@ class Generator(
                                 function(shadow.sourceName) {
                                     public()
                                     override()
+                                    shadow.typeVariables.forEach { +it }
                                     shadow.parameters.forEach { parameter(it.name, it.typeName) }
                                     shadow.returnTypeName?.let { returns(it) }
                                     body {
                                         val maybeReturn = if (shadow.returnTypeName != null) "return " else ""
                                         val parameters = code { shadow.parameters.joinToString { N(it.name) } }
-                                        line { "$maybeReturn${N("duck")}.${N(shadow.name)}(${L(parameters)})" }
+                                        val typeArgs = if (shadow.typeVariables.isNotEmpty()) {
+                                            "<" + shadow.typeVariables.joinToString { it.name } + ">"
+                                        } else ""
+                                        line { "$maybeReturn${N("duck")}.${N(shadow.name)}$typeArgs(${L(parameters)})" }
                                     }
                                 }
                             }
@@ -218,8 +231,9 @@ class Generator(
                 class_(fileName) { _ ->
                     public()
                     abstract()
+                    mixin.typeVariables.forEach { +it }
                     mixinAnnotations(mixin.annotations)
-                    mixin.duck?.let { superinterface(it.className) }
+                    mixin.duck?.let { superinterface(it.className.optionalGeneric(mixin.typeVariables)) }
                     val extensions = mixin.duck?.extensions.orEmpty()
                     val memberInjections = mixin.injections.filterIsInstance<IrMixin.MemberInjection>()
                     val patchMember = if (extensions.isNotEmpty() || memberInjections.isNotEmpty()) {
@@ -236,6 +250,7 @@ class Generator(
                                     method(kind.name) {
                                         annotation<Override>()
                                         public()
+                                        shadow.typeVariables.forEach { +it }
                                         kind.parameters.forEach { parameter(it.name, it.typeName) }
                                         kind.returnTypeName?.let { returns(it) }
                                         body {
@@ -256,6 +271,7 @@ class Generator(
                             is IrMixinDuck.Shadow.Function -> {
                                 val shadowMethod = method(shadow.mappingName) {
                                     mixinAnnotations(shadow.mixinAnnotations)
+                                    shadow.typeVariables.forEach { +it }
                                     shadow.modifiers.forEach { modifier(it) }
                                     shadow.parameters.forEach { parameter(it.name, it.typeName) }
                                     shadow.returnTypeName?.let { returns(it) }
@@ -268,6 +284,7 @@ class Generator(
                                 method(shadow.name) {
                                     annotation<Override>()
                                     public()
+                                    shadow.typeVariables.forEach { +it }
                                     shadow.parameters.forEach { parameter(it.name, it.typeName) }
                                     shadow.returnTypeName?.let { returns(it) }
                                     body {
@@ -285,6 +302,7 @@ class Generator(
                                 method(kind.name) {
                                     annotation<Override>()
                                     public()
+                                    extension.typeVariables.forEach { +it }
                                     kind.parameters.forEach { parameter(it.name, it.typeName) }
                                     kind.returnTypeName?.let { returns(it) }
                                     body {
@@ -328,7 +346,8 @@ class Generator(
                 }
             }
         }
-        return "new ${T(className)}(${L(arguments)})"
+        val diamond = if (patch.typeVariables.isNotEmpty()) "<>" else ""
+        return "new ${T(className)}$diamond(${L(arguments)})"
     }
 
     private fun JavaTypeScope.patchMember(patch: FirPatchClass): String {
@@ -336,7 +355,7 @@ class Generator(
         val isSynchronized = patch.initStrategy == InitStrategy.Synchronized
         val isThreadSafe = patch.initStrategy == InitStrategy.Volatile || isSynchronized
         val initializer = poetesse.java.code { patchInitializer(patch) }
-        val patchField = field("patch", patch.className.nullable(!isEager)) {
+        val patchField = field("patch", patch.className.optionalGeneric(patch.typeVariables, !isEager)) {
             private()
             annotation<Annotation>(xClass(options.uniqueAnnotation))
             if (isEager) {
@@ -360,7 +379,8 @@ class Generator(
             annotation<Annotation>(xClass(options.uniqueAnnotation))
             body {
                 if (isThreadSafe) {
-                    val local by var_(patch.className) { "this.${N(patchField)}" }
+                    val localType = patch.className.optionalGeneric(patch.typeVariables, nullable = true)
+                    val local by var_(localType) { "this.${N(patchField)}" }
                     controlFlow {
                         branch({ "if (${N(local)} == null)" }) {
                             if (isSynchronized && patchLockField != null) {
@@ -391,7 +411,7 @@ class Generator(
                     line { "return this.${N(patchField)}" }
                 }
             }
-            returns(patch.className)
+            returns(patch.className.optionalGeneric(patch.typeVariables))
         }
         return "$getOrInitPatchMethod()"
     }
@@ -449,6 +469,7 @@ class Generator(
         method(injection.name) {
             private()
             if (injection is IrMixin.StaticInjection) static()
+            injection.typeVariables.forEach { +it }
             mixinAnnotations(injection.mixinAnnotations)
             injection.parameters.forEach { parameter ->
                 parameter(parameter.name, parameter.typeName) {
@@ -476,7 +497,7 @@ class Generator(
     }
 
     private fun mixinAnnotation(annotation: IrMixinAnnotation): JavaTypedAnnotationRef<Annotation> =
-        poetesse.java.annotation(annotation.typeClassName) {
+        poetesse.java.annotation(annotation.className) {
             annotation.arguments.forEach { argument ->
                 member(argument.name) {
                     when (argument) {
@@ -502,8 +523,8 @@ class Generator(
             is IrMixinAnnotation.Argument.FloatValue -> L(value.float)
             is IrMixinAnnotation.Argument.DoubleValue -> L(value.double)
             is IrMixinAnnotation.Argument.StringValue -> S(value.string)
-            is IrMixinAnnotation.Argument.EnumValue -> "${T(value.className)}.${N(value.entryName)}"
-            is IrMixinAnnotation.Argument.TypeValue -> "${T(value.typeName)}.class"
+            is IrMixinAnnotation.Argument.EnumValue -> "${T(value.enumClassName)}.${N(value.entryName)}"
+            is IrMixinAnnotation.Argument.ClassValue -> "${T(value.className)}.class"
             is IrMixinAnnotation.Argument.AnnotationValue -> L(mixinAnnotation(value.annotation))
         }
 
@@ -547,3 +568,7 @@ class Generator(
         ).writer().use { it.write(buildText()) }
     }
 }
+
+private fun XClassName.optionalGeneric(typeVariables: List<XTypeName>, nullable: Boolean = false): XTypeName =
+    if (typeVariables.isNotEmpty()) generic(typeVariables, nullable = nullable)
+    else nullable(nullable)

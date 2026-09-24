@@ -1,88 +1,119 @@
 package io.github.diskria.lapis.ksp.phases.lowering
 
 import com.google.devtools.ksp.symbol.KSClassDeclaration
+import com.squareup.kotlinpoet.ksp.TypeParameterResolver
 import com.squareup.kotlinpoet.ksp.toClassName
 import com.squareup.kotlinpoet.ksp.toTypeName
+import com.squareup.kotlinpoet.ksp.toTypeParameterResolver
 import io.github.diskria.lapis.ksp.KspOptions
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
 import io.github.diskria.lapis.ksp.phases.validator.models.MixinAnnotation
 import io.github.diskria.lapis.ksp.phases.validator.models.Patch
 import io.github.diskria.lapis.ksp.phases.validator.models.Type
+import io.github.diskria.lapis.ksp.phases.validator.models.TypeParameter
 import io.github.diskria.lapis.ksp.utils.JavaModifiers
+import io.github.diskria.poetesse.Poetesse
 import io.github.diskria.poetesse.interop.*
 import io.github.diskria.poetesse.java.JPModifier
 import java.util.*
 import javax.lang.model.element.Modifier
 import javax.lang.model.element.Modifier.*
 
-class Lowering(private val options: KspOptions, private val poetesse: PoetesseScope) {
+class Lowering(private val options: KspOptions, private val poetesse: Poetesse) {
 
     fun lowerPatches(patches: List<Patch>): List<FirPatch> {
-        val mixinSourcePackageLCP = if (options.disableLCP) null else {
-            findMixinSourcePackageLCP(patches)
-        }
+        val mixinSourcePackageLCP = if (!options.disableLCP) {
+            patches.map { it.classDeclaration.toXClassName().packageName }.reduceOrNull { lcp, next ->
+                val currentParts = lcp.orEmpty().split('.')
+                val nextParts = next.orEmpty().split('.')
+                currentParts
+                    .zip(nextParts)
+                    .takeWhile { (current, next) -> current == next }
+                    .joinToString(".") { it.first }
+            }.orEmpty()
+        } else null
         return patches.map { lowerPatch(it, mixinSourcePackageLCP) }
     }
 
     private fun lowerPatch(patch: Patch, mixinSourcePackageLCP: String?): FirPatch {
         val mixin = lowerMixin(patch, mixinSourcePackageLCP)
+        val typeParameterResolver = patch.typeParameters.map { it.ksTypeParameter }.toTypeParameterResolver()
         return when (val classKind = patch.classKind) {
             is Patch.Class -> {
-                val constructorParameters = classKind.constructorParameters.map(::lowerPatchClassConstructorParameter)
+                val constructorParameters = classKind.constructorParameters.map {
+                    lowerPatchClassConstructorParameter(it, typeParameterResolver)
+                }
                 FirPatchClass(
                     className = patch.classDeclaration.toXClassName(),
+                    typeVariables = patch.typeParameters.toXTypeVariables(typeParameterResolver),
                     mixin = mixin,
                     impl = if (classKind.isAbstract) lowerPatchImpl(patch, mixin, constructorParameters) else null,
                     constructorParameters = constructorParameters,
-                    initStrategy = patch.initStrategy
+                    initStrategy = patch.initStrategy,
                 )
             }
 
             Patch.Interface -> FirPatchInterface(
                 className = patch.classDeclaration.toXClassName(),
+                typeVariables = patch.typeParameters.toXTypeVariables(typeParameterResolver),
                 mixin = mixin,
             )
         }
     }
 
-    private fun lowerPatchClassConstructorParameter(parameter: Patch.Class.ConstructorParameter) = when (parameter) {
+    private fun lowerPatchClassConstructorParameter(
+        parameter: Patch.Class.ConstructorParameter,
+        typeParameterResolver: TypeParameterResolver,
+    ) = when (parameter) {
         is Patch.Class.ConstructorParameter.Origin -> FirPatchClass.ConstructorParameter.Origin(
             name = parameter.name,
-            targetTypeCast = lowerTargetSubtypeCast(parameter.type),
+            targetTypeCast = lowerTargetSubtypeCast(parameter.type, typeParameterResolver),
         )
     }
 
     private fun lowerPatchImpl(
         patch: Patch, mixin: IrMixin, constructorParameters: List<FirPatchClass.ConstructorParameter>,
-    ) = IrPatchImpl(
-        patchOriginatingFile = patch.containingFile,
-        className = patch.classDeclaration.toXClassName().withSuffix("_Impl"),
-        constructorParameters = buildList {
-            constructorParameters.firstNotNullOfOrNull { it as? FirPatchClass.ConstructorParameter.Origin }?.let {
-                add(IrPatchImpl.ConstructorParameter.Instance(it.name, it.targetTypeCast))
-            }
-            if (mixin.duck != null && patch.shadowSources.isNotEmpty()) {
-                add(IrPatchImpl.ConstructorParameter.Duck(mixin.duck.className))
-            }
-        },
-    )
+    ): IrPatchImpl {
+        val typeParameterResolver = patch.typeParameters.map { it.ksTypeParameter }
+            .toTypeParameterResolver(TypeParameterResolver.EMPTY)
+        return IrPatchImpl(
+            patchOriginatingFile = patch.containingFile,
+            className = patch.classDeclaration.toXClassName().withSuffix("_Impl"),
+            typeVariables = patch.typeParameters.toXTypeVariables(typeParameterResolver),
+            constructorParameters = buildList {
+                constructorParameters.firstNotNullOfOrNull { it as? FirPatchClass.ConstructorParameter.Origin }?.let {
+                    add(IrPatchImpl.ConstructorParameter.Instance(it.name, it.targetTypeCast))
+                }
+                if (mixin.duck != null && patch.shadowSources.isNotEmpty()) {
+                    add(IrPatchImpl.ConstructorParameter.Duck(mixin.duck.className))
+                }
+            },
+        )
+    }
 
     private fun lowerMixin(patch: Patch, sourcePackageLCP: String?): IrMixin {
         val effectiveMixinAnnotations = if (patch.mixinAnnotations.isNotEmpty()) {
             lowerMixinAnnotations(patch.mixinAnnotations)
         } else {
-            val targetTypeValue = IrMixinAnnotation.Argument.TypeValue(patch.targetType.toXTypeName())
-            val valueArgument = IrMixinAnnotation.ScalarArgument("value", targetTypeValue)
+            val targetClassValue = IrMixinAnnotation.Argument.ClassValue(patch.targetClassDeclaration.toXClassName())
+            val valueArgument = IrMixinAnnotation.ScalarArgument("value", targetClassValue)
             listOf(IrMixinAnnotation(poetesse.xClass(options.mixinAnnotation), listOf(valueArgument)))
         }
+        val typeParameterResolver = patch.typeParameters.map { it.ksTypeParameter }
+            .toTypeParameterResolver(TypeParameterResolver.EMPTY)
         return IrMixin(
             patchOriginatingFile = patch.containingFile,
             className = resolveMixinClassName(patch.classDeclaration.toXClassName(), sourcePackageLCP),
+            typeVariables = patch.typeParameters.toXTypeVariables(typeParameterResolver),
             side = patch.side,
             injections = buildList {
-                addAll(patch.injections.map(::lowerMemberInjection))
+                addAll(patch.injections.map {
+                    lowerMemberInjection(it, typeParameterResolver)
+                })
                 patch.companionObject?.let { companionObject ->
-                    addAll(companionObject.injections.map { lowerStaticInjection(companionObject, it) })
+                    addAll(companionObject.injections.map {
+                        lowerStaticInjection(companionObject, it, typeParameterResolver)
+                    })
                 }
             },
             duck = lowerMixinDuck(patch),
@@ -103,119 +134,169 @@ class Lowering(private val options: KspOptions, private val poetesse: PoetesseSc
     }
 
     private fun lowerMixinDuck(patch: Patch): IrMixinDuck? {
-        val shadows = patch.shadowSources.map { lowerMixinDuckShadowEntry(it, patch.classKind is Patch.Interface) }
-        val extensions = patch.extensionSources.map { lowerMixinDuckExtensionEntry(it) }
+        val typeParameterResolver = patch.typeParameters.map { it.ksTypeParameter }
+            .toTypeParameterResolver(TypeParameterResolver.EMPTY)
+        val shadows = patch.shadowSources.map {
+            lowerMixinDuckShadowEntry(it, patch.classKind is Patch.Interface, typeParameterResolver)
+        }
+        val extensions = patch.extensionSources.map {
+            lowerMixinDuckExtensionEntry(it, typeParameterResolver)
+        }
         return if (shadows.isNotEmpty() || extensions.isNotEmpty()) {
             IrMixinDuck(
                 patchOriginatingFile = patch.containingFile,
                 className = patch.classDeclaration.toXClassName().withSuffix("_Duck"),
+                typeVariables = patch.typeParameters.toXTypeVariables(typeParameterResolver),
                 shadows = shadows,
                 extensions = extensions,
             )
         } else null
     }
 
-    private fun lowerMixinDuckExtensionEntry(source: Patch.Extension) = when (source) {
-        is Patch.Extension.Property -> IrMixinDuck.Extension.Property(
-            typeName = source.type.toXTypeName(),
-            sourceName = source.name,
-            sourceGetterJvmName = source.getterJvmName,
-            sourceSetterJvmName = source.setterJvmName,
-            getterName = source.getterJvmName.withUniqueModPrefix(),
-            setterName = source.setterJvmName?.withUniqueModPrefix(),
-            receiverTargetTypeCast = lowerTargetSubtypeCast(source.receiverType),
-        )
-
-        is Patch.Extension.Function -> IrMixinDuck.Extension.Function(
-            sourceName = source.name,
-            sourceJvmName = source.jvmName,
-            name = source.jvmName.withUniqueModPrefix(),
-            parameters = source.parameters.map { IrFunctionParameter(it.name, it.type.toXTypeName()) },
-            returnTypeName = source.returnType?.takeIf { !it.isUnit }?.toXTypeName(),
-            receiverTargetTypeCast = lowerTargetSubtypeCast(source.receiverType),
-        )
-    }
-
-    private fun lowerMixinDuckShadowEntry(source: Patch.Shadow, isInterface: Boolean) = when (source) {
-        is Patch.Shadow.Property -> {
-            val effectiveMixinAnnotations = if (source.mixinAnnotations.isNotEmpty()) {
-                lowerMixinAnnotations(source.mixinAnnotations)
-            } else {
-                listOfNotNull(
-                    if (source.setterJvmName != null) options.mutableAnnotation else null,
-                    if (FINAL in source.modifiers) options.finalAnnotation else null,
-                    options.shadowAnnotation,
-                ).map { IrMixinAnnotation(poetesse.xClass(it), emptyList()) }
-            }
-            IrMixinDuck.Shadow.Property(
-                typeName = source.type.toXTypeName(),
+    private fun lowerMixinDuckExtensionEntry(
+        source: Patch.Extension,
+        parentTypeParameterResolver: TypeParameterResolver,
+    ): IrMixinDuck.Extension {
+        val typeParameterResolver = source.typeParameters.map { it.ksTypeParameter }
+            .toTypeParameterResolver(parentTypeParameterResolver)
+        return when (source) {
+            is Patch.Extension.Property -> IrMixinDuck.Extension.Property(
+                typeName = source.type.toXTypeName(typeParameterResolver),
                 sourceName = source.name,
                 sourceGetterJvmName = source.getterJvmName,
                 sourceSetterJvmName = source.setterJvmName,
                 getterName = source.getterJvmName.withUniqueModPrefix(),
                 setterName = source.setterJvmName?.withUniqueModPrefix(),
-                mappingName = source.mappingName,
-                modifiers = lowerShadowModifiers(source.modifiers, isInterface, isField = true),
-                mixinAnnotations = effectiveMixinAnnotations,
+                receiverTargetTypeCast = lowerTargetSubtypeCast(source.receiverType, typeParameterResolver),
+                typeVariables = source.typeParameters.toXTypeVariables(typeParameterResolver),
             )
-        }
 
-        is Patch.Shadow.Function -> {
-            val effectiveMixinAnnotations = if (source.mixinAnnotations.isNotEmpty()) {
-                lowerMixinAnnotations(source.mixinAnnotations)
-            } else {
-                listOf(IrMixinAnnotation(poetesse.xClass(options.shadowAnnotation), emptyList()))
-            }
-            IrMixinDuck.Shadow.Function(
+            is Patch.Extension.Function -> IrMixinDuck.Extension.Function(
                 sourceName = source.name,
                 sourceJvmName = source.jvmName,
                 name = source.jvmName.withUniqueModPrefix(),
-                parameters = source.parameters.map { IrFunctionParameter(it.name, it.type.toXTypeName()) },
-                returnTypeName = source.returnType?.takeIf { !it.isUnit }?.toXTypeName(),
-                mappingName = source.mappingName,
-                modifiers = lowerShadowModifiers(source.modifiers, isInterface, isField = false),
-                mixinAnnotations = effectiveMixinAnnotations,
+                parameters = source.parameters.map {
+                    IrFunctionParameter(
+                        name = it.name,
+                        typeName = it.type.toXTypeName(typeParameterResolver),
+                    )
+                },
+                returnTypeName = source.returnType?.takeIf { !it.isUnit }?.toXTypeName(typeParameterResolver),
+                receiverTargetTypeCast = lowerTargetSubtypeCast(source.receiverType, typeParameterResolver),
+                typeVariables = source.typeParameters.toXTypeVariables(typeParameterResolver),
             )
         }
     }
 
-    private fun lowerMemberInjection(injection: Patch.Injection) = IrMixin.MemberInjection(
-        sourceJvmName = injection.jvmName,
-        name = injection.jvmName.withUniqueModPrefix(),
-        mixinAnnotations = lowerMixinAnnotations(injection.mixinAnnotations),
-        parameters = injection.parameters.map { parameter ->
-            IrMixin.Injection.Parameter(
-                parameter.name,
-                parameter.type.toXTypeName(),
-                lowerMixinAnnotations(parameter.mixinAnnotations),
-            )
-        },
-        returnTypeName = injection.returnType?.takeIf { !it.isUnit }?.takeIf { !it.isUnit }?.toXTypeName(),
-        extensionReceiverTargetTypeCast = injection.extensionReceiverType?.let { lowerTargetSubtypeCast(it) },
-    )
+    private fun lowerMixinDuckShadowEntry(
+        source: Patch.Shadow,
+        isInterface: Boolean,
+        parentTypeParameterResolver: TypeParameterResolver,
+    ): IrMixinDuck.Shadow {
+        val typeParameterResolver = source.typeParameters.map { it.ksTypeParameter }
+            .toTypeParameterResolver(parentTypeParameterResolver)
+        return when (source) {
+            is Patch.Shadow.Property -> {
+                val effectiveMixinAnnotations = if (source.mixinAnnotations.isNotEmpty()) {
+                    lowerMixinAnnotations(source.mixinAnnotations)
+                } else {
+                    listOfNotNull(
+                        if (source.setterJvmName != null) options.mutableAnnotation else null,
+                        if (FINAL in source.modifiers) options.finalAnnotation else null,
+                        options.shadowAnnotation,
+                    ).map { IrMixinAnnotation(poetesse.xClass(it), emptyList()) }
+                }
+                IrMixinDuck.Shadow.Property(
+                    typeName = source.type.toXTypeName(typeParameterResolver),
+                    sourceName = source.name,
+                    sourceGetterJvmName = source.getterJvmName,
+                    sourceSetterJvmName = source.setterJvmName,
+                    getterName = source.getterJvmName.withUniqueModPrefix(),
+                    setterName = source.setterJvmName?.withUniqueModPrefix(),
+                    mappingName = source.mappingName,
+                    modifiers = lowerShadowModifiers(source.modifiers, isInterface, isField = true),
+                    mixinAnnotations = effectiveMixinAnnotations,
+                    typeVariables = source.typeParameters.toXTypeVariables(typeParameterResolver),
+                )
+            }
+
+            is Patch.Shadow.Function -> {
+                val effectiveMixinAnnotations = if (source.mixinAnnotations.isNotEmpty()) {
+                    lowerMixinAnnotations(source.mixinAnnotations)
+                } else {
+                    listOf(IrMixinAnnotation(poetesse.xClass(options.shadowAnnotation), emptyList()))
+                }
+                IrMixinDuck.Shadow.Function(
+                    sourceName = source.name,
+                    sourceJvmName = source.jvmName,
+                    name = source.jvmName.withUniqueModPrefix(),
+                    parameters = source.parameters.map {
+                        IrFunctionParameter(
+                            name = it.name,
+                            typeName = it.type.toXTypeName(typeParameterResolver),
+                        )
+                    },
+                    returnTypeName = source.returnType?.takeIf { !it.isUnit }?.toXTypeName(typeParameterResolver),
+                    mappingName = source.mappingName,
+                    modifiers = lowerShadowModifiers(source.modifiers, isInterface, isField = false),
+                    mixinAnnotations = effectiveMixinAnnotations,
+                    typeVariables = source.typeParameters.toXTypeVariables(typeParameterResolver),
+                )
+            }
+        }
+    }
+
+    private fun lowerMemberInjection(
+        injection: Patch.Injection,
+        parentTypeParameterResolver: TypeParameterResolver,
+    ): IrMixin.MemberInjection {
+        val typeParameterResolver = injection.typeParameters.resolve(parentTypeParameterResolver)
+        return IrMixin.MemberInjection(
+            sourceJvmName = injection.jvmName,
+            name = injection.jvmName.withUniqueModPrefix(),
+            mixinAnnotations = lowerMixinAnnotations(injection.mixinAnnotations),
+            parameters = injection.parameters.map { parameter ->
+                IrMixin.Injection.Parameter(
+                    parameter.name,
+                    parameter.type.toXTypeName(typeParameterResolver),
+                    lowerMixinAnnotations(parameter.mixinAnnotations),
+                )
+            },
+            returnTypeName = injection.returnType?.takeIf { !it.isUnit }?.toXTypeName(typeParameterResolver),
+            extensionReceiverTargetTypeCast = injection.extensionReceiverType?.let {
+                lowerTargetSubtypeCast(it, typeParameterResolver)
+            },
+            typeVariables = injection.typeParameters.toXTypeVariables(typeParameterResolver),
+        )
+    }
 
     private fun lowerStaticInjection(
         companionObject: Patch.CompanionObject,
         injection: Patch.Injection,
-    ) = IrMixin.StaticInjection(
-        sourceJvmName = injection.jvmName,
-        name = injection.jvmName.withUniqueModPrefix(),
-        mixinAnnotations = lowerMixinAnnotations(injection.mixinAnnotations),
-        parameters = injection.parameters.map { parameter ->
-            IrMixin.Injection.Parameter(
-                parameter.name,
-                parameter.type.toXTypeName(),
-                lowerMixinAnnotations(parameter.mixinAnnotations),
-            )
-        },
-        returnTypeName = injection.returnType?.takeIf { !it.isUnit }?.toXTypeName(),
-        patchCompanionObjectName = companionObject.name,
-    )
+        parentTypeParameterResolver: TypeParameterResolver,
+    ): IrMixin.StaticInjection {
+        val typeParameterResolver = injection.typeParameters.resolve(parentTypeParameterResolver)
+        return IrMixin.StaticInjection(
+            sourceJvmName = injection.jvmName,
+            name = injection.jvmName.withUniqueModPrefix(),
+            mixinAnnotations = lowerMixinAnnotations(injection.mixinAnnotations),
+            parameters = injection.parameters.map { parameter ->
+                IrMixin.Injection.Parameter(
+                    parameter.name,
+                    parameter.type.toXTypeName(typeParameterResolver),
+                    lowerMixinAnnotations(parameter.mixinAnnotations),
+                )
+            },
+            returnTypeName = injection.returnType?.takeIf { !it.isUnit }?.toXTypeName(typeParameterResolver),
+            patchCompanionObjectName = companionObject.name,
+            typeVariables = injection.typeParameters.toXTypeVariables(typeParameterResolver),
+        )
+    }
 
     private fun lowerMixinAnnotations(annotations: List<MixinAnnotation>) = annotations.map(::lowerMixinAnnotation)
 
     private fun lowerMixinAnnotation(annotation: MixinAnnotation) = IrMixinAnnotation(
-        typeClassName = annotation.typeClassDeclaration.toXClassName(),
+        className = annotation.typeClassDeclaration.toXClassName(),
         arguments = annotation.arguments.map { argument ->
             when (argument) {
                 is MixinAnnotation.ScalarArgument -> IrMixinAnnotation.ScalarArgument(
@@ -243,21 +324,25 @@ class Lowering(private val options: KspOptions, private val poetesse: PoetesseSc
         is MixinAnnotation.Argument.FloatValue -> IrMixinAnnotation.Argument.FloatValue(value.float)
         is MixinAnnotation.Argument.DoubleValue -> IrMixinAnnotation.Argument.DoubleValue(value.double)
         is MixinAnnotation.Argument.StringValue -> IrMixinAnnotation.Argument.StringValue(value.string)
-        is MixinAnnotation.Argument.TypeValue -> IrMixinAnnotation.Argument.TypeValue(value.type.toXTypeName())
-        is MixinAnnotation.Argument.EnumValue -> IrMixinAnnotation.Argument.EnumValue(
-            value.classDeclaration.toXClassName(), value.entryName
-        )
+        is MixinAnnotation.Argument.ClassValue -> {
+            IrMixinAnnotation.Argument.ClassValue(value.classDeclaration.toXClassName())
+        }
+
+        is MixinAnnotation.Argument.EnumValue -> {
+            IrMixinAnnotation.Argument.EnumValue(value.enumClassDeclaration.toXClassName(), value.entryName)
+        }
 
         is MixinAnnotation.Argument.AnnotationValue -> {
             IrMixinAnnotation.Argument.AnnotationValue(lowerMixinAnnotation(value.annotation))
         }
     }
 
-    private fun lowerTargetSubtypeCast(targetSubtype: Type) = IrTargetSubtypeCast(
-        typeName = targetSubtype.toXTypeName(),
-        isUnsafeCastRequired = !targetSubtype.isInterface,
-        isTargetCastRequired = !targetSubtype.isAny,
-    )
+    private fun lowerTargetSubtypeCast(targetSubtype: Type, typeParameterResolver: TypeParameterResolver) =
+        IrTargetSubtypeCast(
+            typeName = targetSubtype.toXTypeName(typeParameterResolver),
+            isUnsafeCastRequired = !targetSubtype.isInterface,
+            isTargetCastRequired = !targetSubtype.isAny,
+        )
 
     private fun lowerShadowModifiers(
         modifiers: EnumSet<Modifier>,
@@ -283,18 +368,19 @@ class Lowering(private val options: KspOptions, private val poetesse: PoetesseSc
         return result.toList()
     }
 
-    private fun findMixinSourcePackageLCP(patches: List<Patch>): String =
-        patches.map { it.classDeclaration.toXClassName().packageName }.reduceOrNull { lcp, next ->
-            val currentParts = lcp.orEmpty().split('.')
-            val nextParts = next.orEmpty().split('.')
-            currentParts.zip(nextParts).takeWhile { (current, next) -> current == next }.joinToString(".") { it.first }
-        }.orEmpty()
-
     private fun String.withUniqueModPrefix(): String =
         options.uniqueModPrefix + this
 
-    private fun Type.toXTypeName(): XTypeName =
-        poetesse.xType(type.toTypeName())
+    private fun Type.toXTypeName(typeParameterResolver: TypeParameterResolver): XTypeName =
+        poetesse.xType(ksType.toTypeName(typeParameterResolver))
+
+    private fun List<TypeParameter>.resolve(parent: TypeParameterResolver): TypeParameterResolver =
+        map { it.ksTypeParameter }.toTypeParameterResolver(parent)
+
+    private fun List<TypeParameter>.toXTypeVariables(resolver: TypeParameterResolver): List<XTypeVariableName> =
+        map { typeParameter ->
+            poetesse.xTypeVariable(typeParameter.name, typeParameter.bounds.map { it.toXTypeName(resolver) })
+        }
 
     private fun KSClassDeclaration.toXClassName(): XClassName =
         poetesse.xClass(toClassName())

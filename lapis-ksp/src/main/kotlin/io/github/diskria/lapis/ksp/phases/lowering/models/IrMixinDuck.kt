@@ -4,11 +4,13 @@ import com.google.devtools.ksp.symbol.KSFile
 import io.github.diskria.lapis.ksp.phases.lowering.models.IrMixinDuck.Entry.Kind
 import io.github.diskria.poetesse.interop.XClassName
 import io.github.diskria.poetesse.interop.XTypeName
+import io.github.diskria.poetesse.interop.XTypeVariableName
 import io.github.diskria.poetesse.java.JPModifier
 
 class IrMixinDuck(
     val patchOriginatingFile: KSFile?,
     val className: XClassName,
+    val typeVariables: List<XTypeVariableName>,
     val shadows: List<Shadow>,
     val extensions: List<Extension>,
 ) {
@@ -74,6 +76,7 @@ class IrMixinDuck(
     sealed interface Extension : Entry {
 
         val receiverTargetTypeCast: IrTargetSubtypeCast
+        val typeVariables: List<XTypeVariableName>
 
         class Property(
             override val sourceName: String,
@@ -83,6 +86,7 @@ class IrMixinDuck(
             override val getterName: String,
             override val setterName: String?,
             override val receiverTargetTypeCast: IrTargetSubtypeCast,
+            override val typeVariables: List<XTypeVariableName>,
         ) : IrMixinDuck.Property,
             Extension
 
@@ -93,6 +97,7 @@ class IrMixinDuck(
             override val parameters: List<IrFunctionParameter>,
             override val returnTypeName: XTypeName?,
             override val receiverTargetTypeCast: IrTargetSubtypeCast,
+            override val typeVariables: List<XTypeVariableName>,
         ) : IrMixinDuck.Function,
             Extension
     }
@@ -100,6 +105,7 @@ class IrMixinDuck(
     sealed interface Shadow : Entry {
 
         val modifiers: List<JPModifier>
+        val typeVariables: List<XTypeVariableName>
         val mappingName: String
         val mixinAnnotations: List<IrMixinAnnotation>
 
@@ -113,6 +119,7 @@ class IrMixinDuck(
             override val modifiers: List<JPModifier>,
             override val mappingName: String,
             override val mixinAnnotations: List<IrMixinAnnotation>,
+            override val typeVariables: List<XTypeVariableName>,
         ) : IrMixinDuck.Property,
             Shadow
 
@@ -125,6 +132,7 @@ class IrMixinDuck(
             override val modifiers: List<JPModifier>,
             override val mappingName: String,
             override val mixinAnnotations: List<IrMixinAnnotation>,
+            override val typeVariables: List<XTypeVariableName>,
         ) : IrMixinDuck.Function,
             Shadow
     }
