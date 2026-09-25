@@ -228,13 +228,13 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         kspRequire(isPublic) { "" }
         kspRequire(!hasExtensionReceiver) { "" }
         kspRequire(!isOpen && !isAbstract) { "" }
+        kspRequire(typeParameters.isEmpty()) { "" }
         return KMixinModel.Extension.Property(
             name = name,
             getterJvmName = getter.jvmName,
             setterJvmName = if (setter != null) kspRequireNotNull(setter.jvmName) { "" } else null,
             type = type.validate(),
             receiverType = targetType,
-            typeParameters = typeParameters.validate(),
         )
     }
 
@@ -274,6 +274,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             node.validateJavaIdentifierName(value, "@KShadow property's @MappingName value", sources = true)
         } ?: name
         val modifiersArgument = annotations.findApiArgument(KShadow::modifiers)
+        kspRequire(typeParameters.isEmpty()) { "" }
         return KMixinModel.Shadow.Property(
             name = name,
             getterJvmName = getter.jvmName,
@@ -282,7 +283,6 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             modifiers = validateShadowModifiers(modifiersArgument?.elements.orEmpty(), isInterface, isProperty = true),
             type = type.validate(),
             mixinAnnotations = mixinAnnotations,
-            typeParameters = typeParameters.validate(),
         )
     }
 

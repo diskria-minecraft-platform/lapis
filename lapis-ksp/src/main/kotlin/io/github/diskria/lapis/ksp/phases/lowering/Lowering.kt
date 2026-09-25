@@ -125,21 +125,20 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
         } else null
     }
 
-    private fun KMixinModel.Extension.lower(enclosingGenerics: Generics): IrMixinDuck.Extension {
-        val generics = typeParameters.lower(enclosingGenerics)
-        return when (this) {
-            is KMixinModel.Extension.Property -> IrMixinDuck.Extension.Property(
-                type = type.lower(generics),
-                sourceName = name,
-                sourceGetterJvmName = getterJvmName,
-                sourceSetterJvmName = setterJvmName,
-                getterName = getterJvmName.withUniqueModPrefix(),
-                setterName = setterJvmName?.withUniqueModPrefix(),
-                receiverTargetTypeCast = receiverType.lowerToTargetSubtypeCast(generics),
-                typeVariables = generics.typeVariables,
-            )
+    private fun KMixinModel.Extension.lower(enclosingGenerics: Generics) = when (this) {
+        is KMixinModel.Extension.Property -> IrMixinDuck.Extension.Property(
+            type = type.lower(enclosingGenerics),
+            sourceName = name,
+            sourceGetterJvmName = getterJvmName,
+            sourceSetterJvmName = setterJvmName,
+            getterName = getterJvmName.withUniqueModPrefix(),
+            setterName = setterJvmName?.withUniqueModPrefix(),
+            receiverTargetTypeCast = receiverType.lowerToTargetSubtypeCast(enclosingGenerics),
+        )
 
-            is KMixinModel.Extension.Function -> IrMixinDuck.Extension.Function(
+        is KMixinModel.Extension.Function -> {
+            val generics = typeParameters.lower(enclosingGenerics)
+            IrMixinDuck.Extension.Function(
                 sourceName = name,
                 sourceJvmName = jvmName,
                 name = jvmName.withUniqueModPrefix(),
@@ -151,31 +150,30 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
         }
     }
 
-    private fun KMixinModel.Shadow.lower(isInterface: Boolean, enclosingGenerics: Generics): IrMixinDuck.Shadow {
-        val generics = typeParameters.lower(enclosingGenerics)
-        return when (this) {
-            is KMixinModel.Shadow.Property -> IrMixinDuck.Shadow.Property(
-                type = type.lower(generics),
-                sourceName = name,
-                sourceGetterJvmName = getterJvmName,
-                sourceSetterJvmName = setterJvmName,
-                getterName = getterJvmName.withUniqueModPrefix(),
-                setterName = setterJvmName?.withUniqueModPrefix(),
-                mappingName = mappingName,
-                modifiers = modifiers.lowerToShadowModifiers(isInterface, isField = true),
-                mixinAnnotations = if (mixinAnnotations.isNotEmpty()) {
-                    mixinAnnotations.lower()
-                } else {
-                    listOfNotNull(
-                        if (setterJvmName != null) options.mutableAnnotation else null,
-                        if (FINAL in modifiers) options.finalAnnotation else null,
-                        options.shadowAnnotation,
-                    ).map { IrMixinAnnotation(poetesse.xClass(it), emptyList()) }
-                },
-                typeVariables = generics.typeVariables,
-            )
+    private fun KMixinModel.Shadow.lower(isInterface: Boolean, enclosingGenerics: Generics) = when (this) {
+        is KMixinModel.Shadow.Property -> IrMixinDuck.Shadow.Property(
+            type = type.lower(enclosingGenerics),
+            sourceName = name,
+            sourceGetterJvmName = getterJvmName,
+            sourceSetterJvmName = setterJvmName,
+            getterName = getterJvmName.withUniqueModPrefix(),
+            setterName = setterJvmName?.withUniqueModPrefix(),
+            mappingName = mappingName,
+            modifiers = modifiers.lowerToShadowModifiers(isInterface, isField = true),
+            mixinAnnotations = if (mixinAnnotations.isNotEmpty()) {
+                mixinAnnotations.lower()
+            } else {
+                listOfNotNull(
+                    if (setterJvmName != null) options.mutableAnnotation else null,
+                    if (FINAL in modifiers) options.finalAnnotation else null,
+                    options.shadowAnnotation,
+                ).map { IrMixinAnnotation(poetesse.xClass(it), emptyList()) }
+            },
+        )
 
-            is KMixinModel.Shadow.Function -> IrMixinDuck.Shadow.Function(
+        is KMixinModel.Shadow.Function -> {
+            val generics = typeParameters.lower(enclosingGenerics)
+            IrMixinDuck.Shadow.Function(
                 sourceName = name,
                 sourceJvmName = jvmName,
                 name = jvmName.withUniqueModPrefix(),

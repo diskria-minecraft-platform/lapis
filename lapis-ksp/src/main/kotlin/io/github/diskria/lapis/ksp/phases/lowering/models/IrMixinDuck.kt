@@ -62,7 +62,7 @@ class IrMixinDuck(
             override val sourceJvmName: String,
             type: IrType,
         ) : AccessorKind {
-            val parameter = IrFunctionParameter("newValue", type)
+            val parameter = IrFunctionParameter("value", type)
             override val parameters: List<IrFunctionParameter> = listOf(parameter)
             override val returnType: IrType? = null
         }
@@ -70,12 +70,12 @@ class IrMixinDuck(
 
     sealed interface Function : Entry, Kind {
         override val kinds: List<Kind> get() = listOf(this)
+        val typeVariables: List<XTypeVariableName>
     }
 
     sealed interface Extension : Entry {
 
         val receiverTargetTypeCast: IrTargetSubtypeCast
-        val typeVariables: List<XTypeVariableName>
 
         class Property(
             override val sourceName: String,
@@ -85,7 +85,6 @@ class IrMixinDuck(
             override val getterName: String,
             override val setterName: String?,
             override val receiverTargetTypeCast: IrTargetSubtypeCast,
-            override val typeVariables: List<XTypeVariableName>,
         ) : IrMixinDuck.Property,
             Extension
 
@@ -104,7 +103,6 @@ class IrMixinDuck(
     sealed interface Shadow : Entry {
 
         val modifiers: List<JPModifier>
-        val typeVariables: List<XTypeVariableName>
         val mappingName: String
         val mixinAnnotations: List<IrMixinAnnotation>
 
@@ -118,7 +116,6 @@ class IrMixinDuck(
             override val modifiers: List<JPModifier>,
             override val mappingName: String,
             override val mixinAnnotations: List<IrMixinAnnotation>,
-            override val typeVariables: List<XTypeVariableName>,
         ) : IrMixinDuck.Property,
             Shadow
 

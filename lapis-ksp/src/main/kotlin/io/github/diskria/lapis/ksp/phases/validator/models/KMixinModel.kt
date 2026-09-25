@@ -39,7 +39,6 @@ class KMixinModel(
     sealed interface Extension {
 
         val receiverType: Type
-        val typeParameters: List<TypeParameter>
 
         class Property(
             override val name: String,
@@ -47,7 +46,6 @@ class KMixinModel(
             override val setterJvmName: String?,
             override val type: Type,
             override val receiverType: Type,
-            override val typeParameters: List<TypeParameter>,
         ) : DuckSource.Property,
             Extension
 
@@ -67,7 +65,6 @@ class KMixinModel(
         val modifiers: EnumSet<Modifier>
         val mappingName: String
         val mixinAnnotations: List<MixinAnnotation>
-        val typeParameters: List<TypeParameter>
 
         class Property(
             override val name: String,
@@ -77,7 +74,6 @@ class KMixinModel(
             override val modifiers: EnumSet<Modifier>,
             override val mappingName: String,
             override val mixinAnnotations: List<MixinAnnotation>,
-            override val typeParameters: List<TypeParameter>,
         ) : DuckSource.Property,
             Shadow
 

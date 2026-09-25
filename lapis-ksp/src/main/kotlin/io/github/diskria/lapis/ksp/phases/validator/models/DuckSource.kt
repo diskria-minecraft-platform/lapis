@@ -14,5 +14,6 @@ sealed interface DuckSource {
         val jvmName: String
         val parameters: List<FunctionParameter>
         val returnType: Type?
+        val typeParameters: List<TypeParameter>
     }
 }
