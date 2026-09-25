@@ -34,10 +34,16 @@ class LapisSymbolProcessor(
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
         val parser = SymbolParser(resolver)
+        logger.setPhase(KspLogger.Phase.PARSING)
         val parsedKMixins = parser.parseKMixins()
-        val validatedKMixins = FrontendValidator(options, logger).validate(parsedKMixins)
-        val irKMixins = lowering.lower(validatedKMixins.toList())
+
+        logger.setPhase(KspLogger.Phase.VALIDATION)
+        val validatedKMixins = FrontendValidator(options, logger).validate(parsedKMixins).toList()
+
+        logger.setPhase(KspLogger.Phase.LOWERING)
+        val irKMixins = lowering.lower(validatedKMixins)
         irKMixins.forEach { kMixins[it.className.qualifiedName] = it }
+
         return emptyList()
     }
 
@@ -50,6 +56,7 @@ class LapisSymbolProcessor(
     }
 
     private fun generate() {
+        logger.setPhase(KspLogger.Phase.GENERATION)
         Generator(options, poetesse, codeGenerator).generate(kMixins.values.toList())
     }
 }

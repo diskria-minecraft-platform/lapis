@@ -1,9 +1,7 @@
 package io.github.diskria.lapis.ksp.phases.lowering.models
 
-import io.github.diskria.poetesse.interop.XTypeName
-
 class IrTargetSubtypeCast(
-    val typeName: XTypeName,
+    val type: IrType,
     val isUnsafeCastRequired: Boolean,
     val isTargetCastRequired: Boolean,
 )

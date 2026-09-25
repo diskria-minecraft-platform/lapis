@@ -3,7 +3,6 @@ package io.github.diskria.lapis.ksp.phases.lowering.models
 import com.google.devtools.ksp.symbol.KSFile
 import io.github.diskria.lapis.ksp.phases.lowering.models.IrMixinDuck.Entry.Kind
 import io.github.diskria.poetesse.interop.XClassName
-import io.github.diskria.poetesse.interop.XTypeName
 import io.github.diskria.poetesse.interop.XTypeVariableName
 import io.github.diskria.poetesse.java.JPModifier
 
@@ -23,13 +22,13 @@ class IrMixinDuck(
             val name: String
             val sourceJvmName: String
             val parameters: List<IrFunctionParameter>
-            val returnTypeName: XTypeName?
+            val returnType: IrType?
         }
     }
 
     sealed interface Property : Entry {
 
-        val typeName: XTypeName
+        val type: IrType
         val getterName: String
         val sourceGetterJvmName: String
         val setterName: String?
@@ -37,13 +36,13 @@ class IrMixinDuck(
 
         override val sourceName: String
 
-        val getter: Getter get() = Getter(getterName, sourceGetterJvmName, typeName)
+        val getter: Getter get() = Getter(getterName, sourceGetterJvmName, type)
         val setter: Setter?
             get() {
                 val name = setterName
                 val sourceJvmName = sourceSetterJvmName
                 return if (name != null && sourceJvmName != null) {
-                    Setter(name, sourceJvmName, typeName)
+                    Setter(name, sourceJvmName, type)
                 } else null
             }
 
@@ -53,7 +52,7 @@ class IrMixinDuck(
         class Getter(
             override val name: String,
             override val sourceJvmName: String,
-            override val returnTypeName: XTypeName,
+            override val returnType: IrType,
         ) : AccessorKind {
             override val parameters: List<IrFunctionParameter> = emptyList()
         }
@@ -61,11 +60,11 @@ class IrMixinDuck(
         class Setter(
             override val name: String,
             override val sourceJvmName: String,
-            typeName: XTypeName,
+            type: IrType,
         ) : AccessorKind {
-            val parameter = IrFunctionParameter("newValue", typeName)
+            val parameter = IrFunctionParameter("newValue", type)
             override val parameters: List<IrFunctionParameter> = listOf(parameter)
-            override val returnTypeName: XTypeName? = null
+            override val returnType: IrType? = null
         }
     }
 
@@ -80,7 +79,7 @@ class IrMixinDuck(
 
         class Property(
             override val sourceName: String,
-            override val typeName: XTypeName,
+            override val type: IrType,
             override val sourceGetterJvmName: String,
             override val sourceSetterJvmName: String?,
             override val getterName: String,
@@ -95,7 +94,7 @@ class IrMixinDuck(
             override val name: String,
             override val sourceJvmName: String,
             override val parameters: List<IrFunctionParameter>,
-            override val returnTypeName: XTypeName?,
+            override val returnType: IrType?,
             override val receiverTargetTypeCast: IrTargetSubtypeCast,
             override val typeVariables: List<XTypeVariableName>,
         ) : IrMixinDuck.Function,
@@ -111,7 +110,7 @@ class IrMixinDuck(
 
         class Property(
             override val sourceName: String,
-            override val typeName: XTypeName,
+            override val type: IrType,
             override val getterName: String,
             override val sourceGetterJvmName: String,
             override val setterName: String?,
@@ -128,7 +127,7 @@ class IrMixinDuck(
             override val name: String,
             override val sourceJvmName: String,
             override val parameters: List<IrFunctionParameter>,
-            override val returnTypeName: XTypeName?,
+            override val returnType: IrType?,
             override val modifiers: List<JPModifier>,
             override val mappingName: String,
             override val mixinAnnotations: List<IrMixinAnnotation>,

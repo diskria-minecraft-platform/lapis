@@ -114,6 +114,7 @@ class KMixinModel(
 
 class Type(
     val ksType: KSType,
+    val canonicalType: Type?,
     val isAny: Boolean,
     val isUnit: Boolean,
     val isInterface: Boolean,

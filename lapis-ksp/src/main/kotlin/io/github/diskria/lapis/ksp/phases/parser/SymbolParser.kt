@@ -154,9 +154,6 @@ class SymbolParser(private val resolver: Resolver) {
                 rawValue ?: return ParsedAnnotation.InvalidArgument(this)
                 parseValue(rawValue)
             }
-            if (elements.distinctBy { it::class }.size > 1) {
-                return ParsedAnnotation.InvalidArgument(this)
-            }
             return ParsedAnnotation.ArrayArgument(
                 name = name,
                 isExplicit = origin != com.google.devtools.ksp.symbol.Origin.SYNTHETIC,
@@ -194,22 +191,71 @@ class SymbolParser(private val resolver: Resolver) {
         else -> internalError("Unexpected type of annotation argument value: '${raw::class.qualifiedName}'.")
     }
 
-    private fun KSType.parse(viewNode: KSNode): ParsedType =
-        if (isError) InvalidType(viewNode)
-        else {
-            val actualType = unwrapTypealiases()
-            val classDeclaration = actualType.declaration as? KSClassDeclaration
-            ValidType(
-                type = actualType,
-                isAny = actualType.makeNotNullable() == resolver.builtIns.anyType,
-                isUnit = actualType.makeNotNullable() == resolver.builtIns.unitType,
-                classDeclaration = classDeclaration,
-                packageName = classDeclaration?.packageName?.asString().orEmpty(),
-                qualifiedName = classDeclaration?.qualifiedName?.asString().orEmpty(),
-                isInterface = classDeclaration?.classKind == ClassKind.INTERFACE,
-                node = viewNode,
-            )
+    private fun KSType.parse(viewNode: KSNode): ParsedType {
+        if (isError) return InvalidType(viewNode)
+        val parsedArguments = arguments.map { argument ->
+            if (argument.variance == Variance.STAR) {
+                ParsedType.StarArgument(viewNode)
+            } else {
+                val parsedType = argument.type.parse(viewNode)
+                if (parsedType is InvalidType) {
+                    ParsedType.InvalidArgument(viewNode)
+                } else {
+                    ParsedType.VarianceArgument(argument.variance, parsedType, viewNode)
+                }
+            }
         }
+        val canonicalType = if (declaration is KSTypeAlias) {
+            val expanded = expandTypealias() ?: return InvalidType(viewNode)
+            val parsedExpanded = expanded.parse(viewNode) as? ValidType ?: return InvalidType(viewNode)
+            parsedExpanded.canonicalType ?: parsedExpanded
+        } else {
+            null
+        }
+        val finalType = canonicalType?.ksType ?: this
+        val finalClassDeclaration = finalType.declaration as? KSClassDeclaration
+        return ValidType(
+            ksType = this,
+            arguments = parsedArguments,
+            canonicalType = canonicalType,
+            isAny = finalType.makeNotNullable() == resolver.builtIns.anyType,
+            isUnit = finalType.makeNotNullable() == resolver.builtIns.unitType,
+            classDeclaration = finalClassDeclaration,
+            packageName = finalClassDeclaration?.packageName?.asString(),
+            qualifiedName = finalClassDeclaration?.qualifiedName?.asString(),
+            isInterface = finalClassDeclaration?.classKind == ClassKind.INTERFACE,
+            node = viewNode,
+        )
+    }
+
+    private fun KSType.expandTypealias(visitedAliases: Set<KSTypeAlias> = emptySet()): KSType? {
+        val alias = declaration as? KSTypeAlias ?: return this
+        if (alias in visitedAliases) return null
+        val expandedType = alias.type.resolve()
+        val substitutions = alias.typeParameters.map { it.name.getShortName() }.zip(arguments).toMap()
+        return expandedType.substituteTypeParameters(substitutions, visitedAliases + alias)
+    }
+
+    private fun KSType.substituteTypeParameters(
+        substitutions: Map<String, KSTypeArgument>,
+        visitedAliases: Set<KSTypeAlias>
+    ): KSType? {
+        if (declaration is KSTypeParameter) {
+            val name = declaration.simpleName.asString()
+            val argument = substitutions[name] ?: return this
+            val argumentType = argument.type?.resolve() ?: return this
+            val resolvedType = if (isMarkedNullable) argumentType.makeNullable() else argumentType
+            return resolvedType.expandTypealias(visitedAliases)
+        }
+        if (arguments.isNotEmpty()) {
+            return replace(arguments.map { argument ->
+                val type = argument.type?.resolve() ?: return@map argument
+                val substitutedType = type.substituteTypeParameters(substitutions, visitedAliases) ?: return null
+                resolver.getTypeArgument(resolver.createKSTypeReferenceFromKSType(substitutedType), argument.variance)
+            })
+        }
+        return expandTypealias(visitedAliases)
+    }
 
     private fun KSTypeReference.parse(): ParsedType =
         resolve().parse(this)
@@ -233,8 +279,6 @@ class SymbolParser(private val resolver: Resolver) {
     }
 }
 
-tailrec fun KSType.unwrapTypealiases(): KSType =
-    (declaration as? KSTypeAlias)?.type?.resolve()?.unwrapTypealiases() ?: this
 
 tailrec fun KSDeclaration.unwrapTypealiases(): KSDeclaration =
     (this as? KSTypeAlias)?.type?.resolve()?.declaration?.unwrapTypealiases() ?: this

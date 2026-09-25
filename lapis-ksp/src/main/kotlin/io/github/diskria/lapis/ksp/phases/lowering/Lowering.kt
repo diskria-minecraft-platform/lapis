@@ -129,7 +129,7 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
         val generics = typeParameters.lower(enclosingGenerics)
         return when (this) {
             is KMixinModel.Extension.Property -> IrMixinDuck.Extension.Property(
-                typeName = type.lower(generics),
+                type = type.lower(generics),
                 sourceName = name,
                 sourceGetterJvmName = getterJvmName,
                 sourceSetterJvmName = setterJvmName,
@@ -143,8 +143,8 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
                 sourceName = name,
                 sourceJvmName = jvmName,
                 name = jvmName.withUniqueModPrefix(),
-                parameters = parameters.map { IrFunctionParameter(name = it.name, typeName = it.type.lower(generics)) },
-                returnTypeName = returnType?.takeIf { !it.isUnit }?.lower(generics),
+                parameters = parameters.map { IrFunctionParameter(name = it.name, type = it.type.lower(generics)) },
+                returnType = returnType?.takeIf { !it.isUnit }?.lower(generics),
                 receiverTargetTypeCast = receiverType.lowerToTargetSubtypeCast(generics),
                 typeVariables = generics.typeVariables,
             )
@@ -155,7 +155,7 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
         val generics = typeParameters.lower(enclosingGenerics)
         return when (this) {
             is KMixinModel.Shadow.Property -> IrMixinDuck.Shadow.Property(
-                typeName = type.lower(generics),
+                type = type.lower(generics),
                 sourceName = name,
                 sourceGetterJvmName = getterJvmName,
                 sourceSetterJvmName = setterJvmName,
@@ -179,8 +179,8 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
                 sourceName = name,
                 sourceJvmName = jvmName,
                 name = jvmName.withUniqueModPrefix(),
-                parameters = parameters.map { IrFunctionParameter(name = it.name, typeName = it.type.lower(generics)) },
-                returnTypeName = returnType?.takeIf { !it.isUnit }?.lower(generics),
+                parameters = parameters.map { IrFunctionParameter(name = it.name, type = it.type.lower(generics)) },
+                returnType = returnType?.takeIf { !it.isUnit }?.lower(generics),
                 mappingName = mappingName,
                 modifiers = modifiers.lowerToShadowModifiers(isInterface, isField = false),
                 mixinAnnotations = if (mixinAnnotations.isNotEmpty()) {
@@ -206,7 +206,7 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
                     parameter.mixinAnnotations.lower(),
                 )
             },
-            returnTypeName = returnType?.takeIf { !it.isUnit }?.lower(generics),
+            returnType = returnType?.takeIf { !it.isUnit }?.lower(generics),
             extensionReceiverTargetTypeCast = extensionReceiverType?.lowerToTargetSubtypeCast(generics),
             typeVariables = generics.typeVariables,
         )
@@ -225,7 +225,7 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
                     parameter.mixinAnnotations.lower(),
                 )
             },
-            returnTypeName = returnType?.takeIf { !it.isUnit }?.lower(generics),
+            returnType = returnType?.takeIf { !it.isUnit }?.lower(generics),
             kMixinCompanionObjectName = companion.name,
             typeVariables = generics.typeVariables,
         )
@@ -267,7 +267,7 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
     }
 
     private fun Type.lowerToTargetSubtypeCast(generics: Generics) = IrTargetSubtypeCast(
-        typeName = lower(generics),
+        type = lower(generics),
         isUnsafeCastRequired = !isInterface,
         isTargetCastRequired = !isAny,
     )
@@ -295,8 +295,14 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
     private fun String.withUniqueModPrefix(): String =
         options.uniqueModPrefix + this
 
-    private fun Type.lower(generics: Generics): XTypeName =
-        poetesse.xType(ksType.toTypeName(generics.resolver))
+    private fun Type.lower(generics: Generics): IrType {
+        val kotlin = poetesse.xType(ksType.toTypeName(generics.resolver))
+        return if (canonicalType != null) {
+            IrType(kotlin, poetesse.xType(canonicalType.ksType.toTypeName(generics.resolver)))
+        } else {
+            IrType(kotlin, kotlin)
+        }
+    }
 
     private fun List<TypeParameter>.lower(enclosingGenerics: Generics?): Generics {
         val resolver = map { it.ksTypeParameter }.toTypeParameterResolver(enclosingGenerics?.resolver)

@@ -268,9 +268,9 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         kspRequire(!hasExtensionReceiver) { "" }
         kspRequireNotNull(getter) { "" }
         kspRequireNotNull(getter.jvmName) { "" }
-        val mappingNameValueArgument = annotations.findApiArgument(MappingName::name)
-        validateJavaIdentifierName(name, "@KShadow property name", sources = mappingNameValueArgument == null)
-        val mappingName = mappingNameValueArgument?.let { (value, node) ->
+        val mappingNameArgument = annotations.findApiArgument(MappingName::name)
+        validateJavaIdentifierName(name, "@KShadow property name", sources = mappingNameArgument == null)
+        val mappingName = mappingNameArgument?.let { (value, node) ->
             node.validateJavaIdentifierName(value, "@KShadow property's @MappingName value", sources = true)
         } ?: name
         val modifiersArgument = annotations.findApiArgument(KShadow::modifiers)
@@ -550,14 +550,28 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
     }
 
     private fun ParsedType.validate(): Type {
-        kspRequire(this is ValidType) { "" }
+        kspRequire(this is ValidType) {
+            """
+            Ensure the type has no compilation errors.
+            """.trimIndent()
+        }
+        arguments.forEach { it.validate() }
         return Type(
-            ksType = type,
+            ksType = ksType,
+            canonicalType = canonicalType?.validate(),
             isAny = isAny,
             isUnit = isUnit,
             isInterface = isInterface,
             classDeclaration = classDeclaration,
         )
+    }
+
+    private fun ParsedType.Argument.validate() {
+        kspRequire(this is ParsedType.ValidArgument) {
+            """
+            Ensure the type has no compilation errors.
+            """.trimIndent()
+        }
     }
 
     private fun List<ParsedTypeParameter>.validate() = validateAll { it.validate() }

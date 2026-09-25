@@ -4,7 +4,6 @@ import com.google.devtools.ksp.symbol.KSFile
 import io.github.diskria.lapis.annotations.Side
 import io.github.diskria.lapis.ksp.phases.lowering.models.IrMixin.Injection.Parameter
 import io.github.diskria.poetesse.interop.XClassName
-import io.github.diskria.poetesse.interop.XTypeName
 import io.github.diskria.poetesse.interop.XTypeVariableName
 
 class IrMixin(
@@ -22,12 +21,12 @@ class IrMixin(
         val sourceJvmName: String
         val mixinAnnotations: List<IrMixinAnnotation>
         val parameters: List<Parameter>
-        val returnTypeName: XTypeName?
+        val returnType: IrType?
         val typeVariables: List<XTypeVariableName>
 
         class Parameter(
             val name: String,
-            val typeName: XTypeName,
+            val type: IrType,
             val mixinAnnotations: List<IrMixinAnnotation>,
         )
     }
@@ -37,7 +36,7 @@ class IrMixin(
         override val sourceJvmName: String,
         override val mixinAnnotations: List<IrMixinAnnotation>,
         override val parameters: List<Parameter>,
-        override val returnTypeName: XTypeName?,
+        override val returnType: IrType?,
         override val typeVariables: List<XTypeVariableName>,
         val extensionReceiverTargetTypeCast: IrTargetSubtypeCast?
     ) : Injection
@@ -47,7 +46,7 @@ class IrMixin(
         override val sourceJvmName: String,
         override val mixinAnnotations: List<IrMixinAnnotation>,
         override val parameters: List<Parameter>,
-        override val returnTypeName: XTypeName?,
+        override val returnType: IrType?,
         override val typeVariables: List<XTypeVariableName>,
         val kMixinCompanionObjectName: String,
     ) : Injection

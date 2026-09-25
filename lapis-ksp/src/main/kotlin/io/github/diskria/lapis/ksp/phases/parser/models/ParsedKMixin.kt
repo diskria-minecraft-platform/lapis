@@ -89,10 +89,18 @@ class ParsedKMixin(
     ) : NodeHolder
 }
 
-sealed interface ParsedType : NodeHolder
+sealed interface ParsedType : NodeHolder {
+    sealed interface Argument : NodeHolder
+    sealed interface ValidArgument : Argument
+    class VarianceArgument(val variance: Variance, val type: ParsedType, override val node: KSNode) : ValidArgument
+    class StarArgument(override val node: KSNode) : ValidArgument
+    class InvalidArgument(override val node: KSNode) : Argument
+}
 
 class ValidType(
-    val type: KSType,
+    val ksType: KSType,
+    val arguments: List<ParsedType.Argument>,
+    val canonicalType: ValidType?,
     val isAny: Boolean,
     val isUnit: Boolean,
     val classDeclaration: KSClassDeclaration?,
