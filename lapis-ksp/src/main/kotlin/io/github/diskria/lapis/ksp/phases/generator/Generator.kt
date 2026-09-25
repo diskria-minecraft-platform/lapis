@@ -5,6 +5,7 @@ import com.google.devtools.ksp.processing.Dependencies
 import com.google.devtools.ksp.symbol.KSFile
 import io.github.diskria.lapis.annotations.InitStrategy
 import io.github.diskria.lapis.ksp.KspOptions
+import io.github.diskria.lapis.ksp.extensions.qualifiedNameOf
 import io.github.diskria.lapis.ksp.phases.generator.models.GeneratedMixinsJson
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
 import io.github.diskria.poetesse.Poetesse
@@ -13,12 +14,19 @@ import io.github.diskria.poetesse.interop.*
 import io.github.diskria.poetesse.java.*
 import io.github.diskria.poetesse.kotlin.*
 import kotlinx.serialization.json.Json
+import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
+import javax.annotation.processing.Generated
 
 class Generator(
     private val options: KspOptions,
     private val poetesse: Poetesse,
     private val codeGenerator: CodeGenerator,
 ) {
+    private val generatedDate: String by lazy {
+        OffsetDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXX"))
+    }
+
     fun generate(patches: List<FirPatch>) {
         patches.forEach { patch ->
             patch.mixin.duck?.let {
@@ -43,6 +51,8 @@ class Generator(
         poetesse {
             java.file(duck.className) {
                 interface_(fileName) { _ ->
+                    generatedMarker("Duck interface for binding shadows and forwarding extensions")
+                    suppressAllWarnings()
                     public()
                     duck.typeVariables.forEach { +it }
                     patchInterface?.let { superinterface(it.className) }
@@ -103,6 +113,10 @@ class Generator(
         val extensions = duck.extensions.ifEmpty { return }
         poetesse {
             kotlin.file(patch.className.withSuffix("_Extensions")) {
+                generatedMarker(
+                    "Kotlin sugar providing zero-boilerplate access to the forwarded extensions in duck interface"
+                )
+                suppressAllWarnings()
                 val duckClassName = duck.className.optionalGeneric(duck.typeVariables)
                 extensions.forEach { extension ->
                     when (extension) {
@@ -151,6 +165,8 @@ class Generator(
     private fun generatePatchImpl(patchImpl: IrPatchImpl, patch: FirPatchClass) {
         poetesse {
             kotlin.file(patchImpl.className) {
+                generatedMarker("KMixin implementation for binding shadows")
+                suppressAllWarnings()
                 class_(fileName) { _ ->
                     public()
                     patchImpl.typeVariables.forEach { +it }
@@ -232,6 +248,8 @@ class Generator(
                     public()
                     abstract()
                     mixin.typeVariables.forEach { +it }
+                    generatedMarker("Runtime entrypoint of the Mixin engine delegating logic to the KMixin")
+                    suppressAllWarnings()
                     mixinAnnotations(mixin.annotations)
                     mixin.duck?.let { superinterface(it.className.optionalGeneric(mixin.typeVariables)) }
                     val extensions = mixin.duck?.extensions.orEmpty()
@@ -421,6 +439,8 @@ class Generator(
             java.file(mixin.className) {
                 interface_(fileName) { _ ->
                     public()
+                    generatedMarker("Runtime entrypoint of the Mixin engine delegating logic to the KMixin")
+                    suppressAllWarnings()
                     mixinAnnotations(mixin.annotations)
                     superinterface(mixin.duck?.className ?: patch.className)
                     mixin.duck?.shadows?.filterIsInstance<IrMixinDuck.Shadow.Function>()?.forEach { shadowFunction ->
@@ -567,8 +587,36 @@ class Generator(
             extensionName = "",
         ).writer().use { it.write(buildText()) }
     }
+
+    private fun JavaTypeScope.generatedMarker(roleDesc: String) {
+        annotation<Generated> {
+            member(Generated::value, qualifiedNameOf<Generator>())
+            member(Generated::date, generatedDate)
+            member(Generated::comments, roleDesc)
+        }
+    }
+
+    private fun KotlinFileScope.generatedMarker(roleDesc: String) {
+        annotation<Generated> {
+            member(Generated::value, qualifiedNameOf<Generator>())
+            member(Generated::date, generatedDate)
+            member(Generated::comments, roleDesc)
+        }
+    }
 }
 
 private fun XClassName.optionalGeneric(typeVariables: List<XTypeName>, nullable: Boolean = false): XTypeName =
     if (typeVariables.isNotEmpty()) generic(typeVariables, nullable = nullable)
     else nullable(nullable)
+
+private fun JavaTypeScope.suppressAllWarnings() {
+    annotation<SuppressWarnings> {
+        member(SuppressWarnings::value, "ALL")
+    }
+}
+
+private fun KotlinFileScope.suppressAllWarnings() {
+    annotation<Suppress> {
+        member(Suppress::names, "warnings")
+    }
+}
