@@ -8,7 +8,7 @@ import io.github.diskria.poetesse.interop.XTypeVariableName
 import io.github.diskria.poetesse.java.JPModifier
 
 class IrMixinDuck(
-    val patchOriginatingFile: KSFile?,
+    val originatingFile: KSFile?,
     val className: XClassName,
     val typeVariables: List<XTypeVariableName>,
     val shadows: List<Shadow>,

@@ -2,7 +2,7 @@ package io.github.diskria.lapis.ksp.phases.parser.models
 
 import com.google.devtools.ksp.symbol.*
 
-class ParsedPatch(
+class ParsedKMixin(
     val name: String,
     val isClass: Boolean,
     val isInterface: Boolean,
@@ -12,14 +12,13 @@ class ParsedPatch(
     val isTopLevel: Boolean,
     val hasPackageName: Boolean,
     val isPublic: Boolean,
-    val classDeclaration: KSClassDeclaration,
     val typeParameters: List<ParsedTypeParameter>,
     val companionObject: CompanionObject?,
     val constructors: List<Constructor>,
     val properties: List<Property>,
     val functions: List<Function>,
     val annotations: ParsedAnnotations,
-    override val node: KSNode = classDeclaration,
+    override val node: KSClassDeclaration,
 ) : NodeHolder {
 
     class Constructor(

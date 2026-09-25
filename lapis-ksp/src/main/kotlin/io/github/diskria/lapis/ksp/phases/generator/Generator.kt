@@ -27,35 +27,35 @@ class Generator(
         OffsetDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXX"))
     }
 
-    fun generate(patches: List<FirPatch>) {
-        patches.forEach { patch ->
-            patch.mixin.duck?.let {
-                generateMixinDuck(it, patch as? FirPatchInterface)
-                generateExtensions(it, patch)
+    fun generate(kMixins: List<FirKMixin>) {
+        kMixins.forEach { kMixin ->
+            kMixin.mixin.duck?.let {
+                generateMixinDuck(it, kMixin as? FirKMixinInterface)
+                generateExtensions(it, kMixin)
             }
-            when (patch) {
-                is FirPatchClass -> {
-                    patch.impl?.let { generatePatchImpl(it, patch) }
-                    generateMixinClass(patch.mixin, patch)
+            when (kMixin) {
+                is FirKMixinClass -> {
+                    kMixin.impl?.let { generateKMixinImpl(it, kMixin) }
+                    generateMixinClass(kMixin.mixin, kMixin)
                 }
 
-                is FirPatchInterface -> {
-                    generateMixinInterface(patch.mixin, patch)
+                is FirKMixinInterface -> {
+                    generateMixinInterface(kMixin.mixin, kMixin)
                 }
             }
         }
-        generateMixinConfig(patches.map { it.mixin })
+        generateMixinConfig(kMixins.map { it.mixin })
     }
 
-    private fun generateMixinDuck(duck: IrMixinDuck, patchInterface: FirPatchInterface?) {
+    private fun generateMixinDuck(duck: IrMixinDuck, kMixinInterface: FirKMixinInterface?) {
         poetesse {
             java.file(duck.className) {
                 interface_(fileName) { _ ->
-                    generatedMarker("Duck interface for binding shadows and forwarding extensions")
+                    generatedMarker("Duck interface for binding Mixin shadows and forwarding extensions")
                     suppressAllWarnings()
                     public()
                     duck.typeVariables.forEach { +it }
-                    patchInterface?.let { superinterface(it.className) }
+                    kMixinInterface?.let { superinterface(it.className) }
                     duck.shadows.forEach { shadow ->
                         shadow.kinds.forEach { kind ->
                             val prefixedMethod = method(kind.name) {
@@ -65,7 +65,7 @@ class Generator(
                                 kind.parameters.forEach { parameter(it.name, it.typeName) }
                                 kind.returnTypeName?.let { returns(it) }
                             }
-                            if (patchInterface != null) {
+                            if (kMixinInterface != null) {
                                 method(kind.sourceJvmName) {
                                     annotation<Override>()
                                     public()
@@ -86,17 +86,17 @@ class Generator(
                         extension.kinds.forEach { kind ->
                             method(kind.name) {
                                 public()
-                                if (patchInterface != null) default() else abstract()
+                                if (kMixinInterface != null) default() else abstract()
                                 extension.typeVariables.forEach { +it }
                                 kind.parameters.forEach { parameter(it.name, it.typeName) }
                                 kind.returnTypeName?.let { returns(it) }
-                                if (patchInterface != null) {
+                                if (kMixinInterface != null) {
                                     body {
-                                        val maybeReturn = if (kind.returnTypeName != null) "return " else ""
-                                        val patchReceiver = code { "${T(patchInterface.className)}.super" }
-                                        val parameters = code { kind.parameters.joinToString { N(it.name) } }
+                                        val ret = if (kind.returnTypeName != null) "return " else ""
+                                        val rec = code { "${T(kMixinInterface.className)}.super" }
+                                        val params = code { kind.parameters.joinToString { N(it.name) } }
                                         line {
-                                            "$maybeReturn${L(patchReceiver)}.${N(kind.sourceJvmName)}(${L(parameters)})"
+                                            "$ret${L(rec)}.${N(kind.sourceJvmName)}(${L(params)})"
                                         }
                                     }
                                 }
@@ -105,14 +105,14 @@ class Generator(
                     }
                 }
             }
-        }.writeWith(aggregating = false, listOfNotNull(duck.patchOriginatingFile))
+        }.writeWith(aggregating = false, listOfNotNull(duck.originatingFile))
     }
 
     // TODO: Migrate to FIR plugin
-    private fun generateExtensions(duck: IrMixinDuck, patch: FirPatch) {
+    private fun generateExtensions(duck: IrMixinDuck, kMixin: FirKMixin) {
         val extensions = duck.extensions.ifEmpty { return }
         poetesse {
-            kotlin.file(patch.className.withSuffix("_Extensions")) {
+            kotlin.file(kMixin.className.withSuffix("_Extensions")) {
                 generatedMarker(
                     "Kotlin sugar providing zero-boilerplate access to the forwarded extensions in duck interface"
                 )
@@ -159,44 +159,44 @@ class Generator(
                     }
                 }
             }
-        }.writeWith(aggregating = false, listOfNotNull(duck.patchOriginatingFile))
+        }.writeWith(aggregating = false, listOfNotNull(duck.originatingFile))
     }
 
-    private fun generatePatchImpl(patchImpl: IrPatchImpl, patch: FirPatchClass) {
+    private fun generateKMixinImpl(kMixinImpl: IrKMixinImpl, kMixin: FirKMixinClass) {
         poetesse {
-            kotlin.file(patchImpl.className) {
-                generatedMarker("KMixin implementation for binding shadows")
+            kotlin.file(kMixinImpl.className) {
+                generatedMarker("KMixin implementation for binding Mixin shadows")
                 suppressAllWarnings()
                 class_(fileName) { _ ->
                     public()
-                    patchImpl.typeVariables.forEach { +it }
-                    if (patchImpl.constructorParameters.isNotEmpty()) {
+                    kMixinImpl.typeVariables.forEach { +it }
+                    if (kMixinImpl.constructorParameters.isNotEmpty()) {
                         constructor(primary = true) {
                             public()
-                            patchImpl.constructorParameters.forEach { parameter ->
+                            kMixinImpl.constructorParameters.forEach { parameter ->
                                 when (parameter) {
-                                    is IrPatchImpl.ConstructorParameter.Instance -> {
+                                    is IrKMixinImpl.ConstructorParameter.Instance -> {
                                         parameter(parameter.name, parameter.targetTypeCast.typeName)
                                     }
 
-                                    is IrPatchImpl.ConstructorParameter.Duck -> {
-                                        parameter("duck", parameter.className.optionalGeneric(patchImpl.typeVariables))
+                                    is IrKMixinImpl.ConstructorParameter.Duck -> {
+                                        parameter("duck", parameter.className.optionalGeneric(kMixinImpl.typeVariables))
                                             .property { private() }
                                     }
                                 }
                             }
                         }
                     }
-                    superclass(patch.className.optionalGeneric(patchImpl.typeVariables)) {
-                        patch.constructorParameters.forEach { parameter ->
+                    superclass(kMixin.className.optionalGeneric(kMixinImpl.typeVariables)) {
+                        kMixin.constructorParameters.forEach { parameter ->
                             argument {
                                 when (parameter) {
-                                    is FirPatchClass.ConstructorParameter.Origin -> N(parameter.name)
+                                    is FirKMixinClass.ConstructorParameter.Origin -> N(parameter.name)
                                 }
                             }
                         }
                     }
-                    patch.mixin.duck?.shadows?.forEach { shadow ->
+                    kMixin.mixin.duck?.shadows?.forEach { shadow ->
                         when (shadow) {
                             is IrMixinDuck.Property -> {
                                 property(shadow.sourceName, shadow.typeName) {
@@ -238,10 +238,10 @@ class Generator(
                     }
                 }
             }
-        }.writeWith(aggregating = false, listOfNotNull(patchImpl.patchOriginatingFile))
+        }.writeWith(aggregating = false, listOfNotNull(kMixinImpl.originatingFile))
     }
 
-    private fun generateMixinClass(mixin: IrMixin, patch: FirPatchClass) {
+    private fun generateMixinClass(mixin: IrMixin, kMixin: FirKMixinClass) {
         poetesse {
             java.file(mixin.className) {
                 class_(fileName) { _ ->
@@ -254,8 +254,8 @@ class Generator(
                     mixin.duck?.let { superinterface(it.className.optionalGeneric(mixin.typeVariables)) }
                     val extensions = mixin.duck?.extensions.orEmpty()
                     val memberInjections = mixin.injections.filterIsInstance<IrMixin.MemberInjection>()
-                    val patchMember = if (extensions.isNotEmpty() || memberInjections.isNotEmpty()) {
-                        patchMember(patch)
+                    val delegateMember = if (extensions.isNotEmpty() || memberInjections.isNotEmpty()) {
+                        delegateMember(kMixin)
                     } else null
                     mixin.duck?.shadows?.forEach { shadow ->
                         when (shadow) {
@@ -314,7 +314,7 @@ class Generator(
                             }
                         }
                     }
-                    if (patchMember != null) {
+                    if (delegateMember != null) {
                         extensions.forEach { extension ->
                             extension.kinds.forEach { kind ->
                                 method(kind.name) {
@@ -324,56 +324,56 @@ class Generator(
                                     kind.parameters.forEach { parameter(it.name, it.typeName) }
                                     kind.returnTypeName?.let { returns(it) }
                                     body {
-                                        val maybeReturn = if (kind.returnTypeName != null) "return " else ""
-                                        val parameters = code { kind.parameters.joinToString { N(it.name) } }
+                                        val ret = if (kind.returnTypeName != null) "return " else ""
+                                        val params = code { kind.parameters.joinToString { N(it.name) } }
                                         line {
-                                            "$maybeReturn${N(patchMember)}.${N(kind.sourceJvmName)}(${L(parameters)})"
+                                            "$ret${N(delegateMember)}.${N(kind.sourceJvmName)}(${L(params)})"
                                         }
                                     }
                                 }
                             }
                         }
-                        memberInjections.forEach { mixinInjection(it) { patchMember } }
+                        memberInjections.forEach { mixinInjection(it) { delegateMember } }
                     }
                     mixin.injections.filterIsInstance<IrMixin.StaticInjection>().forEach { staticInjection ->
                         mixinInjection(staticInjection) {
-                            "${T(patch.className)}.${N(staticInjection.patchCompanionObjectName)}"
+                            "${T(kMixin.className)}.${N(staticInjection.kMixinCompanionObjectName)}"
                         }
                     }
                 }
             }
-        }.writeWith(aggregating = false, listOfNotNull(mixin.patchOriginatingFile))
+        }.writeWith(aggregating = false, listOfNotNull(mixin.originatingFile))
     }
 
-    private fun JavaCodeScope.patchInitializer(patch: FirPatchClass): String {
-        val (className, arguments) = if (patch.impl != null) {
-            patch.impl.className to code {
-                patch.impl.constructorParameters.joinToString { parameter ->
+    private fun JavaCodeScope.delegateInitializer(kMixin: FirKMixinClass): String {
+        val (className, arguments) = if (kMixin.impl != null) {
+            kMixin.impl.className to code {
+                kMixin.impl.constructorParameters.joinToString { parameter ->
                     when (parameter) {
-                        is IrPatchImpl.ConstructorParameter.Instance -> targetTypeCast(parameter.targetTypeCast)
-                        is IrPatchImpl.ConstructorParameter.Duck -> "this"
+                        is IrKMixinImpl.ConstructorParameter.Instance -> targetTypeCast(parameter.targetTypeCast)
+                        is IrKMixinImpl.ConstructorParameter.Duck -> "this"
                     }
                 }
             }
         } else {
-            patch.className to code {
-                patch.constructorParameters.joinToString { parameter ->
+            kMixin.className to code {
+                kMixin.constructorParameters.joinToString { parameter ->
                     when (parameter) {
-                        is FirPatchClass.ConstructorParameter.Origin -> targetTypeCast(parameter.targetTypeCast)
+                        is FirKMixinClass.ConstructorParameter.Origin -> targetTypeCast(parameter.targetTypeCast)
                     }
                 }
             }
         }
-        val diamond = if (patch.typeVariables.isNotEmpty()) "<>" else ""
+        val diamond = if (kMixin.typeVariables.isNotEmpty()) "<>" else ""
         return "new ${T(className)}$diamond(${L(arguments)})"
     }
 
-    private fun JavaTypeScope.patchMember(patch: FirPatchClass): String {
-        val isEager = patch.initStrategy == InitStrategy.Eager
-        val isSynchronized = patch.initStrategy == InitStrategy.Synchronized
-        val isThreadSafe = patch.initStrategy == InitStrategy.Volatile || isSynchronized
-        val initializer = poetesse.java.code { patchInitializer(patch) }
-        val patchField = field("patch", patch.className.optionalGeneric(patch.typeVariables, !isEager)) {
+    private fun JavaTypeScope.delegateMember(kMixin: FirKMixinClass): String {
+        val isEager = kMixin.initStrategy == InitStrategy.Eager
+        val isSynchronized = kMixin.initStrategy == InitStrategy.Synchronized
+        val isThreadSafe = kMixin.initStrategy == InitStrategy.Volatile || isSynchronized
+        val initializer = poetesse.java.code { delegateInitializer(kMixin) }
+        val delegateField = field("delegate", kMixin.className.optionalGeneric(kMixin.typeVariables, !isEager)) {
             private()
             annotation<Annotation>(xClass(options.uniqueAnnotation))
             if (isEager) {
@@ -383,58 +383,58 @@ class Generator(
                 volatile()
             }
         }
-        if (isEager) return patchField
-        val patchLockField = if (isSynchronized) {
-            field<Any>("patchLock") {
+        if (isEager) return delegateField
+        val delegateLockField = if (isSynchronized) {
+            field<Any>("delegateLock") {
                 private()
                 final()
                 annotation<Annotation>(xClass(options.uniqueAnnotation))
                 initializer { "new ${T<Any>()}()" }
             }
         } else null
-        val getOrInitPatchMethod = method("getOrInitPatch") {
+        val getDelegate by method {
             private()
             annotation<Annotation>(xClass(options.uniqueAnnotation))
             body {
                 if (isThreadSafe) {
-                    val localType = patch.className.optionalGeneric(patch.typeVariables, nullable = true)
-                    val local by var_(localType) { "this.${N(patchField)}" }
+                    val localType = kMixin.className.optionalGeneric(kMixin.typeVariables, nullable = true)
+                    val local by var_(localType) { "this.${N(delegateField)}" }
                     controlFlow {
                         branch({ "if (${N(local)} == null)" }) {
-                            if (isSynchronized && patchLockField != null) {
+                            if (isSynchronized && delegateLockField != null) {
                                 controlFlow {
-                                    branch({ "synchronized (this.${N(patchLockField)})" }) {
-                                        line { "${N(local)} = this.${N(patchField)}" }
+                                    branch({ "synchronized (this.${N(delegateLockField)})" }) {
+                                        line { "${N(local)} = this.${N(delegateField)}" }
                                         controlFlow {
                                             branch({ "if (${N(local)} == null)" }) {
                                                 line { "${N(local)} = ${L(initializer)}" }
-                                                line { "this.${N(patchField)} = ${N(local)}" }
+                                                line { "this.${N(delegateField)} = ${N(local)}" }
                                             }
                                         }
                                     }
                                 }
                             } else {
                                 line { "${N(local)} = ${L(initializer)}" }
-                                line { "this.${N(patchField)} = ${N(local)}" }
+                                line { "this.${N(delegateField)} = ${N(local)}" }
                             }
                         }
                     }
                     line { "return ${N(local)}" }
                 } else {
                     controlFlow {
-                        branch({ "if (this.${N(patchField)} == null)" }) {
-                            line { "this.${N(patchField)} = ${L(initializer)}" }
+                        branch({ "if (this.${N(delegateField)} == null)" }) {
+                            line { "this.${N(delegateField)} = ${L(initializer)}" }
                         }
                     }
-                    line { "return this.${N(patchField)}" }
+                    line { "return this.${N(delegateField)}" }
                 }
             }
-            returns(patch.className.optionalGeneric(patch.typeVariables))
+            returns(kMixin.className.optionalGeneric(kMixin.typeVariables))
         }
-        return "$getOrInitPatchMethod()"
+        return "$getDelegate()"
     }
 
-    private fun generateMixinInterface(mixin: IrMixin, patch: FirPatchInterface) {
+    private fun generateMixinInterface(mixin: IrMixin, kMixinInterface: FirKMixinInterface) {
         poetesse {
             java.file(mixin.className) {
                 interface_(fileName) { _ ->
@@ -442,7 +442,7 @@ class Generator(
                     generatedMarker("Runtime entrypoint of the Mixin engine delegating logic to the KMixin")
                     suppressAllWarnings()
                     mixinAnnotations(mixin.annotations)
-                    superinterface(mixin.duck?.className ?: patch.className)
+                    superinterface(mixin.duck?.className ?: kMixinInterface.className)
                     mixin.duck?.shadows?.filterIsInstance<IrMixinDuck.Shadow.Function>()?.forEach { shadowFunction ->
                         val shadowMethod = method("shadow$${shadowFunction.mappingName}") {
                             mixinAnnotations(shadowFunction.mixinAnnotations)
@@ -472,20 +472,23 @@ class Generator(
                     }
                     mixin.injections.filterIsInstance<IrMixin.MemberInjection>().forEach { memberInjection ->
                         mixinInjection(memberInjection) {
-                            "${T(mixin.duck?.className ?: patch.className)}.super"
+                            "${T(mixin.duck?.className ?: kMixinInterface.className)}.super"
                         }
                     }
                     mixin.injections.filterIsInstance<IrMixin.StaticInjection>().forEach { staticInjection ->
                         mixinInjection(staticInjection) {
-                            "${T(patch.className)}.${N(staticInjection.patchCompanionObjectName)}"
+                            "${T(kMixinInterface.className)}.${N(staticInjection.kMixinCompanionObjectName)}"
                         }
                     }
                 }
             }
-        }.writeWith(aggregating = false, listOfNotNull(mixin.patchOriginatingFile))
+        }.writeWith(aggregating = false, listOfNotNull(mixin.originatingFile))
     }
 
-    private fun JavaTypeScope.mixinInjection(injection: IrMixin.Injection, patchReceiver: JavaCodeScope.() -> String) {
+    private fun JavaTypeScope.mixinInjection(
+        injection: IrMixin.Injection,
+        delegateReceiver: JavaCodeScope.() -> String,
+    ) {
         method(injection.name) {
             private()
             if (injection is IrMixin.StaticInjection) static()
@@ -507,7 +510,7 @@ class Generator(
                     }.joinToString()
                 }
                 val maybeReturn = if (injection.returnTypeName != null) "return " else ""
-                line { "$maybeReturn${L(patchReceiver)}.${N(injection.sourceJvmName)}(${L(functionArguments)})" }
+                line { "$maybeReturn${L(delegateReceiver)}.${N(injection.sourceJvmName)}(${L(functionArguments)})" }
             }
         }
     }
@@ -532,21 +535,20 @@ class Generator(
             }
         }
 
-    private fun JavaCodeScope.mixinAnnotationArgumentValue(value: IrMixinAnnotation.Argument.Value): String =
-        when (value) {
-            is IrMixinAnnotation.Argument.BooleanValue -> L(value.boolean)
-            is IrMixinAnnotation.Argument.ByteValue -> L(value.byte)
-            is IrMixinAnnotation.Argument.ShortValue -> L(value.short)
-            is IrMixinAnnotation.Argument.IntValue -> L(value.int)
-            is IrMixinAnnotation.Argument.LongValue -> L(value.long)
-            is IrMixinAnnotation.Argument.CharValue -> L(value.char)
-            is IrMixinAnnotation.Argument.FloatValue -> L(value.float)
-            is IrMixinAnnotation.Argument.DoubleValue -> L(value.double)
-            is IrMixinAnnotation.Argument.StringValue -> S(value.string)
-            is IrMixinAnnotation.Argument.EnumValue -> "${T(value.enumClassName)}.${N(value.entryName)}"
-            is IrMixinAnnotation.Argument.ClassValue -> "${T(value.className)}.class"
-            is IrMixinAnnotation.Argument.AnnotationValue -> L(mixinAnnotation(value.annotation))
-        }
+    private fun JavaCodeScope.mixinAnnotationArgumentValue(value: IrMixinAnnotation.Argument.Value) = when (value) {
+        is IrMixinAnnotation.Argument.BooleanValue -> L(value.boolean)
+        is IrMixinAnnotation.Argument.ByteValue -> L(value.byte)
+        is IrMixinAnnotation.Argument.ShortValue -> L(value.short)
+        is IrMixinAnnotation.Argument.IntValue -> L(value.int)
+        is IrMixinAnnotation.Argument.LongValue -> L(value.long)
+        is IrMixinAnnotation.Argument.CharValue -> L(value.char)
+        is IrMixinAnnotation.Argument.FloatValue -> L(value.float)
+        is IrMixinAnnotation.Argument.DoubleValue -> L(value.double)
+        is IrMixinAnnotation.Argument.StringValue -> S(value.string)
+        is IrMixinAnnotation.Argument.EnumValue -> "${T(value.className)}.${N(value.name)}"
+        is IrMixinAnnotation.Argument.ClassValue -> "${T(value.className)}.class"
+        is IrMixinAnnotation.Argument.AnnotationValue -> L(mixinAnnotation(value.annotation))
+    }
 
     private fun JavaCodeScope.targetTypeCast(cast: IrTargetSubtypeCast): String =
         when {
@@ -567,7 +569,7 @@ class Generator(
     private fun generateMixinConfig(mixinBlueprints: List<IrMixin>) {
         generateResourceFile(
             "generated-mixins.json",
-            mixinBlueprints.mapNotNull { it.patchOriginatingFile },
+            mixinBlueprints.mapNotNull { it.originatingFile },
             aggregating = true,
         ) {
             val classNames = mixinBlueprints.groupBy({ it.side }, { it.className })

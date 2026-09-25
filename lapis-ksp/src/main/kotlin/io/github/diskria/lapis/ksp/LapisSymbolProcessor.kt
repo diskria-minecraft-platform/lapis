@@ -6,7 +6,7 @@ import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.symbol.KSAnnotated
 import io.github.diskria.lapis.ksp.phases.generator.Generator
 import io.github.diskria.lapis.ksp.phases.lowering.Lowering
-import io.github.diskria.lapis.ksp.phases.lowering.models.FirPatch
+import io.github.diskria.lapis.ksp.phases.lowering.models.FirKMixin
 import io.github.diskria.lapis.ksp.phases.parser.SymbolParser
 import io.github.diskria.lapis.ksp.phases.validator.FrontendValidator
 import io.github.diskria.poetesse.Poetesse
@@ -30,20 +30,14 @@ class LapisSymbolProcessor(
     }
 
     private val lowering: Lowering by lazy { Lowering(options, poetesse) }
-    private val patches: SortedMap<String, FirPatch> = sortedMapOf()
+    private val kMixins: SortedMap<String, FirKMixin> = sortedMapOf()
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
         val parser = SymbolParser(resolver)
-        logger.setPhase(KspLogger.Phase.PARSING)
-        val parsedPatches = parser.parsePatches()
-
-        logger.setPhase(KspLogger.Phase.VALIDATION)
-        val validatedPatches = FrontendValidator(options, logger).validatePatches(parsedPatches)
-
-        logger.setPhase(KspLogger.Phase.LOWERING)
-        val irPatches = lowering.lowerPatches(validatedPatches)
-        irPatches.forEach { patches[it.className.qualifiedName] = it }
-
+        val parsedKMixins = parser.parseKMixins()
+        val validatedKMixins = FrontendValidator(options, logger).validate(parsedKMixins)
+        val irKMixins = lowering.lower(validatedKMixins.toList())
+        irKMixins.forEach { kMixins[it.className.qualifiedName] = it }
         return emptyList()
     }
 
@@ -56,8 +50,7 @@ class LapisSymbolProcessor(
     }
 
     private fun generate() {
-        logger.setPhase(KspLogger.Phase.GENERATION)
-        Generator(options, poetesse, codeGenerator).generate(patches.values.toList())
+        Generator(options, poetesse, codeGenerator).generate(kMixins.values.toList())
     }
 }
 

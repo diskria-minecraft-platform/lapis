@@ -7,12 +7,6 @@ import com.google.devtools.ksp.symbol.NonExistLocation
 
 class KspLogger(private val logger: KSPLogger) {
 
-    private var currentPhase: Phase = Phase.INITIALIZATION
-
-    fun setPhase(phase: Phase) {
-        currentPhase = phase
-    }
-
     fun warn(message: String, node: KSNode? = null) {
         logger.warn(buildFullMessage(message, node))
     }
@@ -27,7 +21,7 @@ class KspLogger(private val logger: KSPLogger) {
     }
 
     private fun buildFullMessage(message: String, node: KSNode?): String = buildString {
-        appendLine("[Lapis] [Phase: $currentPhase]")
+        appendLine("[Lapis]")
         appendLine(message.trimEnd())
         node?.let {
             val locationText = when (val location = it.location) {
@@ -36,14 +30,6 @@ class KspLogger(private val logger: KSPLogger) {
             }
             appendLine("└── '$node' at $locationText")
         }
-    }
-
-    enum class Phase {
-        INITIALIZATION,
-        PARSING,
-        VALIDATION,
-        LOWERING,
-        GENERATION,
     }
 }
 

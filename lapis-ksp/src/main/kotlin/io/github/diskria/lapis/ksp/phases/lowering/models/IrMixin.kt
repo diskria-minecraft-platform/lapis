@@ -8,7 +8,7 @@ import io.github.diskria.poetesse.interop.XTypeName
 import io.github.diskria.poetesse.interop.XTypeVariableName
 
 class IrMixin(
-    val patchOriginatingFile: KSFile?,
+    val originatingFile: KSFile?,
     val className: XClassName,
     val typeVariables: List<XTypeVariableName>,
     val side: Side,
@@ -49,6 +49,6 @@ class IrMixin(
         override val parameters: List<Parameter>,
         override val returnTypeName: XTypeName?,
         override val typeVariables: List<XTypeVariableName>,
-        val patchCompanionObjectName: String,
+        val kMixinCompanionObjectName: String,
     ) : Injection
 }

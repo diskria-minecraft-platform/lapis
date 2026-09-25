@@ -4,27 +4,27 @@ import io.github.diskria.lapis.annotations.InitStrategy
 import io.github.diskria.poetesse.interop.XClassName
 import io.github.diskria.poetesse.interop.XTypeVariableName
 
-sealed interface FirPatch {
+sealed interface FirKMixin {
     val className: XClassName
     val typeVariables: List<XTypeVariableName>
     val mixin: IrMixin
 }
 
-class FirPatchClass(
+class FirKMixinClass(
     override val className: XClassName,
     override val typeVariables: List<XTypeVariableName>,
     override val mixin: IrMixin,
-    val impl: IrPatchImpl?,
+    val impl: IrKMixinImpl?,
     val constructorParameters: List<ConstructorParameter>,
     val initStrategy: InitStrategy,
-) : FirPatch {
+) : FirKMixin {
     sealed interface ConstructorParameter {
         class Origin(val name: String, val targetTypeCast: IrTargetSubtypeCast) : ConstructorParameter
     }
 }
 
-class FirPatchInterface(
+class FirKMixinInterface(
     override val className: XClassName,
     override val typeVariables: List<XTypeVariableName>,
     override val mixin: IrMixin,
-) : FirPatch
+) : FirKMixin

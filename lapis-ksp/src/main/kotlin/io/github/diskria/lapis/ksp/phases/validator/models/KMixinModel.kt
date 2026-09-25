@@ -9,7 +9,7 @@ import io.github.diskria.lapis.annotations.Side
 import java.util.*
 import javax.lang.model.element.Modifier
 
-class Patch(
+class KMixinModel(
     val containingFile: KSFile?,
     val classDeclaration: KSClassDeclaration,
     val name: String,

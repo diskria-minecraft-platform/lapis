@@ -23,7 +23,7 @@ sealed interface ParsedAnnotation : NodeHolder {
         class DoubleValue(val double: Double) : Value
         class StringValue(val string: String) : Value
         class TypeValue(val type: ParsedType) : Value
-        class EnumValue(val enumClassDeclaration: KSClassDeclaration, val entryName: String) : Value
+        class EnumValue(val classDeclaration: KSClassDeclaration, val name: String) : Value
         class AnnotationValue(val annotation: ParsedAnnotation) : Value
     }
 
@@ -57,10 +57,8 @@ class ValidAnnotation(
 
 class InvalidAnnotation(override val node: KSNode) : ParsedAnnotation
 
-class ParsedAnnotations(
-    val api: List<ValidAnnotation>,
-    val external: List<ParsedAnnotation>,
-) {
+class ParsedAnnotations(val api: List<ValidAnnotation>, val external: List<ParsedAnnotation>) {
+
     inline fun <reified A : Annotation> hasApiAnnotation(): Boolean = findApiAnnotation<A>() != null
 
     @JvmName("findApiStringTypeScalarArgument")
@@ -106,8 +104,8 @@ class ParsedAnnotations(
         }
 
     inline fun <reified E : Enum<E>> ParsedAnnotation.Argument.EnumValue.getTypedOrNull(): E? =
-        if (enumClassDeclaration.qualifiedName?.asString() == qualifiedNameOf<E>()) {
-            enumEntries<E>().find { it.name == entryName }
+        if (classDeclaration.qualifiedName?.asString() == qualifiedNameOf<E>()) {
+            enumEntries<E>().find { it.name == name }
         } else null
 
     inline fun <reified A : Annotation> findApiAnnotation(): ValidAnnotation? =

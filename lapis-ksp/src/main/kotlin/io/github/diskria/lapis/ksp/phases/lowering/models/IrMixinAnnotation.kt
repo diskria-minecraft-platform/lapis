@@ -19,7 +19,7 @@ class IrMixinAnnotation(val className: XClassName, val arguments: List<Argument>
         class DoubleValue(val double: Double) : Value
         class StringValue(val string: String) : Value
         class ClassValue(val className: XClassName) : Value
-        class EnumValue(val enumClassName: XClassName, val entryName: String) : Value
+        class EnumValue(val className: XClassName, val name: String) : Value
         class AnnotationValue(val annotation: IrMixinAnnotation) : Value
     }
 
