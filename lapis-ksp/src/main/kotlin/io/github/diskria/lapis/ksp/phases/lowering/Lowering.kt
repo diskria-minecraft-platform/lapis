@@ -32,7 +32,7 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
     }
 
     private fun KMixinModel.lowerToFir(mixinSourcePackageLCP: String?): FirKMixin {
-        val className = classDeclaration.extractClassName()
+        val className = classDeclaration.lower()
         val typeParameters = typeParameters.resolveTypeParameters(enclosingTypeParameters = null)
         val mixin = deriveMixin(className, typeParameters, mixinSourcePackageLCP)
         return when (classKind) {
@@ -94,7 +94,7 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
         annotations = if (mixinAnnotations.isNotEmpty()) {
             mixinAnnotations.map { it.lower() }
         } else {
-            val targetClassValue = IrMixinAnnotation.Argument.ClassValue(targetClassDeclaration.extractClassName())
+            val targetClassValue = IrMixinAnnotation.Argument.ClassValue(targetClassDeclaration.lower())
             val valueArgument = IrMixinAnnotation.ScalarArgument("value", targetClassValue)
             listOf(IrMixinAnnotation(poetesse.xClass(options.mixinAnnotation), listOf(valueArgument)))
         },
@@ -236,7 +236,7 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
     }
 
     private fun MixinAnnotation.lower() = IrMixinAnnotation(
-        className = typeClassDeclaration.extractClassName(),
+        className = typeClassDeclaration.lower(),
         arguments = arguments.map { argument ->
             when (argument) {
                 is MixinAnnotation.ScalarArgument -> IrMixinAnnotation.ScalarArgument(
@@ -262,8 +262,8 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
         is MixinAnnotation.Argument.FloatValue -> IrMixinAnnotation.Argument.FloatValue(float)
         is MixinAnnotation.Argument.DoubleValue -> IrMixinAnnotation.Argument.DoubleValue(double)
         is MixinAnnotation.Argument.StringValue -> IrMixinAnnotation.Argument.StringValue(string)
-        is MixinAnnotation.Argument.ClassValue -> IrMixinAnnotation.Argument.ClassValue(classDeclaration.extractClassName())
-        is MixinAnnotation.Argument.EnumValue -> IrMixinAnnotation.Argument.EnumValue(classDeclaration.extractClassName(), name)
+        is MixinAnnotation.Argument.ClassValue -> IrMixinAnnotation.Argument.ClassValue(classDeclaration.lower())
+        is MixinAnnotation.Argument.EnumValue -> IrMixinAnnotation.Argument.EnumValue(classDeclaration.lower(), name)
         is MixinAnnotation.Argument.AnnotationValue -> IrMixinAnnotation.Argument.AnnotationValue(annotation.lower())
     }
 
@@ -317,10 +317,13 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
         return scopeTypeParameters
     }
 
-    private fun Type.lower(typeParameters: TypeParameters): IrType = IrType(
-        kotlin = ksType.lower(typeParameters, arguments),
-        java = (canonicalType?.ksType ?: ksType).lower(typeParameters, canonicalType?.arguments ?: arguments)
-    )
+    private fun Type.lower(typeParameters: TypeParameters): IrType {
+        val kotlinType = ksType.lower(typeParameters, arguments)
+        val javaType = canonicalType?.let {
+            it.ksType.lower(typeParameters, it.arguments)
+        } ?: kotlinType
+        return IrType(kotlin = kotlinType, java = javaType)
+    }
 
     private fun KSType.lower(
         typeParameters: TypeParameters,
@@ -331,13 +334,14 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
         if (declaration is KSTypeParameter) {
             return typeParameters[declaration.name.asString()].nullable(isMarkedNullable)
         }
-        val className = when (declaration) {
-            is KSClassDeclaration, is KSTypeAlias -> declaration.extractClassName()
+        val typeName = when (declaration) {
+            is KSClassDeclaration, is KSTypeAlias -> declaration.lower(isMarkedNullable)
             else -> TODO("Guard this in validator")
         }
         if (raw || arguments.isEmpty()) {
-            return className.nullable(isMarkedNullable)
+            return typeName
         }
+        if (typeName !is XClassName) return typeName
         val arguments = arguments.map { argument ->
             if (argument !is Type.TypedArgument) poetesse.xStar()
             else {
@@ -349,10 +353,19 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
                 }
             }
         }
-        return className.generic(arguments, nullable = isMarkedNullable)
+        return typeName.generic(arguments, nullable = isMarkedNullable)
     }
 
-    private fun KSDeclaration.extractClassName(): XClassName {
+    private fun KSDeclaration.lower(nullable: Boolean): XTypeName {
+        val packageName = packageName.asString()
+        val typesString = requireNotNull(qualifiedName) {
+            TODO("Guard this in validator")
+        }.asString().removePrefix("$packageName.")
+        val simpleNames = typesString.split(".")
+        return poetesse.xType(packageName, simpleNames, nullable)
+    }
+
+    private fun KSClassDeclaration.lower(): XClassName {
         val packageName = packageName.asString()
         val typesString = requireNotNull(qualifiedName) {
             TODO("Guard this in validator")
