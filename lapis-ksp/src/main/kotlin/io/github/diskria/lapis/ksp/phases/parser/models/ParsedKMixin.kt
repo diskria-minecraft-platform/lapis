@@ -105,12 +105,10 @@ class ValidType(
     val ksType: KSType,
     val arguments: List<ParsedType.Argument>,
     val canonicalType: ValidType?,
-    val isAny: Boolean,
     val isUnit: Boolean,
     val classDeclaration: KSClassDeclaration?,
     val packageName: String?,
     val qualifiedName: String?,
-    val isInterface: Boolean,
     override val node: KSNode,
 ) : ParsedType
 

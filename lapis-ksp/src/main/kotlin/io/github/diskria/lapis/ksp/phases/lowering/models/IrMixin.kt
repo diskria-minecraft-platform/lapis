@@ -38,7 +38,7 @@ class IrMixin(
         override val parameters: List<Parameter>,
         override val returnType: IrType?,
         override val typeVariables: List<XTypeVariableName>,
-        val extensionReceiverTargetTypeCast: IrTargetSubtypeCast?
+        val extensionReceiverTargetTypeCast: IrType?
     ) : Injection
 
     class StaticInjection(

@@ -69,7 +69,7 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
         typeVariables = sourceTypeParameters.typeVariables,
         constructorParameters = buildList {
             constructorParameters.firstNotNullOfOrNull { it as? FirKMixinClass.ConstructorParameter.Origin }?.let {
-                add(IrKMixinImpl.ConstructorParameter.Instance(it.name, it.targetTypeCast))
+                add(IrKMixinImpl.ConstructorParameter.Instance(it.name, it.type))
             }
             if (duck != null && shadowSources.isNotEmpty()) {
                 add(IrKMixinImpl.ConstructorParameter.Duck(duck.className))
@@ -117,7 +117,7 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
     private fun KMixinModel.Class.ConstructorParameter.lower(typeParameters: TypeParameters) = when (this) {
         is KMixinModel.Class.ConstructorParameter.Origin -> FirKMixinClass.ConstructorParameter.Origin(
             name = name,
-            targetTypeCast = type.lowerToTargetSubtypeCast(typeParameters),
+            type = type.lower(typeParameters),
         )
     }
 
@@ -211,7 +211,7 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
                 )
             },
             returnType = returnType?.takeIf { !it.isUnit }?.lower(scopeTypeParameters),
-            extensionReceiverTargetTypeCast = extensionReceiverType?.lowerToTargetSubtypeCast(scopeTypeParameters),
+            extensionReceiverTargetTypeCast = extensionReceiverType?.lower(scopeTypeParameters),
             typeVariables = scopeTypeParameters.typeVariables,
         )
     }
@@ -266,12 +266,6 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
         is MixinAnnotation.Argument.EnumValue -> IrMixinAnnotation.Argument.EnumValue(classDeclaration.lower(), name)
         is MixinAnnotation.Argument.AnnotationValue -> IrMixinAnnotation.Argument.AnnotationValue(annotation.lower())
     }
-
-    private fun Type.lowerToTargetSubtypeCast(typeParameters: TypeParameters) = IrTargetSubtypeCast(
-        type = lower(typeParameters),
-        isUnsafeCastRequired = !isInterface,
-        isTargetCastRequired = !isAny,
-    )
 
     private fun EnumSet<Modifier>.lowerToShadowModifiers(isInterface: Boolean, isField: Boolean): List<JPModifier> {
         val result = EnumSet.copyOf(this)

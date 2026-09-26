@@ -559,9 +559,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             ksType = ksType,
             arguments = arguments.map { it.validate() },
             canonicalType = canonicalType?.validate(),
-            isAny = isAny,
             isUnit = isUnit,
-            isInterface = isInterface,
             classDeclaration = classDeclaration,
         )
     }

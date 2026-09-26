@@ -179,7 +179,7 @@ class Generator(
                         kMixinImpl.constructorParameters.forEach { parameter ->
                             when (parameter) {
                                 is IrKMixinImpl.ConstructorParameter.Instance -> {
-                                    parameter(parameter.name, parameter.targetTypeCast.type.kotlin)
+                                    parameter(parameter.name, parameter.type.kotlin)
                                 }
 
                                 is IrKMixinImpl.ConstructorParameter.Duck -> {
@@ -351,7 +351,7 @@ class Generator(
             kMixin.impl.className to code {
                 kMixin.impl.constructorParameters.joinToString { parameter ->
                     when (parameter) {
-                        is IrKMixinImpl.ConstructorParameter.Instance -> targetTypeCast(parameter.targetTypeCast)
+                        is IrKMixinImpl.ConstructorParameter.Instance -> unsafeCast(parameter.type)
                         is IrKMixinImpl.ConstructorParameter.Duck -> "this"
                     }
                 }
@@ -360,7 +360,7 @@ class Generator(
             kMixin.className to code {
                 kMixin.constructorParameters.joinToString { parameter ->
                     when (parameter) {
-                        is FirKMixinClass.ConstructorParameter.Origin -> targetTypeCast(parameter.targetTypeCast)
+                        is FirKMixinClass.ConstructorParameter.Origin -> unsafeCast(parameter.type)
                     }
                 }
             }
@@ -503,7 +503,7 @@ class Generator(
                 val arguments = code {
                     buildList {
                         if (injection is IrMixin.MemberInjection) {
-                            injection.extensionReceiverTargetTypeCast?.let { add(targetTypeCast(it)) }
+                            injection.extensionReceiverTargetTypeCast?.let { add(unsafeCast(it)) }
                         }
                         addAll(injection.parameters.map { N(it.name) })
                     }.joinToString()
@@ -547,13 +547,6 @@ class Generator(
         is IrMixinAnnotation.Argument.ClassValue -> "${T(value.className)}.class"
         is IrMixinAnnotation.Argument.AnnotationValue -> L(mixinAnnotation(value.annotation))
     }
-
-    private fun JavaCodeScope.targetTypeCast(cast: IrTargetSubtypeCast): String =
-        when {
-            !cast.isTargetCastRequired -> "this"
-            cast.isUnsafeCastRequired -> "(${T(cast.type.java)}) (${T<Any>()}) this"
-            else -> "(${T(cast.type.java)}) this"
-        }
 
     private fun PoetesseFile.writeWith(aggregating: Boolean, originatingFiles: Iterable<KSFile>) {
         codeGenerator.createNewFile(
@@ -600,6 +593,9 @@ class Generator(
         }
     }
 }
+
+fun JavaCodeScope.unsafeCast(targetType: IrType): String =
+    "(${T(targetType.java)}) (${T<Any>()}) this"
 
 private fun JavaTypeScope.suppressAllWarnings() {
     annotation<SuppressWarnings> {

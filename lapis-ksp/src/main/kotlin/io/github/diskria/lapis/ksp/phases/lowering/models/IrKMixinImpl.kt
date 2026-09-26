@@ -11,7 +11,7 @@ class IrKMixinImpl(
     val constructorParameters: List<ConstructorParameter>,
 ) {
     sealed interface ConstructorParameter {
-        class Instance(val name: String, val targetTypeCast: IrTargetSubtypeCast) : ConstructorParameter
+        class Instance(val name: String, val type: IrType) : ConstructorParameter
         class Duck(val className: XClassName) : ConstructorParameter
     }
 }

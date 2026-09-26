@@ -19,7 +19,7 @@ class FirKMixinClass(
     val initStrategy: InitStrategy,
 ) : FirKMixin {
     sealed interface ConstructorParameter {
-        class Origin(val name: String, val targetTypeCast: IrTargetSubtypeCast) : ConstructorParameter
+        class Origin(val name: String, val type: IrType) : ConstructorParameter
     }
 }
 

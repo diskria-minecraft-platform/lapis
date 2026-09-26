@@ -219,12 +219,10 @@ class SymbolParser(private val resolver: Resolver) {
             ksType = this,
             arguments = parsedArguments,
             canonicalType = canonicalType,
-            isAny = finalType.makeNotNullable() == resolver.builtIns.anyType,
             isUnit = finalType.makeNotNullable() == resolver.builtIns.unitType,
             classDeclaration = finalClassDeclaration,
             packageName = finalClassDeclaration?.packageName?.asString(),
             qualifiedName = finalClassDeclaration?.qualifiedName?.asString(),
-            isInterface = finalClassDeclaration?.classKind == ClassKind.INTERFACE,
             node = viewNode,
         )
     }
