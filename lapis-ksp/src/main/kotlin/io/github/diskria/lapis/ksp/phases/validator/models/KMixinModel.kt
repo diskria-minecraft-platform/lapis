@@ -111,7 +111,6 @@ class Type(
     val ksType: KSType,
     val arguments: List<Argument>,
     val canonicalType: Type?,
-    val isUnit: Boolean,
     val classDeclaration: KSClassDeclaration?,
 ) {
     sealed interface Argument

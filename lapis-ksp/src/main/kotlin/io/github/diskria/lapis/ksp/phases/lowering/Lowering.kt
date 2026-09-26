@@ -144,7 +144,7 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
                         type = it.type.lower(scopeTypeParameters),
                     )
                 },
-                returnType = returnType?.takeIf { !it.isUnit }?.lower(scopeTypeParameters),
+                returnType = returnType?.lower(scopeTypeParameters),
                 receiverType = receiverType.lower(scopeTypeParameters),
                 typeVariables = scopeTypeParameters.typeVariables,
             )
@@ -184,7 +184,7 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
                         type = it.type.lower(scopeTypeParameters),
                     )
                 },
-                returnType = returnType?.takeIf { !it.isUnit }?.lower(scopeTypeParameters),
+                returnType = returnType?.lower(scopeTypeParameters),
                 mappingName = mappingName,
                 modifiers = modifiers.lowerToShadowModifiers(isInterface, isField = false),
                 mixinAnnotations = if (mixinAnnotations.isNotEmpty()) {
@@ -210,7 +210,7 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
                     parameter.mixinAnnotations.map { it.lower() },
                 )
             },
-            returnType = returnType?.takeIf { !it.isUnit }?.lower(scopeTypeParameters),
+            returnType = returnType?.lower(scopeTypeParameters),
             extensionReceiverTargetTypeCast = extensionReceiverType?.lower(scopeTypeParameters),
             typeVariables = scopeTypeParameters.typeVariables,
         )
@@ -229,7 +229,7 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
                     parameter.mixinAnnotations.map { it.lower() },
                 )
             },
-            returnType = returnType?.takeIf { !it.isUnit }?.lower(scopeTypeParameters),
+            returnType = returnType?.lower(scopeTypeParameters),
             kMixinCompanionObjectName = companion.name,
             typeVariables = scopeTypeParameters.typeVariables,
         )

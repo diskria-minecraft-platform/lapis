@@ -253,7 +253,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             name = name,
             jvmName = jvmName,
             parameters = parameters,
-            returnType = returnType.validate(),
+            returnType = returnType?.validate(),
             receiverType = targetType,
             typeParameters = typeParameters.validate(),
         )
@@ -304,7 +304,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             name = name,
             jvmName = jvmName,
             parameters = parameters.map { FunctionParameter(name = it.name, type = it.type.validate()) },
-            returnType = returnType.validate(),
+            returnType = returnType?.validate(),
             mappingName = mappingName,
             mixinAnnotations = mixinAnnotations,
             modifiers = validateShadowModifiers(modifiersArgument?.elements.orEmpty(), isInterface, isProperty = false),
@@ -333,7 +333,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             },
             mixinAnnotations = mixinAnnotations,
             parameters = parameters.map { it.validateAsInjectionParameter() },
-            returnType = returnType.validate(),
+            returnType = returnType?.validate(),
             typeParameters = typeParameters.validate(),
         )
     }
@@ -559,7 +559,6 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             ksType = ksType,
             arguments = arguments.map { it.validate() },
             canonicalType = canonicalType?.validate(),
-            isUnit = isUnit,
             classDeclaration = classDeclaration,
         )
     }

@@ -92,7 +92,10 @@ class SymbolParser(private val resolver: Resolver) {
         name = simpleName.asString(),
         jvmName = resolver.getJvmName(this),
         parameters = parameters.map { it.parseAsFunctionParameter() },
-        returnType = returnType.parse(this),
+        returnType = returnType.parse(this).takeIf {
+            if (it !is ValidType) return@takeIf true
+            (it.canonicalType?.ksType ?: it.ksType).makeNotNullable() != resolver.builtIns.unitType
+        },
         isPublic = isPublic(),
         isOpen = Modifier.OPEN in modifiers,
         isAbstract = isAbstract,
@@ -219,7 +222,6 @@ class SymbolParser(private val resolver: Resolver) {
             ksType = this,
             arguments = parsedArguments,
             canonicalType = canonicalType,
-            isUnit = finalType.makeNotNullable() == resolver.builtIns.unitType,
             classDeclaration = finalClassDeclaration,
             packageName = finalClassDeclaration?.packageName?.asString(),
             qualifiedName = finalClassDeclaration?.qualifiedName?.asString(),
