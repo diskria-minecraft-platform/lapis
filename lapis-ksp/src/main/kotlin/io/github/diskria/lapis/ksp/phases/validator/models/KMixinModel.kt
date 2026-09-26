@@ -3,7 +3,6 @@ package io.github.diskria.lapis.ksp.phases.validator.models
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSFile
 import com.google.devtools.ksp.symbol.KSType
-import com.google.devtools.ksp.symbol.KSTypeParameter
 import io.github.diskria.lapis.annotations.InitStrategy
 import io.github.diskria.lapis.annotations.Side
 import java.util.*
@@ -110,15 +109,26 @@ class KMixinModel(
 
 class Type(
     val ksType: KSType,
+    val arguments: List<Argument>,
     val canonicalType: Type?,
     val isAny: Boolean,
     val isUnit: Boolean,
     val isInterface: Boolean,
     val classDeclaration: KSClassDeclaration?,
-)
+) {
+    sealed interface Argument
+    object StarArgument : Argument
+
+    sealed interface TypedArgument : Argument {
+        val type: Type
+    }
+
+    class InvariantArgument(override val type: Type) : TypedArgument
+    class CovariantArgument(override val type: Type) : TypedArgument
+    class ContravariantArgument(override val type: Type) : TypedArgument
+}
 
 class TypeParameter(
     val name: String,
     val bounds: List<Type>,
-    val ksTypeParameter: KSTypeParameter,
 )

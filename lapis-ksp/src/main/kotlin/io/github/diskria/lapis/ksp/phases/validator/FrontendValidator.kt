@@ -555,9 +555,9 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             Ensure the type has no compilation errors.
             """.trimIndent()
         }
-        arguments.forEach { it.validate() }
         return Type(
             ksType = ksType,
+            arguments = arguments.map { it.validate() },
             canonicalType = canonicalType?.validate(),
             isAny = isAny,
             isUnit = isUnit,
@@ -566,11 +566,17 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         )
     }
 
-    private fun ParsedType.Argument.validate() {
+    private fun ParsedType.Argument.validate(): Type.Argument {
         kspRequire(this is ParsedType.ValidArgument) {
             """
             Ensure the type has no compilation errors.
             """.trimIndent()
+        }
+        return when (this) {
+            is ParsedType.StarArgument -> Type.StarArgument
+            is ParsedType.InvariantArgument -> Type.InvariantArgument(type.validate())
+            is ParsedType.CovariantArgument -> Type.CovariantArgument(type.validate())
+            is ParsedType.ContravariantArgument -> Type.ContravariantArgument(type.validate())
         }
     }
 
@@ -601,7 +607,6 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         return TypeParameter(
             name = name,
             bounds = bounds.mapValid { it.validate() },
-            ksTypeParameter = node,
         )
     }
 

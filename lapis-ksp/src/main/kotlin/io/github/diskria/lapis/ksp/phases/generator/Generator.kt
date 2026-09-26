@@ -127,7 +127,7 @@ class Generator(
                     is IrMixinDuck.Extension.Property -> property(extension.sourceName, extension.type.kotlin) {
                         public()
                         inline()
-                        extensionReceiver(extension.receiverTargetTypeCast.type.kotlin)
+                        extensionReceiver(extension.receiverType.kotlin)
                         getter {
                             expression {
                                 val callable = code { N(extension.getter.name) }
@@ -150,17 +150,13 @@ class Generator(
                         inline()
                         duck.typeVariables.forEach { +it }
                         extension.typeVariables.forEach { +it }
-                        extensionReceiver(extension.receiverTargetTypeCast.type.kotlin)
+                        extensionReceiver(extension.receiverType.kotlin)
                         extension.parameters.forEach { parameter(it.name, it.type.kotlin) }
                         extension.returnType?.let { returns(it.kotlin) }
                         body {
                             val returner = if (extension.returnType != null) "return " else ""
                             val callable = code { N(extension.name) }
-                            val generics = code {
-                                if (extension.typeVariables.isNotEmpty()) {
-                                    "<" + extension.typeVariables.joinToString { N(it.name) } + ">"
-                                } else ""
-                            }
+                            val generics = generics(extension.typeVariables)
                             val arguments = code { extension.parameters.joinToString { N(it.name) } }
                             line { "$returner${L(receiver)}.${L(callable)}${L(generics)}(${L(arguments)})" }
                         }
@@ -237,11 +233,7 @@ class Generator(
                                 val returner = if (shadow.returnType != null) "return " else ""
                                 val receiver = code { N("duck") }
                                 val callable = code { N(shadow.name) }
-                                val generics = code {
-                                    if (shadow.typeVariables.isNotEmpty()) {
-                                        "<" + shadow.typeVariables.joinToString { N(it.name) } + ">"
-                                    } else ""
-                                }
+                                val generics = generics(shadow.typeVariables)
                                 val arguments = code { shadow.parameters.joinToString { N(it.name) } }
                                 line { "$returner${L(receiver)}.${L(callable)}${L(generics)}(${L(arguments)})" }
                             }
@@ -373,7 +365,7 @@ class Generator(
                 }
             }
         }
-        val generics = code { if (kMixin.typeVariables.isNotEmpty()) "<>" else "" }
+        val generics = generics(kMixin.typeVariables, diamond = true)
         return "new ${T(className)}${L(generics)}(${L(arguments)})"
     }
 
@@ -607,10 +599,6 @@ class Generator(
     }
 }
 
-private fun XClassName.optionalGeneric(typeVariables: List<XTypeName>, nullable: Boolean = false): XTypeName =
-    if (typeVariables.isNotEmpty()) generic(typeVariables, nullable = nullable)
-    else nullable(nullable)
-
 private fun JavaTypeScope.suppressAllWarnings() {
     annotation<SuppressWarnings> {
         member(SuppressWarnings::value, "ALL")
@@ -622,3 +610,22 @@ private fun KotlinFileScope.suppressAllWarnings() {
         member(Suppress::names, "warnings")
     }
 }
+
+private fun JavaCodeFactory.generics(typeVariables: List<XTypeVariableName>, diamond: Boolean = false): JavaCodeRef =
+    code {
+        if (typeVariables.isNotEmpty()) {
+            if (diamond) "<>"
+            else "<" + typeVariables.joinToString { N(it.name) } + ">"
+        } else ""
+    }
+
+private fun KotlinCodeFactory.generics(typeVariables: List<XTypeVariableName>): KotlinCodeRef =
+    code {
+        if (typeVariables.isNotEmpty()) {
+            "<" + typeVariables.joinToString { N(it.name) } + ">"
+        } else ""
+    }
+
+private fun XClassName.optionalGeneric(typeVariables: List<XTypeName>, nullable: Boolean = false): XTypeName =
+    if (typeVariables.isNotEmpty()) generic(typeVariables, nullable = nullable)
+    else nullable(nullable)

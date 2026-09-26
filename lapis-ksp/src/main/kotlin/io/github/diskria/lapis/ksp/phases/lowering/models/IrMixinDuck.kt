@@ -75,7 +75,7 @@ class IrMixinDuck(
 
     sealed interface Extension : Entry {
 
-        val receiverTargetTypeCast: IrTargetSubtypeCast
+        val receiverType: IrType
 
         class Property(
             override val sourceName: String,
@@ -84,7 +84,7 @@ class IrMixinDuck(
             override val sourceSetterJvmName: String?,
             override val getterName: String,
             override val setterName: String?,
-            override val receiverTargetTypeCast: IrTargetSubtypeCast,
+            override val receiverType: IrType,
         ) : IrMixinDuck.Property,
             Extension
 
@@ -94,7 +94,7 @@ class IrMixinDuck(
             override val sourceJvmName: String,
             override val parameters: List<IrFunctionParameter>,
             override val returnType: IrType?,
-            override val receiverTargetTypeCast: IrTargetSubtypeCast,
+            override val receiverType: IrType,
             override val typeVariables: List<XTypeVariableName>,
         ) : IrMixinDuck.Function,
             Extension

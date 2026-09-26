@@ -91,9 +91,13 @@ class ParsedKMixin(
 
 sealed interface ParsedType : NodeHolder {
     sealed interface Argument : NodeHolder
+
     sealed interface ValidArgument : Argument
-    class VarianceArgument(val variance: Variance, val type: ParsedType, override val node: KSNode) : ValidArgument
     class StarArgument(override val node: KSNode) : ValidArgument
+    class InvariantArgument(val type: ParsedType, override val node: KSNode) : ValidArgument
+    class CovariantArgument(val type: ParsedType, override val node: KSNode) : ValidArgument
+    class ContravariantArgument(val type: ParsedType, override val node: KSNode) : ValidArgument
+
     class InvalidArgument(override val node: KSNode) : Argument
 }
 

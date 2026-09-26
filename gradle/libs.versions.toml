@@ -3,7 +3,6 @@ auto-service = "1.2.0"
 auto-service-annotations = "1.1.1"
 ksp = "2.3.12"
 poetesse = "0.1.6-SNAPSHOT"
-kotlin-poet-ksp = "2.4.0"
 kotlin-serialization-json = "1.11.0"
 
 [plugins]
@@ -14,7 +13,6 @@ auto-service-ksp = { group = "dev.zacsweers.autoservice", name = "auto-service-k
 auto-service-annotations = { group = "com.google.auto.service", name = "auto-service-annotations", version.ref = "auto-service-annotations" }
 ksp-api = { group = "com.google.devtools.ksp", name = "symbol-processing-api", version.ref = "ksp" }
 poetesse = { group = "io.github.diskria", name = "poetesse", version.ref = "poetesse" }
-kotlin-poet-ksp = { group = "com.squareup", name = "kotlinpoet-ksp", version.ref = "kotlin-poet-ksp" }
 kotlin-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json-jvm", version.ref = "kotlin-serialization-json" }
 
 ksp-plugin = { group = "com.google.devtools.ksp", name = "com.google.devtools.ksp.gradle.plugin", version.ref = "ksp" }

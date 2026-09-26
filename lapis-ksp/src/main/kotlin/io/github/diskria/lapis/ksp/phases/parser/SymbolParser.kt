@@ -194,14 +194,15 @@ class SymbolParser(private val resolver: Resolver) {
     private fun KSType.parse(viewNode: KSNode): ParsedType {
         if (isError) return InvalidType(viewNode)
         val parsedArguments = arguments.map { argument ->
-            if (argument.variance == Variance.STAR) {
-                ParsedType.StarArgument(viewNode)
-            } else {
-                val parsedType = argument.type.parse(viewNode)
-                if (parsedType is InvalidType) {
-                    ParsedType.InvalidArgument(viewNode)
-                } else {
-                    ParsedType.VarianceArgument(argument.variance, parsedType, viewNode)
+            when (val variance = argument.variance) {
+                Variance.STAR -> ParsedType.StarArgument(viewNode)
+                else -> when (val parsedType = argument.type.parse(viewNode)) {
+                    is InvalidType -> ParsedType.InvalidArgument(viewNode)
+                    else -> when (variance) {
+                        Variance.INVARIANT -> ParsedType.InvariantArgument(parsedType, viewNode)
+                        Variance.COVARIANT -> ParsedType.CovariantArgument(parsedType, viewNode)
+                        Variance.CONTRAVARIANT -> ParsedType.ContravariantArgument(parsedType, viewNode)
+                    }
                 }
             }
         }
