@@ -447,6 +447,7 @@ class Generator(
                     val shadowMethod = method("shadow$${shadow.mappingName}") {
                         mixinAnnotations(shadow.mixinAnnotations)
                         shadow.modifiers.forEach { +it }
+                        shadow.typeVariables.forEach { +it }
                         shadow.returnType?.let { returns(it.java) }
                         shadow.parameters.forEach { parameter(it.name, it.type.java) }
                         if (JPModifier.STATIC in shadow.modifiers || JPModifier.PRIVATE in shadow.modifiers) {
@@ -459,6 +460,7 @@ class Generator(
                         annotation<Override>()
                         public()
                         default()
+                        shadow.typeVariables.forEach { +it }
                         shadow.returnType?.let { returns(it.java) }
                         shadow.parameters.forEach { parameter(it.name, it.type.java) }
                         body {
