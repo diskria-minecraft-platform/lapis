@@ -164,11 +164,13 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
             mixinAnnotations = if (mixinAnnotations.isNotEmpty()) {
                 mixinAnnotations.map { it.lower() }
             } else {
-                listOfNotNull(
-                    if (setterJvmName != null) options.mutableAnnotation else null,
-                    if (FINAL in modifiers) options.finalAnnotation else null,
-                    options.shadowAnnotation,
-                ).map { IrMixinAnnotation(poetesse.xClass(it), emptyList()) }
+                buildList {
+                    if (FINAL in modifiers) {
+                        if (setterJvmName != null) add(options.mutableAnnotation)
+                        add(options.finalAnnotation)
+                    }
+                    add(options.shadowAnnotation)
+                }.map { IrMixinAnnotation(poetesse.xClass(it)) }
             },
         )
 
@@ -190,7 +192,7 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
                 mixinAnnotations = if (mixinAnnotations.isNotEmpty()) {
                     mixinAnnotations.map { it.lower() }
                 } else {
-                    listOf(IrMixinAnnotation(poetesse.xClass(options.shadowAnnotation), emptyList()))
+                    listOf(IrMixinAnnotation(poetesse.xClass(options.shadowAnnotation)))
                 },
                 typeVariables = scopeTypeParameters.typeVariables,
             )

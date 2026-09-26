@@ -2,7 +2,7 @@ package io.github.diskria.lapis.ksp.phases.lowering.models
 
 import io.github.diskria.poetesse.interop.XClassName
 
-class IrMixinAnnotation(val className: XClassName, val arguments: List<Argument>) {
+class IrMixinAnnotation(val className: XClassName, val arguments: List<Argument> = emptyList()) {
 
     sealed interface Argument {
 
