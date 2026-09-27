@@ -13,13 +13,13 @@ class IrMixin(
     val side: Side,
     val injections: List<Injection>,
     val duck: IrMixinDuck?,
-    val annotations: List<IrMixinAnnotation>,
+    val annotations: List<IrAnnotation>,
 ) {
     sealed interface Injection {
 
         val name: String
         val sourceJvmName: String
-        val mixinAnnotations: List<IrMixinAnnotation>
+        val annotations: List<IrAnnotation>
         val parameters: List<Parameter>
         val returnType: IrType?
         val typeVariables: List<XTypeVariableName>
@@ -27,14 +27,14 @@ class IrMixin(
         class Parameter(
             val name: String,
             val type: IrType,
-            val mixinAnnotations: List<IrMixinAnnotation>,
+            val annotations: List<IrAnnotation>,
         )
     }
 
     class MemberInjection(
         override val name: String,
         override val sourceJvmName: String,
-        override val mixinAnnotations: List<IrMixinAnnotation>,
+        override val annotations: List<IrAnnotation>,
         override val parameters: List<Parameter>,
         override val returnType: IrType?,
         override val typeVariables: List<XTypeVariableName>,
@@ -44,7 +44,7 @@ class IrMixin(
     class StaticInjection(
         override val name: String,
         override val sourceJvmName: String,
-        override val mixinAnnotations: List<IrMixinAnnotation>,
+        override val annotations: List<IrAnnotation>,
         override val parameters: List<Parameter>,
         override val returnType: IrType?,
         override val typeVariables: List<XTypeVariableName>,

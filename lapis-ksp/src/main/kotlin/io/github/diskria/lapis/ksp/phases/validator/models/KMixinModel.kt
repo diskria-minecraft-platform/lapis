@@ -40,7 +40,7 @@ class KMixinModel(
         val receiverType: TypeModel
 
         class Property(
-            override val name: String,
+            override val declaredName: String,
             override val getterJvmName: String,
             override val setterJvmName: String?,
             override val type: TypeModel,
@@ -49,7 +49,7 @@ class KMixinModel(
             Extension
 
         class Function(
-            override val name: String,
+            override val declaredName: String,
             override val jvmName: String,
             override val parameters: List<FunctionParameterModel>,
             override val returnType: TypeModel?,
@@ -66,7 +66,7 @@ class KMixinModel(
         val mixinAnnotations: List<MixinAnnotationModel>
 
         class Property(
-            override val name: String,
+            override val declaredName: String,
             override val getterJvmName: String,
             override val setterJvmName: String?,
             override val type: TypeModel,
@@ -77,7 +77,7 @@ class KMixinModel(
             Shadow
 
         class Function(
-            override val name: String,
+            override val declaredName: String,
             override val jvmName: String,
             override val parameters: List<FunctionParameterModel>,
             override val returnType: TypeModel?,

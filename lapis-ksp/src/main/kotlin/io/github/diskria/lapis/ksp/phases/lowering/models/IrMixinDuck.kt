@@ -15,7 +15,7 @@ class IrMixinDuck(
 ) {
     sealed interface Entry {
 
-        val sourceName: String
+        val declaredName: String
         val kinds: List<Kind>
 
         sealed interface Kind {
@@ -30,17 +30,17 @@ class IrMixinDuck(
 
         val type: IrType
         val getterName: String
-        val sourceGetterJvmName: String
+        val declaredGetterJvmName: String
         val setterName: String?
-        val sourceSetterJvmName: String?
+        val declaredSetterJvmName: String?
 
-        override val sourceName: String
+        override val declaredName: String
 
-        val getter: Getter get() = Getter(getterName, sourceGetterJvmName, type)
+        val getter: Getter get() = Getter(getterName, declaredGetterJvmName, type)
         val setter: Setter?
             get() {
                 val name = setterName
-                val sourceJvmName = sourceSetterJvmName
+                val sourceJvmName = declaredSetterJvmName
                 return if (name != null && sourceJvmName != null) {
                     Setter(name, sourceJvmName, type)
                 } else null
@@ -78,10 +78,10 @@ class IrMixinDuck(
         val receiverType: IrType
 
         class Property(
-            override val sourceName: String,
+            override val declaredName: String,
             override val type: IrType,
-            override val sourceGetterJvmName: String,
-            override val sourceSetterJvmName: String?,
+            override val declaredGetterJvmName: String,
+            override val declaredSetterJvmName: String?,
             override val getterName: String,
             override val setterName: String?,
             override val receiverType: IrType,
@@ -89,7 +89,7 @@ class IrMixinDuck(
             Extension
 
         class Function(
-            override val sourceName: String,
+            override val declaredName: String,
             override val name: String,
             override val sourceJvmName: String,
             override val parameters: List<IrFunctionParameter>,
@@ -104,30 +104,30 @@ class IrMixinDuck(
 
         val modifiers: List<JPModifier>
         val mappingName: String
-        val mixinAnnotations: List<IrMixinAnnotation>
+        val annotations: List<IrAnnotation>
 
         class Property(
-            override val sourceName: String,
+            override val declaredName: String,
             override val type: IrType,
             override val getterName: String,
-            override val sourceGetterJvmName: String,
+            override val declaredGetterJvmName: String,
             override val setterName: String?,
-            override val sourceSetterJvmName: String?,
+            override val declaredSetterJvmName: String?,
             override val modifiers: List<JPModifier>,
             override val mappingName: String,
-            override val mixinAnnotations: List<IrMixinAnnotation>,
+            override val annotations: List<IrAnnotation>,
         ) : IrMixinDuck.Property,
             Shadow
 
         class Function(
-            override val sourceName: String,
+            override val declaredName: String,
             override val name: String,
             override val sourceJvmName: String,
             override val parameters: List<IrFunctionParameter>,
             override val returnType: IrType?,
             override val modifiers: List<JPModifier>,
             override val mappingName: String,
-            override val mixinAnnotations: List<IrMixinAnnotation>,
+            override val annotations: List<IrAnnotation>,
             override val typeVariables: List<XTypeVariableName>,
         ) : IrMixinDuck.Function,
             Shadow

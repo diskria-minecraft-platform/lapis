@@ -92,9 +92,9 @@ class Lowering(
         annotations = if (mixinAnnotations.isNotEmpty()) {
             mixinAnnotations.map { it.lower() }
         } else {
-            val targetClassValue = IrMixinAnnotation.Argument.ClassValue(targetClassDeclaration.lower())
-            val valueArgument = IrMixinAnnotation.ScalarArgument("value", targetClassValue)
-            listOf(IrMixinAnnotation(poetesse.xClass(options.mixinAnnotation), listOf(valueArgument)))
+            val targetClassValue = IrAnnotation.Argument.ClassValue(targetClassDeclaration.lower())
+            val valueArgument = IrAnnotation.ScalarArgument("value", targetClassValue)
+            listOf(IrAnnotation(poetesse.xClass(options.mixinAnnotation), listOf(valueArgument)))
         },
     )
 
@@ -122,9 +122,9 @@ class Lowering(
     private fun KMixinModel.Extension.lower(enclosingTypeParameters: TypeParameters) = when (this) {
         is KMixinModel.Extension.Property -> IrMixinDuck.Extension.Property(
             type = type.lower(enclosingTypeParameters),
-            sourceName = name,
-            sourceGetterJvmName = getterJvmName,
-            sourceSetterJvmName = setterJvmName,
+            declaredName = declaredName,
+            declaredGetterJvmName = getterJvmName,
+            declaredSetterJvmName = setterJvmName,
             getterName = getterJvmName.withUniqueModPrefix(),
             setterName = setterJvmName?.withUniqueModPrefix(),
             receiverType = receiverType.lower(enclosingTypeParameters),
@@ -133,7 +133,7 @@ class Lowering(
         is KMixinModel.Extension.Function -> {
             val scopeTypeParameters = typeParameters.resolveTypeParameters(enclosingTypeParameters)
             IrMixinDuck.Extension.Function(
-                sourceName = name,
+                declaredName = declaredName,
                 sourceJvmName = jvmName,
                 name = jvmName.withUniqueModPrefix(),
                 parameters = parameters.map {
@@ -152,14 +152,14 @@ class Lowering(
     private fun KMixinModel.Shadow.lower(isInterface: Boolean, enclosingTypeParameters: TypeParameters) = when (this) {
         is KMixinModel.Shadow.Property -> IrMixinDuck.Shadow.Property(
             type = type.lower(enclosingTypeParameters),
-            sourceName = name,
-            sourceGetterJvmName = getterJvmName,
-            sourceSetterJvmName = setterJvmName,
+            declaredName = declaredName,
+            declaredGetterJvmName = getterJvmName,
+            declaredSetterJvmName = setterJvmName,
             getterName = getterJvmName.withUniqueModPrefix(),
             setterName = setterJvmName?.withUniqueModPrefix(),
             mappingName = mappingName,
             modifiers = modifiers.lowerToShadowModifiers(isInterface, isField = true),
-            mixinAnnotations = if (mixinAnnotations.isNotEmpty()) {
+            annotations = if (mixinAnnotations.isNotEmpty()) {
                 mixinAnnotations.map { it.lower() }
             } else {
                 buildList {
@@ -168,14 +168,14 @@ class Lowering(
                         add(options.finalAnnotation)
                     }
                     add(options.shadowAnnotation)
-                }.map { IrMixinAnnotation(poetesse.xClass(it)) }
+                }.map { IrAnnotation(poetesse.xClass(it)) }
             },
         )
 
         is KMixinModel.Shadow.Function -> {
             val scopeTypeParameters = typeParameters.resolveTypeParameters(enclosingTypeParameters)
             IrMixinDuck.Shadow.Function(
-                sourceName = name,
+                declaredName = declaredName,
                 sourceJvmName = jvmName,
                 name = jvmName.withUniqueModPrefix(),
                 parameters = parameters.map {
@@ -187,10 +187,10 @@ class Lowering(
                 returnType = returnType?.lower(scopeTypeParameters),
                 mappingName = mappingName,
                 modifiers = modifiers.lowerToShadowModifiers(isInterface, isField = false),
-                mixinAnnotations = if (mixinAnnotations.isNotEmpty()) {
+                annotations = if (mixinAnnotations.isNotEmpty()) {
                     mixinAnnotations.map { it.lower() }
                 } else {
-                    listOf(IrMixinAnnotation(poetesse.xClass(options.shadowAnnotation)))
+                    listOf(IrAnnotation(poetesse.xClass(options.shadowAnnotation)))
                 },
                 typeVariables = scopeTypeParameters.typeVariables,
             )
@@ -202,7 +202,7 @@ class Lowering(
         return IrMixin.MemberInjection(
             sourceJvmName = jvmName,
             name = jvmName.withUniqueModPrefix(),
-            mixinAnnotations = mixinAnnotations.map { it.lower() },
+            annotations = mixinAnnotations.map { it.lower() },
             parameters = parameters.map { parameter ->
                 IrMixin.Injection.Parameter(
                     parameter.name,
@@ -221,7 +221,7 @@ class Lowering(
         return IrMixin.StaticInjection(
             sourceJvmName = jvmName,
             name = jvmName.withUniqueModPrefix(),
-            mixinAnnotations = mixinAnnotations.map { it.lower() },
+            annotations = mixinAnnotations.map { it.lower() },
             parameters = parameters.map { parameter ->
                 IrMixin.Injection.Parameter(
                     parameter.name,
@@ -235,16 +235,16 @@ class Lowering(
         )
     }
 
-    private fun MixinAnnotationModel.lower() = IrMixinAnnotation(
+    private fun MixinAnnotationModel.lower() = IrAnnotation(
         className = typeClassDeclaration.lower(),
         arguments = arguments.map { argument ->
             when (argument) {
-                is MixinAnnotationModel.ScalarArgument -> IrMixinAnnotation.ScalarArgument(
+                is MixinAnnotationModel.ScalarArgument -> IrAnnotation.ScalarArgument(
                     name = argument.name,
                     value = argument.value.lower(),
                 )
 
-                is MixinAnnotationModel.ArrayArgument -> IrMixinAnnotation.ArrayArgument(
+                is MixinAnnotationModel.ArrayArgument -> IrAnnotation.ArrayArgument(
                     name = argument.name,
                     elements = argument.elements.map { it.lower() },
                 )
@@ -252,24 +252,19 @@ class Lowering(
         },
     )
 
-    private fun MixinAnnotationModel.Argument.Value.lower(): IrMixinAnnotation.Argument.Value = when (this) {
-        is MixinAnnotationModel.Argument.BooleanValue -> IrMixinAnnotation.Argument.BooleanValue(boolean)
-        is MixinAnnotationModel.Argument.ByteValue -> IrMixinAnnotation.Argument.ByteValue(byte)
-        is MixinAnnotationModel.Argument.ShortValue -> IrMixinAnnotation.Argument.ShortValue(short)
-        is MixinAnnotationModel.Argument.IntValue -> IrMixinAnnotation.Argument.IntValue(int)
-        is MixinAnnotationModel.Argument.LongValue -> IrMixinAnnotation.Argument.LongValue(long)
-        is MixinAnnotationModel.Argument.CharValue -> IrMixinAnnotation.Argument.CharValue(char)
-        is MixinAnnotationModel.Argument.FloatValue -> IrMixinAnnotation.Argument.FloatValue(float)
-        is MixinAnnotationModel.Argument.DoubleValue -> IrMixinAnnotation.Argument.DoubleValue(double)
-        is MixinAnnotationModel.Argument.StringValue -> IrMixinAnnotation.Argument.StringValue(string)
-        is MixinAnnotationModel.Argument.ClassValue -> IrMixinAnnotation.Argument.ClassValue(classDeclaration.lower())
-        is MixinAnnotationModel.Argument.EnumValue -> {
-            IrMixinAnnotation.Argument.EnumValue(classDeclaration.lower(), name)
-        }
-
-        is MixinAnnotationModel.Argument.AnnotationValue -> {
-            IrMixinAnnotation.Argument.AnnotationValue(annotation.lower())
-        }
+    private fun MixinAnnotationModel.Argument.Value.lower(): IrAnnotation.Argument.Value = when (this) {
+        is MixinAnnotationModel.Argument.BooleanValue -> IrAnnotation.Argument.BooleanValue(boolean)
+        is MixinAnnotationModel.Argument.ByteValue -> IrAnnotation.Argument.ByteValue(byte)
+        is MixinAnnotationModel.Argument.ShortValue -> IrAnnotation.Argument.ShortValue(short)
+        is MixinAnnotationModel.Argument.IntValue -> IrAnnotation.Argument.IntValue(int)
+        is MixinAnnotationModel.Argument.LongValue -> IrAnnotation.Argument.LongValue(long)
+        is MixinAnnotationModel.Argument.CharValue -> IrAnnotation.Argument.CharValue(char)
+        is MixinAnnotationModel.Argument.FloatValue -> IrAnnotation.Argument.FloatValue(float)
+        is MixinAnnotationModel.Argument.DoubleValue -> IrAnnotation.Argument.DoubleValue(double)
+        is MixinAnnotationModel.Argument.StringValue -> IrAnnotation.Argument.StringValue(string)
+        is MixinAnnotationModel.Argument.ClassValue -> IrAnnotation.Argument.ClassValue(classDeclaration.lower())
+        is MixinAnnotationModel.Argument.EnumValue -> IrAnnotation.Argument.EnumValue(classDeclaration.lower(), name)
+        is MixinAnnotationModel.Argument.AnnotationValue -> IrAnnotation.Argument.AnnotationValue(annotation.lower())
     }
 
     private fun EnumSet<Modifier>.lowerToShadowModifiers(isInterface: Boolean, isField: Boolean): List<JPModifier> {

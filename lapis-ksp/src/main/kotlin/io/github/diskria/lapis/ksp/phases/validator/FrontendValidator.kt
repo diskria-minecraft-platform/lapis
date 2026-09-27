@@ -221,7 +221,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         kspRequire(!isOpen && !isAbstract) { "" }
         kspRequire(typeParameters.isEmpty()) { "" }
         return KMixinModel.Extension.Property(
-            name = name.validate(),
+            declaredName = name.validate(),
             getterJvmName = getter.jvmName,
             setterJvmName = if (setter != null) kspRequireNotNull(setter.jvmName) { "" } else null,
             type = type.validate(),
@@ -241,7 +241,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             )
         }
         return KMixinModel.Extension.Function(
-            name = name.validate(),
+            declaredName = name.validate(),
             jvmName = jvmName,
             parameters = parameters,
             returnType = returnType?.validate(),
@@ -259,18 +259,16 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         kspRequire(!hasExtensionReceiver) { "" }
         kspRequireNotNull(getter) { "" }
         kspRequireNotNull(getter.jvmName) { "" }
+        val declaredName = name.validate()
         val mappingNameArgument = annotations.findApiArgument(MappingName::name)
-        val implicitName = validateJavaIdentifierName(
-            name.validate(), "@KShadow property name",
-            sources = mappingNameArgument == null,
-        )
+        validateJavaIdentifierName(declaredName, "@KShadow property name", mappingNameArgument == null)
         val mappingName = mappingNameArgument?.let { (value, node) ->
             node.validateJavaIdentifierName(value, "@KShadow property's @MappingName value", sources = true)
-        } ?: implicitName
+        } ?: declaredName
         val modifiersArgument = annotations.findApiArgument(KShadow::modifiers)
         kspRequire(typeParameters.isEmpty()) { "" }
         return KMixinModel.Shadow.Property(
-            name = name.validate(),
+            declaredName = name.validate(),
             getterJvmName = getter.jvmName,
             setterJvmName = if (setter != null) kspRequireNotNull(setter.jvmName) { "" } else null,
             mappingName = mappingName,
@@ -288,20 +286,17 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         kspRequireNotNull(jvmName) { "" }
         kspRequire(isAbstract) { "" }
         kspRequire(extensionReceiverType == null) { "" }
+        val declaredName = name.validate()
         val mappingNameArgument = annotations.findApiArgument(MappingName::name)
-        val implicitName = validateJavaIdentifierName(
-            name = name.validate(),
-            roleDesc = "@KShadow function name",
-            sources = mappingNameArgument == null,
-        )
-        val effectiveName = mappingNameArgument?.let { (value, node) ->
+        validateJavaIdentifierName(declaredName, "@KShadow function name", mappingNameArgument == null)
+        val mappingName = mappingNameArgument?.let { (value, node) ->
             node.validateJavaIdentifierName(value, "@KShadow function's @MappingName value", sources = true)
-        } ?: implicitName
+        } ?: declaredName
         val modifiersArgument = annotations.findApiArgument(KShadow::modifiers)
         return KMixinModel.Shadow.Function(
-            name = name.validate(),
+            declaredName = declaredName,
             jvmName = jvmName,
-            mappingName = effectiveName,
+            mappingName = mappingName,
             parameters = parameters.map {
                 FunctionParameterModel(
                     name = it.name.validate(),

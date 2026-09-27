@@ -125,7 +125,7 @@ class Generator(
             suppressAllWarnings()
             extensions.forEach { extension ->
                 when (extension) {
-                    is IrMixinDuck.Extension.Property -> property(extension.sourceName, extension.type.kotlin) {
+                    is IrMixinDuck.Extension.Property -> property(extension.declaredName, extension.type.kotlin) {
                         public()
                         inline()
                         extensionReceiver(extension.receiverType.kotlin)
@@ -146,7 +146,7 @@ class Generator(
                         }
                     }
 
-                    is IrMixinDuck.Extension.Function -> function(extension.sourceName) {
+                    is IrMixinDuck.Extension.Function -> function(extension.declaredName) {
                         public()
                         inline()
                         duck.typeVariables.forEach { +it }
@@ -157,9 +157,9 @@ class Generator(
                         body {
                             val returner = if (extension.returnType != null) "return " else ""
                             val callable = code { N(extension.name) }
-                            val generics = generics(extension.typeVariables)
+                            val typeArguments = typeArguments(extension.typeVariables)
                             val arguments = code { extension.parameters.joinToString { N(it.name) } }
-                            line { "$returner${L(receiver)}.${L(callable)}${L(generics)}(${L(arguments)})" }
+                            line { "$returner${L(receiver)}.${L(callable)}${L(typeArguments)}(${L(arguments)})" }
                         }
                     }
                 }
@@ -202,7 +202,7 @@ class Generator(
                 }
                 kMixin.mixin.duck?.shadows?.forEach { shadow ->
                     when (shadow) {
-                        is IrMixinDuck.Property -> property(shadow.sourceName, shadow.type.kotlin) {
+                        is IrMixinDuck.Property -> property(shadow.declaredName, shadow.type.kotlin) {
                             public()
                             override()
                             getter {
@@ -224,7 +224,7 @@ class Generator(
                             }
                         }
 
-                        is IrMixinDuck.Function -> function(shadow.sourceName) {
+                        is IrMixinDuck.Function -> function(shadow.declaredName) {
                             public()
                             override()
                             shadow.typeVariables.forEach { +it }
@@ -234,9 +234,9 @@ class Generator(
                                 val returner = if (shadow.returnType != null) "return " else ""
                                 val receiver = code { N("duck") }
                                 val callable = code { N(shadow.name) }
-                                val generics = generics(shadow.typeVariables)
+                                val typeArguments = typeArguments(shadow.typeVariables)
                                 val arguments = code { shadow.parameters.joinToString { N(it.name) } }
-                                line { "$returner${L(receiver)}.${L(callable)}${L(generics)}(${L(arguments)})" }
+                                line { "$returner${L(receiver)}.${L(callable)}${L(typeArguments)}(${L(arguments)})" }
                             }
                         }
                     }
@@ -246,6 +246,11 @@ class Generator(
     }.writeWith(aggregating = false, listOfNotNull(kMixinImpl.originatingFile))
 
     private fun generateMixinClass(mixin: IrMixin, kMixin: KMixinFirClass) = poetesse {
+        val extensions = mixin.duck?.extensions.orEmpty()
+        val memberInjections = mixin.injections.filterIsInstance<IrMixin.MemberInjection>()
+        val delegateInitializer = if (extensions.isNotEmpty() || memberInjections.isNotEmpty()) {
+            java.code { delegateInitializer(kMixin) }
+        } else null
         java.file(mixin.className) {
             class_(fileName) { _ ->
                 public()
@@ -253,18 +258,16 @@ class Generator(
                 mixin.typeVariables.forEach { +it }
                 generatedMarker("Runtime entrypoint of the Mixin engine delegating logic to the KMixin")
                 suppressAllWarnings()
-                mixinAnnotations(mixin.annotations)
+                annotations(mixin.annotations)
                 mixin.duck?.let { superinterface(it.className.optionalGeneric(mixin.typeVariables)) }
                 val extensions = mixin.duck?.extensions.orEmpty()
                 val memberInjections = mixin.injections.filterIsInstance<IrMixin.MemberInjection>()
-                val delegate = if (extensions.isNotEmpty() || memberInjections.isNotEmpty()) {
-                    delegateMember(kMixin)
-                } else null
+                val delegate = delegateInitializer?.let { delegateMember(kMixin, it) }
                 mixin.duck?.shadows?.forEach { shadow ->
                     when (shadow) {
                         is IrMixinDuck.Shadow.Property -> {
                             val shadowField = field(shadow.mappingName, shadow.type.java) {
-                                mixinAnnotations(shadow.mixinAnnotations)
+                                annotations(shadow.annotations)
                                 shadow.modifiers.forEach { +it }
                             }
                             shadow.kinds.forEach { kind ->
@@ -290,7 +293,7 @@ class Generator(
 
                         is IrMixinDuck.Shadow.Function -> {
                             val shadowMethod = method(shadow.mappingName) {
-                                mixinAnnotations(shadow.mixinAnnotations)
+                                annotations(shadow.annotations)
                                 shadow.modifiers.forEach { +it }
                                 shadow.typeVariables.forEach { +it }
                                 shadow.returnType?.let { returns(it.java) }
@@ -328,15 +331,14 @@ class Generator(
                                 kind.parameters.forEach { parameter(it.name, it.type.java) }
                                 body {
                                     val returner = if (kind.returnType != null) "return " else ""
-                                    val receiver = code { N(delegate) }
                                     val callable = code { N(kind.sourceJvmName) }
                                     val arguments = code { kind.parameters.joinToString { N(it.name) } }
-                                    line { "$returner${L(receiver)}.${L(callable)}(${L(arguments)})" }
+                                    line { "$returner${L(delegate)}.${L(callable)}(${L(arguments)})" }
                                 }
                             }
                         }
                     }
-                    memberInjections.forEach { mixinInjection(it) { delegate } }
+                    memberInjections.forEach { mixinInjection(it, delegate) }
                 }
                 mixin.injections.filterIsInstance<IrMixin.StaticInjection>().forEach { staticInjection ->
                     mixinInjection(staticInjection) {
@@ -366,16 +368,20 @@ class Generator(
                 }
             }
         }
-        val generics = generics(kMixin.typeVariables, diamond = true)
-        return "new ${T(className)}${L(generics)}(${L(arguments)})"
+        val typeArguments = typeArguments(kMixin.typeVariables, diamond = true)
+        return "new ${T(className)}${L(typeArguments)}(${L(arguments)})"
     }
 
-    private fun JavaTypeScope.delegateMember(kMixin: KMixinFirClass): String {
+    private fun JavaTypeScope.delegateMember(
+        kMixin: KMixinFirClass,
+        initializer: JavaCodeRef,
+    ): JavaCodeScope.() -> String {
         val isEager = kMixin.initStrategy == InitStrategy.Eager
         val isSynchronized = kMixin.initStrategy == InitStrategy.Synchronized
         val isThreadSafe = kMixin.initStrategy == InitStrategy.Volatile || isSynchronized
-        val initializer = poetesse.java.code { delegateInitializer(kMixin) }
-        val delegateField = field("delegate", kMixin.className.optionalGeneric(kMixin.typeVariables, !isEager)) {
+        val delegateField = field(
+            $$"kotlin$delegate", kMixin.className.optionalGeneric(kMixin.typeVariables, !isEager)
+        ) {
             private()
             annotation<Annotation>(xClass(options.uniqueAnnotation))
             if (isEager) {
@@ -385,22 +391,22 @@ class Generator(
                 volatile()
             }
         }
-        if (isEager) return delegateField
+        if (isEager) return { N(delegateField) }
         val delegateLockField = if (isSynchronized) {
-            field<Any>("delegateLock") {
+            field<Any>($$"kotlin$delegateLock") {
                 private()
                 final()
                 annotation<Annotation>(xClass(options.uniqueAnnotation))
                 initializer { "new ${T<Any>()}()" }
             }
         } else null
-        val getDelegate by method {
+        val getDelegate = method($$"kotlin$getDelegate") {
             private()
             annotation<Annotation>(xClass(options.uniqueAnnotation))
             body {
                 if (isThreadSafe) {
                     val localType = kMixin.className.optionalGeneric(kMixin.typeVariables, nullable = true)
-                    val local by var_(localType) { "this.${N(delegateField)}" }
+                    val local = var_("local", localType) { "this.${N(delegateField)}" }
                     controlFlow {
                         branch({ "if (${N(local)} == null)" }) {
                             if (isSynchronized && delegateLockField != null) {
@@ -433,7 +439,7 @@ class Generator(
             }
             returns(kMixin.className.optionalGeneric(kMixin.typeVariables))
         }
-        return "$getDelegate()"
+        return { "${N(getDelegate)}()" }
     }
 
     private fun generateMixinInterface(mixin: IrMixin, kMixinInterface: KMixinFirInterface) = poetesse {
@@ -441,12 +447,12 @@ class Generator(
             interface_(fileName) { _ ->
                 generatedMarker("Runtime entrypoint of the Mixin engine delegating logic to the KMixin")
                 suppressAllWarnings()
-                mixinAnnotations(mixin.annotations)
+                annotations(mixin.annotations)
                 public()
                 superinterface(mixin.duck?.className ?: kMixinInterface.className)
                 mixin.duck?.shadows?.filterIsInstance<IrMixinDuck.Shadow.Function>()?.forEach { shadow ->
                     val shadowMethod = method("shadow$${shadow.mappingName}") {
-                        mixinAnnotations(shadow.mixinAnnotations)
+                        annotations(shadow.annotations)
                         shadow.modifiers.forEach { +it }
                         shadow.typeVariables.forEach { +it }
                         shadow.returnType?.let { returns(it.java) }
@@ -486,17 +492,15 @@ class Generator(
         }
     }.writeWith(aggregating = false, listOfNotNull(mixin.originatingFile))
 
-    private fun JavaTypeScope.mixinInjection(injection: IrMixin.Injection, receiver: JavaCodeScope.() -> String) {
+    private fun JavaTypeScope.mixinInjection(injection: IrMixin.Injection, delegate: JavaCodeScope.() -> String) {
         method(injection.name) {
-            mixinAnnotations(injection.mixinAnnotations)
+            annotations(injection.annotations)
             private()
             if (injection is IrMixin.StaticInjection) static()
             injection.typeVariables.forEach { +it }
             injection.returnType?.let { returns(it.java) }
             injection.parameters.forEach { parameter ->
-                parameter(parameter.name, parameter.type.java) {
-                    mixinAnnotations(parameter.mixinAnnotations)
-                }
+                parameter(parameter.name, parameter.type.java) { annotations(parameter.annotations) }
             }
             body {
                 val returner = if (injection.returnType != null) "return " else ""
@@ -509,44 +513,42 @@ class Generator(
                         addAll(injection.parameters.map { N(it.name) })
                     }.joinToString()
                 }
-                line { "$returner${L(receiver)}.${L(callable)}(${L(arguments)})" }
+                line { "$returner${L(delegate)}.${L(callable)}(${L(arguments)})" }
             }
         }
     }
 
-    private fun JavaAnnotationTrait.mixinAnnotations(mixinAnnotations: List<IrMixinAnnotation>) {
-        mixinAnnotations.forEach { +mixinAnnotation(it) }
+    private fun JavaAnnotationTrait.annotations(annotations: List<IrAnnotation>) {
+        annotations.forEach { +annotation(it) }
     }
 
-    private fun mixinAnnotation(annotation: IrMixinAnnotation): JavaTypedAnnotationRef<Annotation> =
-        poetesse.java.annotation(annotation.className) {
+    private fun JavaAnnotationFactory.annotation(annotation: IrAnnotation): JavaAnnotationRef =
+        annotation<Annotation>(annotation.className) {
             annotation.arguments.forEach { argument ->
                 member(argument.name) {
                     when (argument) {
-                        is IrMixinAnnotation.ScalarArgument -> mixinAnnotationArgumentValue(argument.value)
-                        is IrMixinAnnotation.ArrayArgument -> {
-                            argument.elements.joinToString(prefix = "{", postfix = "}") {
-                                mixinAnnotationArgumentValue(it)
-                            }
+                        is IrAnnotation.ScalarArgument -> annotationArgumentValue(argument.value)
+                        is IrAnnotation.ArrayArgument -> {
+                            argument.elements.joinToString(prefix = "{", postfix = "}") { annotationArgumentValue(it) }
                         }
                     }
                 }
             }
         }
 
-    private fun JavaCodeScope.mixinAnnotationArgumentValue(value: IrMixinAnnotation.Argument.Value) = when (value) {
-        is IrMixinAnnotation.Argument.BooleanValue -> L(value.boolean)
-        is IrMixinAnnotation.Argument.ByteValue -> L(value.byte)
-        is IrMixinAnnotation.Argument.ShortValue -> L(value.short)
-        is IrMixinAnnotation.Argument.IntValue -> L(value.int)
-        is IrMixinAnnotation.Argument.LongValue -> L(value.long)
-        is IrMixinAnnotation.Argument.CharValue -> L(value.char)
-        is IrMixinAnnotation.Argument.FloatValue -> L(value.float)
-        is IrMixinAnnotation.Argument.DoubleValue -> L(value.double)
-        is IrMixinAnnotation.Argument.StringValue -> S(value.string)
-        is IrMixinAnnotation.Argument.EnumValue -> "${T(value.className)}.${N(value.name)}"
-        is IrMixinAnnotation.Argument.ClassValue -> "${T(value.className)}.class"
-        is IrMixinAnnotation.Argument.AnnotationValue -> L(mixinAnnotation(value.annotation))
+    private fun JavaCodeScope.annotationArgumentValue(value: IrAnnotation.Argument.Value) = when (value) {
+        is IrAnnotation.Argument.BooleanValue -> L(value.boolean)
+        is IrAnnotation.Argument.ByteValue -> L(value.byte)
+        is IrAnnotation.Argument.ShortValue -> L(value.short)
+        is IrAnnotation.Argument.IntValue -> L(value.int)
+        is IrAnnotation.Argument.LongValue -> L(value.long)
+        is IrAnnotation.Argument.CharValue -> L(value.char)
+        is IrAnnotation.Argument.FloatValue -> L(value.float)
+        is IrAnnotation.Argument.DoubleValue -> L(value.double)
+        is IrAnnotation.Argument.StringValue -> S(value.string)
+        is IrAnnotation.Argument.EnumValue -> "${T(value.className)}.${N(value.name)}"
+        is IrAnnotation.Argument.ClassValue -> "${T(value.className)}.class"
+        is IrAnnotation.Argument.AnnotationValue -> L(poetesse.java.annotation(value.annotation))
     }
 
     private fun PoetesseFile.writeWith(aggregating: Boolean, originatingFiles: Iterable<KSFile>) {
@@ -610,20 +612,18 @@ private fun KotlinFileScope.suppressAllWarnings() {
     }
 }
 
-private fun JavaCodeFactory.generics(typeVariables: List<XTypeVariableName>, diamond: Boolean = false): JavaCodeRef =
-    code {
-        if (typeVariables.isNotEmpty()) {
-            if (diamond) "<>"
-            else "<" + typeVariables.joinToString { N(it.name) } + ">"
-        } else ""
-    }
+private fun JavaCodeFactory.typeArguments(typeVariables: List<XTypeVariableName>, diamond: Boolean = false) = code {
+    if (typeVariables.isNotEmpty()) {
+        if (diamond) "<>"
+        else "<" + typeVariables.joinToString { N(it.name) } + ">"
+    } else ""
+}
 
-private fun KotlinCodeFactory.generics(typeVariables: List<XTypeVariableName>): KotlinCodeRef =
-    code {
-        if (typeVariables.isNotEmpty()) {
-            "<" + typeVariables.joinToString { N(it.name) } + ">"
-        } else ""
-    }
+private fun KotlinCodeFactory.typeArguments(typeVariables: List<XTypeVariableName>) = code {
+    if (typeVariables.isNotEmpty()) {
+        "<" + typeVariables.joinToString { N(it.name) } + ">"
+    } else ""
+}
 
 private fun XClassName.optionalGeneric(typeVariables: List<XTypeName>, nullable: Boolean = false): XTypeName =
     if (typeVariables.isNotEmpty()) generic(typeVariables, nullable = nullable)
