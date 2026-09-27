@@ -3,13 +3,12 @@ package io.github.diskria.lapis.ksp.phases.lowering.models
 import com.google.devtools.ksp.symbol.KSFile
 import io.github.diskria.lapis.ksp.phases.lowering.models.IrMixinDuck.Entry.Kind
 import io.github.diskria.poetesse.interop.XClassName
-import io.github.diskria.poetesse.interop.XTypeVariableName
 import io.github.diskria.poetesse.java.JPModifier
 
 class IrMixinDuck(
     val originatingFile: KSFile?,
     val className: XClassName,
-    val typeVariables: List<XTypeVariableName>,
+    val typeVariables: IrTypeVariables,
     val shadows: List<Shadow>,
     val extensions: List<Extension>,
 ) {
@@ -70,7 +69,7 @@ class IrMixinDuck(
 
     sealed interface Function : Entry, Kind {
         override val kinds: List<Kind> get() = listOf(this)
-        val typeVariables: List<XTypeVariableName>
+        val typeVariables: IrTypeVariables
     }
 
     sealed interface Extension : Entry {
@@ -95,7 +94,7 @@ class IrMixinDuck(
             override val parameters: List<IrFunctionParameter>,
             override val returnType: IrType?,
             override val receiverType: IrType,
-            override val typeVariables: List<XTypeVariableName>,
+            override val typeVariables: IrTypeVariables,
         ) : IrMixinDuck.Function,
             Extension
     }
@@ -128,7 +127,7 @@ class IrMixinDuck(
             override val modifiers: List<JPModifier>,
             override val mappingName: String,
             override val annotations: List<IrAnnotation>,
-            override val typeVariables: List<XTypeVariableName>,
+            override val typeVariables: IrTypeVariables,
         ) : IrMixinDuck.Function,
             Shadow
     }

@@ -1,6 +1,5 @@
 package io.github.diskria.lapis.ksp.phases.lowering
 
-import com.google.devtools.ksp.symbol.*
 import io.github.diskria.lapis.ksp.KspOptions
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
 import io.github.diskria.lapis.ksp.phases.validator.models.*
@@ -20,7 +19,7 @@ class Lowering(
     private val mixinSourcePackageLCP by lazy {
         if (options.disableLCP) null
         else {
-            models.map { it.classDeclaration.packageName }.reduceOrNull { current, next ->
+            models.map { it.type.packageName }.reduceOrNull { current, next ->
                 val currentSegments = current.split('.')
                 val nextSegments = next.split('.')
                 currentSegments
@@ -34,8 +33,8 @@ class Lowering(
     fun lower() = models.map { it.lower() }
 
     private fun KMixinModel.lower(): KMixinFir {
-        val className = classDeclaration.lower()
-        val typeParameters = typeParameters.resolveTypeParameters(enclosingTypeParameters = null)
+        val className = type.toXClassName()
+        val typeParameters = typeParameters.resolve(enclosing = null)
         val mixin = deriveMixin(className, typeParameters)
         return when (classKind) {
             is KMixinModel.Class -> {
@@ -92,7 +91,7 @@ class Lowering(
         annotations = if (mixinAnnotations.isNotEmpty()) {
             mixinAnnotations.map { it.lower() }
         } else {
-            val targetClassValue = IrAnnotation.Argument.ClassValue(targetClassDeclaration.lower())
+            val targetClassValue = IrAnnotation.Argument.ClassValue(targetClassDeclaration.toXClassName())
             val valueArgument = IrAnnotation.ScalarArgument("value", targetClassValue)
             listOf(IrAnnotation(poetesse.xClass(options.mixinAnnotation), listOf(valueArgument)))
         },
@@ -131,7 +130,7 @@ class Lowering(
         )
 
         is KMixinModel.Extension.Function -> {
-            val scopeTypeParameters = typeParameters.resolveTypeParameters(enclosingTypeParameters)
+            val scopeTypeParameters = typeParameters.resolve(enclosingTypeParameters)
             IrMixinDuck.Extension.Function(
                 declaredName = declaredName,
                 sourceJvmName = jvmName,
@@ -173,7 +172,7 @@ class Lowering(
         )
 
         is KMixinModel.Shadow.Function -> {
-            val scopeTypeParameters = typeParameters.resolveTypeParameters(enclosingTypeParameters)
+            val scopeTypeParameters = typeParameters.resolve(enclosingTypeParameters)
             IrMixinDuck.Shadow.Function(
                 declaredName = declaredName,
                 sourceJvmName = jvmName,
@@ -198,7 +197,7 @@ class Lowering(
     }
 
     private fun KMixinModel.Injection.lowerAsMember(enclosingTypeParameters: TypeParameters): IrMixin.MemberInjection {
-        val scopeTypeParameters = typeParameters.resolveTypeParameters(enclosingTypeParameters)
+        val scopeTypeParameters = typeParameters.resolve(enclosingTypeParameters)
         return IrMixin.MemberInjection(
             sourceJvmName = jvmName,
             name = jvmName.withUniqueModPrefix(),
@@ -217,7 +216,7 @@ class Lowering(
     }
 
     private fun KMixinModel.Injection.lowerAsStatic(companion: KMixinModel.CompanionObject): IrMixin.StaticInjection {
-        val scopeTypeParameters = typeParameters.resolveTypeParameters(enclosingTypeParameters = null)
+        val scopeTypeParameters = typeParameters.resolve(enclosing = null)
         return IrMixin.StaticInjection(
             sourceJvmName = jvmName,
             name = jvmName.withUniqueModPrefix(),
@@ -236,7 +235,7 @@ class Lowering(
     }
 
     private fun MixinAnnotationModel.lower() = IrAnnotation(
-        className = typeClassDeclaration.lower(),
+        className = this@lower.type.toXClassName(),
         arguments = arguments.map { argument ->
             when (argument) {
                 is MixinAnnotationModel.ScalarArgument -> IrAnnotation.ScalarArgument(
@@ -262,8 +261,8 @@ class Lowering(
         is MixinAnnotationModel.Argument.FloatValue -> IrAnnotation.Argument.FloatValue(float)
         is MixinAnnotationModel.Argument.DoubleValue -> IrAnnotation.Argument.DoubleValue(double)
         is MixinAnnotationModel.Argument.StringValue -> IrAnnotation.Argument.StringValue(string)
-        is MixinAnnotationModel.Argument.ClassValue -> IrAnnotation.Argument.ClassValue(classDeclaration.lower())
-        is MixinAnnotationModel.Argument.EnumValue -> IrAnnotation.Argument.EnumValue(classDeclaration.lower(), name)
+        is MixinAnnotationModel.Argument.ClassValue -> IrAnnotation.Argument.ClassValue(type.toXClassName())
+        is MixinAnnotationModel.Argument.EnumValue -> IrAnnotation.Argument.EnumValue(type.toXClassName(), name)
         is MixinAnnotationModel.Argument.AnnotationValue -> IrAnnotation.Argument.AnnotationValue(annotation.lower())
     }
 
@@ -290,78 +289,79 @@ class Lowering(
     private fun String.withUniqueModPrefix(): String =
         options.uniqueModPrefix + this
 
-    class TypeParameters(private val parent: TypeParameters?) {
+    class TypeParameters(private val enclosing: TypeParameters?) {
 
-        val typeVariables: List<XTypeVariableName> get() = parametersMap.values.toList()
-        val parametersMap = LinkedHashMap<String, XTypeVariableName>()
+        val typeVariables get() = IrTypeVariables(inKotlin.values.toList(), inJava.values.toList())
+        val inKotlin = LinkedHashMap<String, XTypeVariableName>()
+        val inJava = LinkedHashMap<String, XTypeVariableName>()
 
-        operator fun get(index: String): XTypeVariableName =
-            parametersMap[index] ?: parent?.get(index) ?: TODO("Guard this in validator")
+        operator fun get(name: String, forJava: Boolean): XTypeVariableName {
+            val map = if (forJava) inJava else inKotlin
+            return map[name] ?: enclosing?.get(name, forJava) ?: TODO("Guard this in validator")
+        }
     }
 
-    private fun List<TypeParameterModel>.resolveTypeParameters(enclosingTypeParameters: TypeParameters?): TypeParameters {
-        val scopeTypeParameters = TypeParameters(enclosingTypeParameters)
-        forEach { scopeTypeParameters.parametersMap[it.name] = poetesse.xTypeVariable(it.name) }
+    private fun List<TypeParameterModel>.resolve(enclosing: TypeParameters?): TypeParameters {
+        val scopeTypeParameters = TypeParameters(enclosing)
         forEach { typeParameter ->
-            scopeTypeParameters.parametersMap[typeParameter.name] = poetesse.xTypeVariable(
+            scopeTypeParameters.inKotlin[typeParameter.name] = poetesse.xTypeVariable(typeParameter.name)
+            scopeTypeParameters.inJava[typeParameter.name] = poetesse.xTypeVariable(typeParameter.name)
+        }
+        forEach { typeParameter ->
+            val irBounds = typeParameter.bounds.map { it.lower(scopeTypeParameters) }
+            scopeTypeParameters.inKotlin[typeParameter.name] = poetesse.xTypeVariable(
                 name = typeParameter.name,
-                bounds = typeParameter.bounds.map { it.ksType.lower(scopeTypeParameters, emptyList()) },
+                bounds = irBounds.map { it.inKotlin },
+            )
+            scopeTypeParameters.inJava[typeParameter.name] = poetesse.xTypeVariable(
+                name = typeParameter.name,
+                bounds = irBounds.map { it.inJava },
             )
         }
         return scopeTypeParameters
     }
 
-    private fun TypeModel.lower(typeParameters: TypeParameters): IrType {
-        val kotlinType = ksType.lower(typeParameters, arguments)
-        val javaType = canonicalType?.let {
-            it.ksType.lower(typeParameters, it.arguments)
-        } ?: kotlinType
-        return IrType(kotlin = kotlinType, java = javaType)
+    private fun TypeModel.lower(typeParameters: TypeParameters): IrType = when (this) {
+        is ClassTypeModel -> {
+            val kotlinTypeName = toXTypeName(typeParameters, forJava = false)
+            val javaTypeName = toXTypeName(typeParameters, forJava = true)
+            IrType(kotlinTypeName, javaTypeName)
+        }
+
+        is TypeArgumentModel -> {
+            val kotlinTypeName = typeParameters[name, false].nullable(isNullable)
+            val javaTypeName = typeParameters[name, true].nullable(isNullable)
+            IrType(kotlinTypeName, javaTypeName)
+        }
     }
 
-    private fun KSType.lower(
-        typeParameters: TypeParameters,
-        arguments: List<TypeModel.Argument>,
-        raw: Boolean = false,
-    ): XTypeName {
-        val declaration = declaration
-        if (declaration is KSTypeParameter) {
-            return typeParameters[declaration.name.asString()].nullable(isMarkedNullable)
-        }
-        val typeName = when (declaration) {
-            is KSClassDeclaration, is KSTypeAlias -> declaration.lower(isMarkedNullable)
-            else -> TODO("Guard this in validator")
-        }
-        if (typeName !is XClassName || raw || arguments.isEmpty()) {
-            return typeName
-        }
-        val arguments = arguments.map { argument ->
-            when (argument) {
-                is TypeModel.StarArgument -> poetesse.xStar()
-                is TypeModel.TypedArgument -> {
-                    val type = argument.type.ksType.lower(typeParameters, argument.type.arguments)
-                    when (argument) {
-                        is TypeModel.InvariantArgument -> type
-                        is TypeModel.CovariantArgument -> type.producer()
-                        is TypeModel.ContravariantArgument -> type.consumer()
-                    }
-                }
+    private fun TypeModel.toXTypeName(typeParameters: TypeParameters, forJava: Boolean): XTypeName = when (this) {
+        is ClassTypeModel -> {
+            val type = if (forJava && canonicalType != null) canonicalType else this
+            val typeName = type.toXTypeName(type.isNullable)
+            if (typeName is XClassName && type.arguments.isNotEmpty()) {
+                typeName.generic(type.arguments.map { it.toXTypeName(typeParameters, forJava) })
+            } else {
+                typeName
             }
         }
-        return typeName.generic(arguments, nullable = isMarkedNullable)
+
+        is TypeArgumentModel -> typeParameters[name, forJava].nullable(isNullable)
     }
 
-    private fun KSDeclaration.lower(nullable: Boolean): XTypeName {
-        val packageName = packageName.asString()
-        val typesString = requireNotNull(qualifiedName) {
-            TODO("Guard this in validator")
-        }.asString().removePrefix("$packageName.")
-        val simpleNames = typesString.split(".")
-        return poetesse.xType(packageName, simpleNames, nullable)
-    }
+    private fun ClassTypeModel.Argument.toXTypeName(typeParameters: TypeParameters, forJava: Boolean): XTypeName =
+        when (this) {
+            is ClassTypeModel.StarArgument -> poetesse.xStar()
+            is ClassTypeModel.InvariantArgument -> type.toXTypeName(typeParameters, forJava)
+            is ClassTypeModel.CovariantArgument -> type.toXTypeName(typeParameters, forJava).producer()
+            is ClassTypeModel.ContravariantArgument -> type.toXTypeName(typeParameters, forJava).consumer()
+        }
 
-    private fun ClassDeclarationModel.lower(): XClassName =
-        poetesse.xClass(packageName, qualifiedName.removePrefix("$packageName.").split("."))
+    private fun ClassTypeModel.toXTypeName(isNullable: Boolean = false): XTypeName =
+        poetesse.xType(packageName, qualifiedName.removePrefix("$packageName.").split("."), isNullable)
+
+    private fun ClassTypeModel.toXClassName(isNullable: Boolean = false): XClassName =
+        poetesse.xClass(packageName, qualifiedName.removePrefix("$packageName.").split("."), isNullable)
 
     private fun resolveMixinClassName(srcClassName: XClassName): XClassName {
         val srcPackageName = srcClassName.packageName

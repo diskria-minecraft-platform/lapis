@@ -4,6 +4,7 @@ import com.google.devtools.ksp.symbol.*
 
 class KMixinNode(
     val name: NameNode,
+    val type: TypeNode,
     val isClass: Boolean,
     val isInterface: Boolean,
     val isOpen: Boolean,
@@ -88,27 +89,35 @@ class KMixinNode(
     ) : NodeHolder
 }
 
-sealed interface TypeNode : NodeHolder {
-    sealed interface Argument : NodeHolder
+sealed interface TypeNode : NodeHolder
 
-    sealed interface ValidArgument : Argument
-    class StarArgument(override val node: KSNode) : ValidArgument
-    class InvariantArgument(val type: TypeNode, override val node: KSNode) : ValidArgument
-    class CovariantArgument(val type: TypeNode, override val node: KSNode) : ValidArgument
-    class ContravariantArgument(val type: TypeNode, override val node: KSNode) : ValidArgument
-
-    class InvalidArgument(override val node: KSNode) : Argument
+sealed interface ValidTypeNode : TypeNode {
+    val ksType: KSType
+    val isNullable: Boolean
 }
 
-class ValidTypeNode(
-    val ksType: KSType,
-    val arguments: List<TypeNode.Argument>,
-    val canonicalType: ValidTypeNode?,
-    val classDeclaration: KSClassDeclaration?,
-    val packageName: String?,
-    val qualifiedName: String?,
+class ClassTypeNode(
+    val packageName: NameNode,
+    val qualifiedName: NameNode,
+    val arguments: List<Argument>,
+    val canonicalType: ClassTypeNode?,
+    override val isNullable: Boolean,
+    override val ksType: KSType,
     override val node: KSNode,
-) : TypeNode
+) : ValidTypeNode {
+    sealed interface Argument : NodeHolder
+    class StarArgument(override val node: KSNode) : Argument
+    class InvariantArgument(val type: TypeNode, override val node: KSNode) : Argument
+    class CovariantArgument(val type: TypeNode, override val node: KSNode) : Argument
+    class ContravariantArgument(val type: TypeNode, override val node: KSNode) : Argument
+}
+
+class TypeArgumentNode(
+    val name: NameNode,
+    override val isNullable: Boolean,
+    override val ksType: KSType,
+    override val node: KSNode,
+) : ValidTypeNode
 
 class InvalidTypeNode(override val node: KSNode) : TypeNode
 

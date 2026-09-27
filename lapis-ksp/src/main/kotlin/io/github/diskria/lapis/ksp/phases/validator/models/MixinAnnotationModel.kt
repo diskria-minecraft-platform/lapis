@@ -1,6 +1,6 @@
 package io.github.diskria.lapis.ksp.phases.validator.models
 
-class MixinAnnotationModel(val typeClassDeclaration: ClassDeclarationModel, val arguments: List<Argument>) {
+class MixinAnnotationModel(val type: ClassTypeModel, val arguments: List<Argument>) {
 
     sealed interface Argument {
 
@@ -16,8 +16,8 @@ class MixinAnnotationModel(val typeClassDeclaration: ClassDeclarationModel, val 
         class FloatValue(val float: Float) : Value
         class DoubleValue(val double: Double) : Value
         class StringValue(val string: String) : Value
-        class ClassValue(val classDeclaration: ClassDeclarationModel) : Value
-        class EnumValue(val classDeclaration: ClassDeclarationModel, val name: String) : Value
+        class ClassValue(val type: ClassTypeModel) : Value
+        class EnumValue(val type: ClassTypeModel, val name: String) : Value
         class AnnotationValue(val annotation: MixinAnnotationModel) : Value
     }
 

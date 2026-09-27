@@ -1,6 +1,5 @@
 package io.github.diskria.lapis.ksp.phases.parser.models
 
-import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSNode
 import io.github.diskria.lapis.ksp.extensions.qualifiedNameOf
 import io.github.diskria.lapis.ksp.phases.parser.models.AnnotationNode.Argument
@@ -23,12 +22,7 @@ sealed interface AnnotationNode : NodeHolder {
         class DoubleValue(val double: Double) : Value
         class StringValue(val string: String) : Value
         class TypeValue(val type: TypeNode, override val node: KSNode) : Value, NodeHolder
-        class EnumValue(
-            val classDeclaration: KSClassDeclaration,
-            val name: NameNode,
-            override val node: KSNode,
-        ) : Value, NodeHolder
-
+        class EnumValue(val type: TypeNode, val name: NameNode, override val node: KSNode) : Value, NodeHolder
         class AnnotationValue(val annotation: AnnotationNode) : Value
     }
 
@@ -118,13 +112,20 @@ class AnnotationNodeContainer(val api: List<ValidAnnotationNode>, val external: 
         }
 
     inline fun <reified E : Enum<E>> AnnotationNode.Argument.EnumValue.getTypedOrNull(): E? =
-        if (name is ValidNameNode && classDeclaration.qualifiedName?.asString() == qualifiedNameOf<E>()) {
+        if (name is ValidNameNode &&
+            type is ClassTypeNode &&
+            type.qualifiedName is ValidNameNode &&
+            type.qualifiedName.name == qualifiedNameOf<E>()
+        ) {
             enumEntries<E>().find { it.name == name.name }
         } else null
 
     inline fun <reified A : Annotation> findApiAnnotation(): ValidAnnotationNode? =
         api.firstNotNullOfOrNull { annotation ->
-            if (annotation.type.qualifiedName == qualifiedNameOf<A>()) annotation
+            if (annotation.type is ClassTypeNode &&
+                annotation.type.qualifiedName is ValidNameNode &&
+                annotation.type.qualifiedName.name == qualifiedNameOf<A>()
+            ) annotation
             else null
         }
 

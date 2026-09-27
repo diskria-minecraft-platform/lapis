@@ -1,8 +1,6 @@
 package io.github.diskria.lapis.ksp.phases.validator.models
 
-import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSFile
-import com.google.devtools.ksp.symbol.KSType
 import io.github.diskria.lapis.annotations.InitStrategy
 import io.github.diskria.lapis.annotations.Side
 import java.util.*
@@ -10,7 +8,7 @@ import javax.lang.model.element.Modifier
 
 class KMixinModel(
     val containingFile: KSFile?,
-    val classDeclaration: ClassDeclarationModel,
+    val type: ClassTypeModel,
     val name: String,
     val side: Side,
     val initStrategy: InitStrategy,
@@ -19,7 +17,7 @@ class KMixinModel(
     val extensionSources: List<Extension>,
     val injections: List<Injection>,
     val companionObject: CompanionObject?,
-    val targetClassDeclaration: ClassDeclarationModel,
+    val targetClassDeclaration: ClassTypeModel,
     val mixinAnnotations: List<MixinAnnotationModel>,
     val typeParameters: List<TypeParameterModel>,
 ) {
@@ -37,14 +35,14 @@ class KMixinModel(
 
     sealed interface Extension {
 
-        val receiverType: TypeModel
+        val receiverType: ClassTypeModel
 
         class Property(
             override val declaredName: String,
             override val getterJvmName: String,
             override val setterJvmName: String?,
             override val type: TypeModel,
-            override val receiverType: TypeModel,
+            override val receiverType: ClassTypeModel,
         ) : DuckSourceModel.Property,
             Extension
 
@@ -53,7 +51,7 @@ class KMixinModel(
             override val jvmName: String,
             override val parameters: List<FunctionParameterModel>,
             override val returnType: TypeModel?,
-            override val receiverType: TypeModel,
+            override val receiverType: ClassTypeModel,
             override val typeParameters: List<TypeParameterModel>,
         ) : DuckSourceModel.Function,
             Extension
@@ -107,30 +105,30 @@ class KMixinModel(
     class CompanionObject(val name: String, val injections: List<Injection>)
 }
 
-class TypeModel(
-    val ksType: KSType,
+sealed interface TypeModel {
+    val isNullable: Boolean
+}
+
+class ClassTypeModel(
+    val packageName: String,
+    val qualifiedName: String,
     val arguments: List<Argument>,
-    val canonicalType: TypeModel?,
-    val classDeclaration: KSClassDeclaration?,
-) {
+    val canonicalType: ClassTypeModel?,
+    override val isNullable: Boolean,
+) : TypeModel {
     sealed interface Argument
     object StarArgument : Argument
-
-    sealed interface TypedArgument : Argument {
-        val type: TypeModel
-    }
-
-    class InvariantArgument(override val type: TypeModel) : TypedArgument
-    class CovariantArgument(override val type: TypeModel) : TypedArgument
-    class ContravariantArgument(override val type: TypeModel) : TypedArgument
+    class InvariantArgument(val type: TypeModel) : Argument
+    class CovariantArgument(val type: TypeModel) : Argument
+    class ContravariantArgument(val type: TypeModel) : Argument
 }
+
+class TypeArgumentModel(
+    val name: String,
+    override val isNullable: Boolean,
+) : TypeModel
 
 class TypeParameterModel(
     val name: String,
     val bounds: List<TypeModel>,
-)
-
-class ClassDeclarationModel(
-    val packageName: String,
-    val qualifiedName: String,
 )

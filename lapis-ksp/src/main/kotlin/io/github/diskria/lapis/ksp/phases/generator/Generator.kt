@@ -54,7 +54,7 @@ class Generator(
                 generatedMarker("Duck interface for binding Mixin shadows and forwarding extensions")
                 suppressAllWarnings()
                 public()
-                duck.typeVariables.forEach { +it }
+                duck.typeVariables.inJava.forEach { +it }
                 kMixinInterface?.let { superinterface(it.className) }
                 duck.shadows.forEach { shadow ->
                     shadow.kinds.forEach { kind ->
@@ -62,10 +62,10 @@ class Generator(
                             public()
                             abstract()
                             if (shadow is IrMixinDuck.Shadow.Function) {
-                                shadow.typeVariables.forEach { +it }
+                                shadow.typeVariables.inJava.forEach { +it }
                             }
-                            kind.returnType?.let { returns(it.java) }
-                            kind.parameters.forEach { parameter(it.name, it.type.java) }
+                            kind.returnType?.let { returns(it.inJava) }
+                            kind.parameters.forEach { parameter(it.name, it.type.inJava) }
                         }
                         if (kMixinInterface != null) {
                             method(kind.sourceJvmName) {
@@ -73,10 +73,10 @@ class Generator(
                                 public()
                                 default()
                                 if (shadow is IrMixinDuck.Shadow.Function) {
-                                    shadow.typeVariables.forEach { +it }
+                                    shadow.typeVariables.inJava.forEach { +it }
                                 }
-                                kind.returnType?.let { returns(it.java) }
-                                kind.parameters.forEach { parameter(it.name, it.type.java) }
+                                kind.returnType?.let { returns(it.inJava) }
+                                kind.parameters.forEach { parameter(it.name, it.type.inJava) }
                                 body {
                                     val returner = if (kind.returnType != null) "return " else ""
                                     val callable = code { N(prefixedMethod) }
@@ -93,10 +93,10 @@ class Generator(
                             public()
                             if (kMixinInterface != null) default() else abstract()
                             if (extension is IrMixinDuck.Extension.Function) {
-                                extension.typeVariables.forEach { +it }
+                                extension.typeVariables.inJava.forEach { +it }
                             }
-                            kind.returnType?.let { returns(it.java) }
-                            kind.parameters.forEach { parameter(it.name, it.type.java) }
+                            kind.returnType?.let { returns(it.inJava) }
+                            kind.parameters.forEach { parameter(it.name, it.type.inJava) }
                             if (kMixinInterface != null) {
                                 body {
                                     val returner = if (kind.returnType != null) "return " else ""
@@ -116,7 +116,7 @@ class Generator(
     // TODO: Migrate to FIR plugin
     private fun generateExtensions(duck: IrMixinDuck, kMixin: KMixinFir): Unit = poetesse {
         val extensions = duck.extensions.ifEmpty { return }
-        val duckClassName = duck.className.optionalGeneric(duck.typeVariables)
+        val duckClassName = duck.className.optionalGeneric(duck.typeVariables.inKotlin)
         val receiver = kotlin.code { "(this as ${T(duckClassName)})" }
         kotlin.file(kMixin.className.withSuffix("_Extensions")) {
             generatedMarker(
@@ -125,10 +125,10 @@ class Generator(
             suppressAllWarnings()
             extensions.forEach { extension ->
                 when (extension) {
-                    is IrMixinDuck.Extension.Property -> property(extension.declaredName, extension.type.kotlin) {
+                    is IrMixinDuck.Extension.Property -> property(extension.declaredName, extension.type.inKotlin) {
                         public()
                         inline()
-                        extensionReceiver(extension.receiverType.kotlin)
+                        extensionReceiver(extension.receiverType.inKotlin)
                         getter {
                             expression {
                                 val callable = code { N(extension.getter.name) }
@@ -149,15 +149,15 @@ class Generator(
                     is IrMixinDuck.Extension.Function -> function(extension.declaredName) {
                         public()
                         inline()
-                        duck.typeVariables.forEach { +it }
-                        extension.typeVariables.forEach { +it }
-                        extensionReceiver(extension.receiverType.kotlin)
-                        extension.parameters.forEach { parameter(it.name, it.type.kotlin) }
-                        extension.returnType?.let { returns(it.kotlin) }
+                        duck.typeVariables.inKotlin.forEach { +it }
+                        extension.typeVariables.inKotlin.forEach { +it }
+                        extensionReceiver(extension.receiverType.inKotlin)
+                        extension.parameters.forEach { parameter(it.name, it.type.inKotlin) }
+                        extension.returnType?.let { returns(it.inKotlin) }
                         body {
                             val returner = if (extension.returnType != null) "return " else ""
                             val callable = code { N(extension.name) }
-                            val typeArguments = typeArguments(extension.typeVariables)
+                            val typeArguments = typeArguments(extension.typeVariables.inKotlin)
                             val arguments = code { extension.parameters.joinToString { N(it.name) } }
                             line { "$returner${L(receiver)}.${L(callable)}${L(typeArguments)}(${L(arguments)})" }
                         }
@@ -173,25 +173,26 @@ class Generator(
             suppressAllWarnings()
             class_(fileName) { _ ->
                 public()
-                kMixinImpl.typeVariables.forEach { +it }
+                kMixinImpl.typeVariables.inKotlin.forEach { +it }
                 if (kMixinImpl.constructorParameters.isNotEmpty()) {
                     constructor(primary = true) {
                         public()
                         kMixinImpl.constructorParameters.forEach { parameter ->
                             when (parameter) {
                                 is IrKMixinImpl.ConstructorParameter.Instance -> {
-                                    parameter(parameter.name, parameter.type.kotlin)
+                                    parameter(parameter.name, parameter.type.inKotlin)
                                 }
 
                                 is IrKMixinImpl.ConstructorParameter.Duck -> {
-                                    parameter("duck", parameter.className.optionalGeneric(kMixinImpl.typeVariables))
-                                        .property { private() }
+                                    parameter(
+                                        "duck", parameter.className.optionalGeneric(kMixinImpl.typeVariables.inKotlin)
+                                    ).property { private() }
                                 }
                             }
                         }
                     }
                 }
-                superclass(kMixin.className.optionalGeneric(kMixinImpl.typeVariables)) {
+                superclass(kMixin.className.optionalGeneric(kMixinImpl.typeVariables.inKotlin)) {
                     kMixin.constructorParameters.forEach { parameter ->
                         argument {
                             when (parameter) {
@@ -202,7 +203,7 @@ class Generator(
                 }
                 kMixin.mixin.duck?.shadows?.forEach { shadow ->
                     when (shadow) {
-                        is IrMixinDuck.Property -> property(shadow.declaredName, shadow.type.kotlin) {
+                        is IrMixinDuck.Property -> property(shadow.declaredName, shadow.type.inKotlin) {
                             public()
                             override()
                             getter {
@@ -227,14 +228,14 @@ class Generator(
                         is IrMixinDuck.Function -> function(shadow.declaredName) {
                             public()
                             override()
-                            shadow.typeVariables.forEach { +it }
-                            shadow.parameters.forEach { parameter(it.name, it.type.kotlin) }
-                            shadow.returnType?.let { returns(it.kotlin) }
+                            shadow.typeVariables.inKotlin.forEach { +it }
+                            shadow.parameters.forEach { parameter(it.name, it.type.inKotlin) }
+                            shadow.returnType?.let { returns(it.inKotlin) }
                             body {
                                 val returner = if (shadow.returnType != null) "return " else ""
                                 val receiver = code { N("duck") }
                                 val callable = code { N(shadow.name) }
-                                val typeArguments = typeArguments(shadow.typeVariables)
+                                val typeArguments = typeArguments(shadow.typeVariables.inKotlin)
                                 val arguments = code { shadow.parameters.joinToString { N(it.name) } }
                                 line { "$returner${L(receiver)}.${L(callable)}${L(typeArguments)}(${L(arguments)})" }
                             }
@@ -255,18 +256,18 @@ class Generator(
             class_(fileName) { _ ->
                 public()
                 abstract()
-                mixin.typeVariables.forEach { +it }
+                mixin.typeVariables.inJava.forEach { +it }
                 generatedMarker("Runtime entrypoint of the Mixin engine delegating logic to the KMixin")
                 suppressAllWarnings()
                 annotations(mixin.annotations)
-                mixin.duck?.let { superinterface(it.className.optionalGeneric(mixin.typeVariables)) }
+                mixin.duck?.let { superinterface(it.className.optionalGeneric(mixin.typeVariables.inJava)) }
                 val extensions = mixin.duck?.extensions.orEmpty()
                 val memberInjections = mixin.injections.filterIsInstance<IrMixin.MemberInjection>()
                 val delegate = delegateInitializer?.let { delegateMember(kMixin, it) }
                 mixin.duck?.shadows?.forEach { shadow ->
                     when (shadow) {
                         is IrMixinDuck.Shadow.Property -> {
-                            val shadowField = field(shadow.mappingName, shadow.type.java) {
+                            val shadowField = field(shadow.mappingName, shadow.type.inJava) {
                                 annotations(shadow.annotations)
                                 shadow.modifiers.forEach { +it }
                             }
@@ -274,8 +275,8 @@ class Generator(
                                 method(kind.name) {
                                     annotation<Override>()
                                     public()
-                                    kind.returnType?.let { returns(it.java) }
-                                    kind.parameters.forEach { parameter(it.name, it.type.java) }
+                                    kind.returnType?.let { returns(it.inJava) }
+                                    kind.parameters.forEach { parameter(it.name, it.type.inJava) }
                                     body {
                                         when (kind) {
                                             is IrMixinDuck.Property.Getter -> {
@@ -295,9 +296,9 @@ class Generator(
                             val shadowMethod = method(shadow.mappingName) {
                                 annotations(shadow.annotations)
                                 shadow.modifiers.forEach { +it }
-                                shadow.typeVariables.forEach { +it }
-                                shadow.returnType?.let { returns(it.java) }
-                                shadow.parameters.forEach { parameter(it.name, it.type.java) }
+                                shadow.typeVariables.inJava.forEach { +it }
+                                shadow.returnType?.let { returns(it.inJava) }
+                                shadow.parameters.forEach { parameter(it.name, it.type.inJava) }
                                 if (JPModifier.STATIC in shadow.modifiers) {
                                     body { line { "throw new ${T<AssertionError>()}(${S("Stub!")})" } }
                                 }
@@ -305,9 +306,9 @@ class Generator(
                             method(shadow.name) {
                                 annotation<Override>()
                                 public()
-                                shadow.typeVariables.forEach { +it }
-                                shadow.returnType?.let { returns(it.java) }
-                                shadow.parameters.forEach { parameter(it.name, it.type.java) }
+                                shadow.typeVariables.inJava.forEach { +it }
+                                shadow.returnType?.let { returns(it.inJava) }
+                                shadow.parameters.forEach { parameter(it.name, it.type.inJava) }
                                 body {
                                     val returner = if (shadow.returnType != null) "return " else ""
                                     val callable = code { N(shadowMethod) }
@@ -325,10 +326,10 @@ class Generator(
                                 annotation<Override>()
                                 public()
                                 if (extension is IrMixinDuck.Extension.Function) {
-                                    extension.typeVariables.forEach { +it }
+                                    extension.typeVariables.inJava.forEach { +it }
                                 }
-                                kind.returnType?.let { returns(it.java) }
-                                kind.parameters.forEach { parameter(it.name, it.type.java) }
+                                kind.returnType?.let { returns(it.inJava) }
+                                kind.parameters.forEach { parameter(it.name, it.type.inJava) }
                                 body {
                                     val returner = if (kind.returnType != null) "return " else ""
                                     val callable = code { N(kind.sourceJvmName) }
@@ -368,7 +369,7 @@ class Generator(
                 }
             }
         }
-        val typeArguments = typeArguments(kMixin.typeVariables, diamond = true)
+        val typeArguments = typeArguments(kMixin.typeVariables.inJava, diamond = true)
         return "new ${T(className)}${L(typeArguments)}(${L(arguments)})"
     }
 
@@ -380,7 +381,7 @@ class Generator(
         val isSynchronized = kMixin.initStrategy == InitStrategy.Synchronized
         val isThreadSafe = kMixin.initStrategy == InitStrategy.Volatile || isSynchronized
         val delegateField = field(
-            $$"kotlin$delegate", kMixin.className.optionalGeneric(kMixin.typeVariables, !isEager)
+            $$"kotlin$delegate", kMixin.className.optionalGeneric(kMixin.typeVariables.inJava, !isEager)
         ) {
             private()
             annotation<Annotation>(xClass(options.uniqueAnnotation))
@@ -405,7 +406,7 @@ class Generator(
             annotation<Annotation>(xClass(options.uniqueAnnotation))
             body {
                 if (isThreadSafe) {
-                    val localType = kMixin.className.optionalGeneric(kMixin.typeVariables, nullable = true)
+                    val localType = kMixin.className.optionalGeneric(kMixin.typeVariables.inJava, nullable = true)
                     val local = var_("local", localType) { "this.${N(delegateField)}" }
                     controlFlow {
                         branch({ "if (${N(local)} == null)" }) {
@@ -437,7 +438,7 @@ class Generator(
                     line { "return this.${N(delegateField)}" }
                 }
             }
-            returns(kMixin.className.optionalGeneric(kMixin.typeVariables))
+            returns(kMixin.className.optionalGeneric(kMixin.typeVariables.inJava))
         }
         return { "${N(getDelegate)}()" }
     }
@@ -454,9 +455,9 @@ class Generator(
                     val shadowMethod = method("shadow$${shadow.mappingName}") {
                         annotations(shadow.annotations)
                         shadow.modifiers.forEach { +it }
-                        shadow.typeVariables.forEach { +it }
-                        shadow.returnType?.let { returns(it.java) }
-                        shadow.parameters.forEach { parameter(it.name, it.type.java) }
+                        shadow.typeVariables.inJava.forEach { +it }
+                        shadow.returnType?.let { returns(it.inJava) }
+                        shadow.parameters.forEach { parameter(it.name, it.type.inJava) }
                         if (JPModifier.STATIC in shadow.modifiers || JPModifier.PRIVATE in shadow.modifiers) {
                             body {
                                 line { "throw new ${T<AssertionError>()}(${S("Stub!")})" }
@@ -467,9 +468,9 @@ class Generator(
                         annotation<Override>()
                         public()
                         default()
-                        shadow.typeVariables.forEach { +it }
-                        shadow.returnType?.let { returns(it.java) }
-                        shadow.parameters.forEach { parameter(it.name, it.type.java) }
+                        shadow.typeVariables.inJava.forEach { +it }
+                        shadow.returnType?.let { returns(it.inJava) }
+                        shadow.parameters.forEach { parameter(it.name, it.type.inJava) }
                         body {
                             val returner = if (shadow.returnType != null) "return " else ""
                             val callable = code { N(shadowMethod) }
@@ -497,10 +498,10 @@ class Generator(
             annotations(injection.annotations)
             private()
             if (injection is IrMixin.StaticInjection) static()
-            injection.typeVariables.forEach { +it }
-            injection.returnType?.let { returns(it.java) }
+            injection.typeVariables.inJava.forEach { +it }
+            injection.returnType?.let { returns(it.inJava) }
             injection.parameters.forEach { parameter ->
-                parameter(parameter.name, parameter.type.java) { annotations(parameter.annotations) }
+                parameter(parameter.name, parameter.type.inJava) { annotations(parameter.annotations) }
             }
             body {
                 val returner = if (injection.returnType != null) "return " else ""
@@ -598,7 +599,7 @@ class Generator(
 }
 
 fun JavaCodeScope.unsafeCast(targetType: IrType): String =
-    "(${T(targetType.java)}) (${T<Any>()}) this"
+    "(${T(targetType.inJava)}) (${T<Any>()}) this"
 
 private fun JavaTypeScope.suppressAllWarnings() {
     annotation<SuppressWarnings> {
