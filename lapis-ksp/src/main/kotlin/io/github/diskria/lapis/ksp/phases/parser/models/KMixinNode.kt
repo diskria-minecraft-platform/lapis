@@ -2,22 +2,21 @@ package io.github.diskria.lapis.ksp.phases.parser.models
 
 import com.google.devtools.ksp.symbol.*
 
-class ParsedKMixin(
-    val name: String,
+class KMixinNode(
+    val name: NameNode,
     val isClass: Boolean,
     val isInterface: Boolean,
     val isOpen: Boolean,
     val isAbstract: Boolean,
     val isSealed: Boolean,
     val isTopLevel: Boolean,
-    val hasPackageName: Boolean,
     val isPublic: Boolean,
-    val typeParameters: List<ParsedTypeParameter>,
+    val typeParameters: List<TypeParameterNode>,
     val companionObject: CompanionObject?,
     val constructors: List<Constructor>,
     val properties: List<Property>,
     val functions: List<Function>,
-    val annotations: ParsedAnnotations,
+    val annotations: AnnotationNodeContainer,
     override val node: KSClassDeclaration,
 ) : NodeHolder {
 
@@ -28,22 +27,22 @@ class ParsedKMixin(
     ) : NodeHolder {
 
         class Parameter(
-            val name: String,
-            val type: ParsedType,
-            val annotations: ParsedAnnotations,
+            val name: NameNode,
+            val type: TypeNode,
+            val annotations: AnnotationNodeContainer,
             override val node: KSNode,
         ) : NodeHolder
     }
 
     class Property(
-        val name: String,
-        val type: ParsedType,
+        val name: NameNode,
+        val type: TypeNode,
         val isPublic: Boolean,
         val isOpen: Boolean,
         val isAbstract: Boolean,
         val hasExtensionReceiver: Boolean,
-        val typeParameters: List<ParsedTypeParameter>,
-        val annotations: ParsedAnnotations,
+        val typeParameters: List<TypeParameterNode>,
+        val annotations: AnnotationNodeContainer,
         val getter: Getter?,
         val setter: Setter?,
         override val node: KSNode,
@@ -51,7 +50,7 @@ class ParsedKMixin(
 
         class Getter(
             val jvmName: String?,
-            val annotations: ParsedAnnotations,
+            val annotations: AnnotationNodeContainer,
         )
 
         class Setter(
@@ -60,63 +59,67 @@ class ParsedKMixin(
     }
 
     class Function(
-        val name: String,
+        val name: NameNode,
         val jvmName: String?,
         val parameters: List<Parameter>,
-        val returnType: ParsedType?,
+        val returnType: TypeNode?,
         val isPublic: Boolean,
         val isOpen: Boolean,
         val isAbstract: Boolean,
-        val extensionReceiverType: ParsedType?,
-        val annotations: ParsedAnnotations,
-        val typeParameters: List<ParsedTypeParameter>,
+        val extensionReceiverType: TypeNode?,
+        val annotations: AnnotationNodeContainer,
+        val typeParameters: List<TypeParameterNode>,
         override val node: KSNode,
     ) : NodeHolder {
 
         class Parameter(
-            val name: String,
-            val type: ParsedType,
-            val annotations: ParsedAnnotations,
+            val name: NameNode,
+            val type: TypeNode,
+            val annotations: AnnotationNodeContainer,
             override val node: KSNode,
         ) : NodeHolder
     }
 
     class CompanionObject(
-        val name: String,
+        val name: NameNode,
         val isPublic: Boolean,
         val functions: List<Function>,
         override val node: KSNode,
     ) : NodeHolder
 }
 
-sealed interface ParsedType : NodeHolder {
+sealed interface TypeNode : NodeHolder {
     sealed interface Argument : NodeHolder
 
     sealed interface ValidArgument : Argument
     class StarArgument(override val node: KSNode) : ValidArgument
-    class InvariantArgument(val type: ParsedType, override val node: KSNode) : ValidArgument
-    class CovariantArgument(val type: ParsedType, override val node: KSNode) : ValidArgument
-    class ContravariantArgument(val type: ParsedType, override val node: KSNode) : ValidArgument
+    class InvariantArgument(val type: TypeNode, override val node: KSNode) : ValidArgument
+    class CovariantArgument(val type: TypeNode, override val node: KSNode) : ValidArgument
+    class ContravariantArgument(val type: TypeNode, override val node: KSNode) : ValidArgument
 
     class InvalidArgument(override val node: KSNode) : Argument
 }
 
-class ValidType(
+class ValidTypeNode(
     val ksType: KSType,
-    val arguments: List<ParsedType.Argument>,
-    val canonicalType: ValidType?,
+    val arguments: List<TypeNode.Argument>,
+    val canonicalType: ValidTypeNode?,
     val classDeclaration: KSClassDeclaration?,
     val packageName: String?,
     val qualifiedName: String?,
     override val node: KSNode,
-) : ParsedType
+) : TypeNode
 
-class InvalidType(override val node: KSNode) : ParsedType
+class InvalidTypeNode(override val node: KSNode) : TypeNode
 
-class ParsedTypeParameter(
-    val name: String,
+class TypeParameterNode(
+    val name: NameNode,
     val variance: Variance,
     val isReified: Boolean,
-    val bounds: List<ParsedType>,
+    val bounds: List<TypeNode>,
     override val node: KSTypeParameter,
 ) : NodeHolder
+
+sealed interface NameNode : NodeHolder
+class ValidNameNode(val name: String, override val node: KSNode) : NameNode
+class InvalidNameNode(override val node: KSNode) : NameNode

@@ -1,8 +1,6 @@
 package io.github.diskria.lapis.ksp.phases.validator.models
 
-import com.google.devtools.ksp.symbol.KSClassDeclaration
-
-class MixinAnnotation(val typeClassDeclaration: KSClassDeclaration, val arguments: List<Argument>) {
+class MixinAnnotationModel(val typeClassDeclaration: ClassDeclarationModel, val arguments: List<Argument>) {
 
     sealed interface Argument {
 
@@ -18,9 +16,9 @@ class MixinAnnotation(val typeClassDeclaration: KSClassDeclaration, val argument
         class FloatValue(val float: Float) : Value
         class DoubleValue(val double: Double) : Value
         class StringValue(val string: String) : Value
-        class ClassValue(val classDeclaration: KSClassDeclaration) : Value
-        class EnumValue(val classDeclaration: KSClassDeclaration, val name: String) : Value
-        class AnnotationValue(val annotation: MixinAnnotation) : Value
+        class ClassValue(val classDeclaration: ClassDeclarationModel) : Value
+        class EnumValue(val classDeclaration: ClassDeclarationModel, val name: String) : Value
+        class AnnotationValue(val annotation: MixinAnnotationModel) : Value
     }
 
     class ScalarArgument(

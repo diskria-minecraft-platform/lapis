@@ -10,7 +10,7 @@ import javax.lang.model.element.Modifier
 
 class KMixinModel(
     val containingFile: KSFile?,
-    val classDeclaration: KSClassDeclaration,
+    val classDeclaration: ClassDeclarationModel,
     val name: String,
     val side: Side,
     val initStrategy: InitStrategy,
@@ -19,9 +19,9 @@ class KMixinModel(
     val extensionSources: List<Extension>,
     val injections: List<Injection>,
     val companionObject: CompanionObject?,
-    val targetClassDeclaration: KSClassDeclaration,
-    val mixinAnnotations: List<MixinAnnotation>,
-    val typeParameters: List<TypeParameter>,
+    val targetClassDeclaration: ClassDeclarationModel,
+    val mixinAnnotations: List<MixinAnnotationModel>,
+    val typeParameters: List<TypeParameterModel>,
 ) {
     sealed interface ClassKind
     class Class(
@@ -29,7 +29,7 @@ class KMixinModel(
         val constructorParameters: List<ConstructorParameter>,
     ) : ClassKind {
         sealed interface ConstructorParameter {
-            class Origin(val name: String, val type: Type) : ConstructorParameter
+            class Origin(val name: String, val type: TypeModel) : ConstructorParameter
         }
     }
 
@@ -37,25 +37,25 @@ class KMixinModel(
 
     sealed interface Extension {
 
-        val receiverType: Type
+        val receiverType: TypeModel
 
         class Property(
             override val name: String,
             override val getterJvmName: String,
             override val setterJvmName: String?,
-            override val type: Type,
-            override val receiverType: Type,
-        ) : DuckSource.Property,
+            override val type: TypeModel,
+            override val receiverType: TypeModel,
+        ) : DuckSourceModel.Property,
             Extension
 
         class Function(
             override val name: String,
             override val jvmName: String,
-            override val parameters: List<FunctionParameter>,
-            override val returnType: Type?,
-            override val receiverType: Type,
-            override val typeParameters: List<TypeParameter>,
-        ) : DuckSource.Function,
+            override val parameters: List<FunctionParameterModel>,
+            override val returnType: TypeModel?,
+            override val receiverType: TypeModel,
+            override val typeParameters: List<TypeParameterModel>,
+        ) : DuckSourceModel.Function,
             Extension
     }
 
@@ -63,69 +63,74 @@ class KMixinModel(
 
         val modifiers: EnumSet<Modifier>
         val mappingName: String
-        val mixinAnnotations: List<MixinAnnotation>
+        val mixinAnnotations: List<MixinAnnotationModel>
 
         class Property(
             override val name: String,
             override val getterJvmName: String,
             override val setterJvmName: String?,
-            override val type: Type,
+            override val type: TypeModel,
             override val modifiers: EnumSet<Modifier>,
             override val mappingName: String,
-            override val mixinAnnotations: List<MixinAnnotation>,
-        ) : DuckSource.Property,
+            override val mixinAnnotations: List<MixinAnnotationModel>,
+        ) : DuckSourceModel.Property,
             Shadow
 
         class Function(
             override val name: String,
             override val jvmName: String,
-            override val parameters: List<FunctionParameter>,
-            override val returnType: Type?,
+            override val parameters: List<FunctionParameterModel>,
+            override val returnType: TypeModel?,
             override val modifiers: EnumSet<Modifier>,
             override val mappingName: String,
-            override val mixinAnnotations: List<MixinAnnotation>,
-            override val typeParameters: List<TypeParameter>,
-        ) : DuckSource.Function,
+            override val mixinAnnotations: List<MixinAnnotationModel>,
+            override val typeParameters: List<TypeParameterModel>,
+        ) : DuckSourceModel.Function,
             Shadow
     }
 
     class Injection(
         val jvmName: String,
-        val extensionReceiverType: Type?,
-        val mixinAnnotations: List<MixinAnnotation>,
+        val extensionReceiverType: TypeModel?,
+        val mixinAnnotations: List<MixinAnnotationModel>,
         val parameters: List<Parameter>,
-        val returnType: Type?,
-        val typeParameters: List<TypeParameter>,
+        val returnType: TypeModel?,
+        val typeParameters: List<TypeParameterModel>,
     ) {
         class Parameter(
             val name: String,
-            val type: Type,
-            val mixinAnnotations: List<MixinAnnotation>,
+            val type: TypeModel,
+            val mixinAnnotations: List<MixinAnnotationModel>,
         )
     }
 
     class CompanionObject(val name: String, val injections: List<Injection>)
 }
 
-class Type(
+class TypeModel(
     val ksType: KSType,
     val arguments: List<Argument>,
-    val canonicalType: Type?,
+    val canonicalType: TypeModel?,
     val classDeclaration: KSClassDeclaration?,
 ) {
     sealed interface Argument
     object StarArgument : Argument
 
     sealed interface TypedArgument : Argument {
-        val type: Type
+        val type: TypeModel
     }
 
-    class InvariantArgument(override val type: Type) : TypedArgument
-    class CovariantArgument(override val type: Type) : TypedArgument
-    class ContravariantArgument(override val type: Type) : TypedArgument
+    class InvariantArgument(override val type: TypeModel) : TypedArgument
+    class CovariantArgument(override val type: TypeModel) : TypedArgument
+    class ContravariantArgument(override val type: TypeModel) : TypedArgument
 }
 
-class TypeParameter(
+class TypeParameterModel(
     val name: String,
-    val bounds: List<Type>,
+    val bounds: List<TypeModel>,
+)
+
+class ClassDeclarationModel(
+    val packageName: String,
+    val qualifiedName: String,
 )

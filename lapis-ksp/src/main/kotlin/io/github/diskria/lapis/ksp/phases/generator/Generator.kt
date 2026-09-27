@@ -19,6 +19,7 @@ import java.time.format.DateTimeFormatter
 import javax.annotation.processing.Generated
 
 class Generator(
+    private val kMixins: List<KMixinFir>,
     private val options: KspOptions,
     private val poetesse: Poetesse,
     private val codeGenerator: CodeGenerator,
@@ -27,19 +28,19 @@ class Generator(
         OffsetDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXX"))
     }
 
-    fun generate(kMixins: List<FirKMixin>) {
+    fun generate() {
         kMixins.forEach { kMixin ->
             kMixin.mixin.duck?.let {
-                generateMixinDuck(it, kMixin as? FirKMixinInterface)
+                generateMixinDuck(it, kMixin as? KMixinFirInterface)
                 generateExtensions(it, kMixin)
             }
             when (kMixin) {
-                is FirKMixinClass -> {
+                is KMixinFirClass -> {
                     kMixin.impl?.let { generateKMixinImpl(it, kMixin) }
                     generateMixinClass(kMixin.mixin, kMixin)
                 }
 
-                is FirKMixinInterface -> {
+                is KMixinFirInterface -> {
                     generateMixinInterface(kMixin.mixin, kMixin)
                 }
             }
@@ -47,7 +48,7 @@ class Generator(
         generateMixinConfig(kMixins.map { it.mixin })
     }
 
-    private fun generateMixinDuck(duck: IrMixinDuck, kMixinInterface: FirKMixinInterface?) = poetesse {
+    private fun generateMixinDuck(duck: IrMixinDuck, kMixinInterface: KMixinFirInterface?) = poetesse {
         java.file(duck.className) {
             interface_(fileName) { _ ->
                 generatedMarker("Duck interface for binding Mixin shadows and forwarding extensions")
@@ -113,7 +114,7 @@ class Generator(
     }.writeWith(aggregating = false, listOfNotNull(duck.originatingFile))
 
     // TODO: Migrate to FIR plugin
-    private fun generateExtensions(duck: IrMixinDuck, kMixin: FirKMixin): Unit = poetesse {
+    private fun generateExtensions(duck: IrMixinDuck, kMixin: KMixinFir): Unit = poetesse {
         val extensions = duck.extensions.ifEmpty { return }
         val duckClassName = duck.className.optionalGeneric(duck.typeVariables)
         val receiver = kotlin.code { "(this as ${T(duckClassName)})" }
@@ -166,7 +167,7 @@ class Generator(
         }
     }.writeWith(aggregating = false, listOfNotNull(duck.originatingFile))
 
-    private fun generateKMixinImpl(kMixinImpl: IrKMixinImpl, kMixin: FirKMixinClass) = poetesse {
+    private fun generateKMixinImpl(kMixinImpl: IrKMixinImpl, kMixin: KMixinFirClass) = poetesse {
         kotlin.file(kMixinImpl.className) {
             generatedMarker("KMixin implementation for binding Mixin shadows")
             suppressAllWarnings()
@@ -194,7 +195,7 @@ class Generator(
                     kMixin.constructorParameters.forEach { parameter ->
                         argument {
                             when (parameter) {
-                                is FirKMixinClass.ConstructorParameter.Origin -> N(parameter.name)
+                                is KMixinFirClass.ConstructorParameter.Origin -> N(parameter.name)
                             }
                         }
                     }
@@ -244,7 +245,7 @@ class Generator(
         }
     }.writeWith(aggregating = false, listOfNotNull(kMixinImpl.originatingFile))
 
-    private fun generateMixinClass(mixin: IrMixin, kMixin: FirKMixinClass) = poetesse {
+    private fun generateMixinClass(mixin: IrMixin, kMixin: KMixinFirClass) = poetesse {
         java.file(mixin.className) {
             class_(fileName) { _ ->
                 public()
@@ -346,7 +347,7 @@ class Generator(
         }
     }.writeWith(aggregating = false, listOfNotNull(mixin.originatingFile))
 
-    private fun JavaCodeScope.delegateInitializer(kMixin: FirKMixinClass): String {
+    private fun JavaCodeScope.delegateInitializer(kMixin: KMixinFirClass): String {
         val (className, arguments) = if (kMixin.impl != null) {
             kMixin.impl.className to code {
                 kMixin.impl.constructorParameters.joinToString { parameter ->
@@ -360,7 +361,7 @@ class Generator(
             kMixin.className to code {
                 kMixin.constructorParameters.joinToString { parameter ->
                     when (parameter) {
-                        is FirKMixinClass.ConstructorParameter.Origin -> unsafeCast(parameter.type)
+                        is KMixinFirClass.ConstructorParameter.Origin -> unsafeCast(parameter.type)
                     }
                 }
             }
@@ -369,7 +370,7 @@ class Generator(
         return "new ${T(className)}${L(generics)}(${L(arguments)})"
     }
 
-    private fun JavaTypeScope.delegateMember(kMixin: FirKMixinClass): String {
+    private fun JavaTypeScope.delegateMember(kMixin: KMixinFirClass): String {
         val isEager = kMixin.initStrategy == InitStrategy.Eager
         val isSynchronized = kMixin.initStrategy == InitStrategy.Synchronized
         val isThreadSafe = kMixin.initStrategy == InitStrategy.Volatile || isSynchronized
@@ -435,7 +436,7 @@ class Generator(
         return "$getDelegate()"
     }
 
-    private fun generateMixinInterface(mixin: IrMixin, kMixinInterface: FirKMixinInterface) = poetesse {
+    private fun generateMixinInterface(mixin: IrMixin, kMixinInterface: KMixinFirInterface) = poetesse {
         java.file(mixin.className) {
             interface_(fileName) { _ ->
                 generatedMarker("Runtime entrypoint of the Mixin engine delegating logic to the KMixin")

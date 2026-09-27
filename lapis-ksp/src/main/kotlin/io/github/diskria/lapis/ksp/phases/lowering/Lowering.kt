@@ -3,10 +3,7 @@ package io.github.diskria.lapis.ksp.phases.lowering
 import com.google.devtools.ksp.symbol.*
 import io.github.diskria.lapis.ksp.KspOptions
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
-import io.github.diskria.lapis.ksp.phases.validator.models.KMixinModel
-import io.github.diskria.lapis.ksp.phases.validator.models.MixinAnnotation
-import io.github.diskria.lapis.ksp.phases.validator.models.Type
-import io.github.diskria.lapis.ksp.phases.validator.models.TypeParameter
+import io.github.diskria.lapis.ksp.phases.validator.models.*
 import io.github.diskria.lapis.ksp.utils.JavaModifiers
 import io.github.diskria.poetesse.Poetesse
 import io.github.diskria.poetesse.interop.*
@@ -15,30 +12,35 @@ import java.util.*
 import javax.lang.model.element.Modifier
 import javax.lang.model.element.Modifier.*
 
-class Lowering(private val options: KspOptions, private val poetesse: Poetesse) {
-
-    fun lower(kMixins: List<KMixinModel>): List<FirKMixin> {
-        val mixinSourcePackageLCP = if (!options.disableLCP) {
-            kMixins.map { it.classDeclaration.packageName.asString() }.reduceOrNull { current, next ->
+class Lowering(
+    private val models: List<KMixinModel>,
+    private val options: KspOptions,
+    private val poetesse: Poetesse,
+) {
+    private val mixinSourcePackageLCP by lazy {
+        if (options.disableLCP) null
+        else {
+            models.map { it.classDeclaration.packageName }.reduceOrNull { current, next ->
                 val currentSegments = current.split('.')
                 val nextSegments = next.split('.')
                 currentSegments
                     .zip(nextSegments)
                     .takeWhile { (current, next) -> current == next }
                     .joinToString(".") { it.first }
-            }.orEmpty()
-        } else null
-        return kMixins.map { it.lowerToFir(mixinSourcePackageLCP) }
+            }
+        }
     }
 
-    private fun KMixinModel.lowerToFir(mixinSourcePackageLCP: String?): FirKMixin {
+    fun lower() = models.map { it.lower() }
+
+    private fun KMixinModel.lower(): KMixinFir {
         val className = classDeclaration.lower()
         val typeParameters = typeParameters.resolveTypeParameters(enclosingTypeParameters = null)
-        val mixin = deriveMixin(className, typeParameters, mixinSourcePackageLCP)
+        val mixin = deriveMixin(className, typeParameters)
         return when (classKind) {
             is KMixinModel.Class -> {
                 val constructorParameters = classKind.constructorParameters.map { it.lower(typeParameters) }
-                FirKMixinClass(
+                KMixinFirClass(
                     className = className,
                     typeVariables = typeParameters.typeVariables,
                     mixin = mixin,
@@ -50,7 +52,7 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
                 )
             }
 
-            KMixinModel.Interface -> FirKMixinInterface(
+            KMixinModel.Interface -> KMixinFirInterface(
                 className = className,
                 typeVariables = typeParameters.typeVariables,
                 mixin = mixin,
@@ -61,14 +63,14 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
     private fun KMixinModel.deriveImpl(
         sourceClassName: XClassName,
         sourceTypeParameters: TypeParameters,
-        constructorParameters: List<FirKMixinClass.ConstructorParameter>,
+        constructorParameters: List<KMixinFirClass.ConstructorParameter>,
         duck: IrMixinDuck?,
     ) = IrKMixinImpl(
         originatingFile = containingFile,
         className = sourceClassName.withSuffix("_Impl"),
         typeVariables = sourceTypeParameters.typeVariables,
         constructorParameters = buildList {
-            constructorParameters.firstNotNullOfOrNull { it as? FirKMixinClass.ConstructorParameter.Origin }?.let {
+            constructorParameters.firstNotNullOfOrNull { it as? KMixinFirClass.ConstructorParameter.Origin }?.let {
                 add(IrKMixinImpl.ConstructorParameter.Instance(it.name, it.type))
             }
             if (duck != null && shadowSources.isNotEmpty()) {
@@ -77,13 +79,9 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
         },
     )
 
-    private fun KMixinModel.deriveMixin(
-        sourceClassName: XClassName,
-        sourceTypeParameters: TypeParameters,
-        sourcePackageLCP: String?,
-    ) = IrMixin(
+    private fun KMixinModel.deriveMixin(sourceClassName: XClassName, sourceTypeParameters: TypeParameters) = IrMixin(
         originatingFile = containingFile,
-        className = resolveMixinClassName(sourceClassName, sourcePackageLCP),
+        className = resolveMixinClassName(sourceClassName),
         typeVariables = sourceTypeParameters.typeVariables,
         side = side,
         injections = buildList {
@@ -115,7 +113,7 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
     }
 
     private fun KMixinModel.Class.ConstructorParameter.lower(typeParameters: TypeParameters) = when (this) {
-        is KMixinModel.Class.ConstructorParameter.Origin -> FirKMixinClass.ConstructorParameter.Origin(
+        is KMixinModel.Class.ConstructorParameter.Origin -> KMixinFirClass.ConstructorParameter.Origin(
             name = name,
             type = type.lower(typeParameters),
         )
@@ -237,16 +235,16 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
         )
     }
 
-    private fun MixinAnnotation.lower() = IrMixinAnnotation(
+    private fun MixinAnnotationModel.lower() = IrMixinAnnotation(
         className = typeClassDeclaration.lower(),
         arguments = arguments.map { argument ->
             when (argument) {
-                is MixinAnnotation.ScalarArgument -> IrMixinAnnotation.ScalarArgument(
+                is MixinAnnotationModel.ScalarArgument -> IrMixinAnnotation.ScalarArgument(
                     name = argument.name,
                     value = argument.value.lower(),
                 )
 
-                is MixinAnnotation.ArrayArgument -> IrMixinAnnotation.ArrayArgument(
+                is MixinAnnotationModel.ArrayArgument -> IrMixinAnnotation.ArrayArgument(
                     name = argument.name,
                     elements = argument.elements.map { it.lower() },
                 )
@@ -254,19 +252,24 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
         },
     )
 
-    private fun MixinAnnotation.Argument.Value.lower(): IrMixinAnnotation.Argument.Value = when (this) {
-        is MixinAnnotation.Argument.BooleanValue -> IrMixinAnnotation.Argument.BooleanValue(boolean)
-        is MixinAnnotation.Argument.ByteValue -> IrMixinAnnotation.Argument.ByteValue(byte)
-        is MixinAnnotation.Argument.ShortValue -> IrMixinAnnotation.Argument.ShortValue(short)
-        is MixinAnnotation.Argument.IntValue -> IrMixinAnnotation.Argument.IntValue(int)
-        is MixinAnnotation.Argument.LongValue -> IrMixinAnnotation.Argument.LongValue(long)
-        is MixinAnnotation.Argument.CharValue -> IrMixinAnnotation.Argument.CharValue(char)
-        is MixinAnnotation.Argument.FloatValue -> IrMixinAnnotation.Argument.FloatValue(float)
-        is MixinAnnotation.Argument.DoubleValue -> IrMixinAnnotation.Argument.DoubleValue(double)
-        is MixinAnnotation.Argument.StringValue -> IrMixinAnnotation.Argument.StringValue(string)
-        is MixinAnnotation.Argument.ClassValue -> IrMixinAnnotation.Argument.ClassValue(classDeclaration.lower())
-        is MixinAnnotation.Argument.EnumValue -> IrMixinAnnotation.Argument.EnumValue(classDeclaration.lower(), name)
-        is MixinAnnotation.Argument.AnnotationValue -> IrMixinAnnotation.Argument.AnnotationValue(annotation.lower())
+    private fun MixinAnnotationModel.Argument.Value.lower(): IrMixinAnnotation.Argument.Value = when (this) {
+        is MixinAnnotationModel.Argument.BooleanValue -> IrMixinAnnotation.Argument.BooleanValue(boolean)
+        is MixinAnnotationModel.Argument.ByteValue -> IrMixinAnnotation.Argument.ByteValue(byte)
+        is MixinAnnotationModel.Argument.ShortValue -> IrMixinAnnotation.Argument.ShortValue(short)
+        is MixinAnnotationModel.Argument.IntValue -> IrMixinAnnotation.Argument.IntValue(int)
+        is MixinAnnotationModel.Argument.LongValue -> IrMixinAnnotation.Argument.LongValue(long)
+        is MixinAnnotationModel.Argument.CharValue -> IrMixinAnnotation.Argument.CharValue(char)
+        is MixinAnnotationModel.Argument.FloatValue -> IrMixinAnnotation.Argument.FloatValue(float)
+        is MixinAnnotationModel.Argument.DoubleValue -> IrMixinAnnotation.Argument.DoubleValue(double)
+        is MixinAnnotationModel.Argument.StringValue -> IrMixinAnnotation.Argument.StringValue(string)
+        is MixinAnnotationModel.Argument.ClassValue -> IrMixinAnnotation.Argument.ClassValue(classDeclaration.lower())
+        is MixinAnnotationModel.Argument.EnumValue -> {
+            IrMixinAnnotation.Argument.EnumValue(classDeclaration.lower(), name)
+        }
+
+        is MixinAnnotationModel.Argument.AnnotationValue -> {
+            IrMixinAnnotation.Argument.AnnotationValue(annotation.lower())
+        }
     }
 
     private fun EnumSet<Modifier>.lowerToShadowModifiers(isInterface: Boolean, isField: Boolean): List<JPModifier> {
@@ -301,7 +304,7 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
             parametersMap[index] ?: parent?.get(index) ?: TODO("Guard this in validator")
     }
 
-    private fun List<TypeParameter>.resolveTypeParameters(enclosingTypeParameters: TypeParameters?): TypeParameters {
+    private fun List<TypeParameterModel>.resolveTypeParameters(enclosingTypeParameters: TypeParameters?): TypeParameters {
         val scopeTypeParameters = TypeParameters(enclosingTypeParameters)
         forEach { scopeTypeParameters.parametersMap[it.name] = poetesse.xTypeVariable(it.name) }
         forEach { typeParameter ->
@@ -313,7 +316,7 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
         return scopeTypeParameters
     }
 
-    private fun Type.lower(typeParameters: TypeParameters): IrType {
+    private fun TypeModel.lower(typeParameters: TypeParameters): IrType {
         val kotlinType = ksType.lower(typeParameters, arguments)
         val javaType = canonicalType?.let {
             it.ksType.lower(typeParameters, it.arguments)
@@ -323,7 +326,7 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
 
     private fun KSType.lower(
         typeParameters: TypeParameters,
-        arguments: List<Type.Argument>,
+        arguments: List<TypeModel.Argument>,
         raw: Boolean = false,
     ): XTypeName {
         val declaration = declaration
@@ -334,18 +337,19 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
             is KSClassDeclaration, is KSTypeAlias -> declaration.lower(isMarkedNullable)
             else -> TODO("Guard this in validator")
         }
-        if (raw || arguments.isEmpty()) {
+        if (typeName !is XClassName || raw || arguments.isEmpty()) {
             return typeName
         }
-        if (typeName !is XClassName) return typeName
         val arguments = arguments.map { argument ->
-            if (argument !is Type.TypedArgument) poetesse.xStar()
-            else {
-                val type = argument.type.ksType.lower(typeParameters, argument.type.arguments)
-                when (argument) {
-                    is Type.InvariantArgument -> type
-                    is Type.CovariantArgument -> type.producer()
-                    is Type.ContravariantArgument -> type.consumer()
+            when (argument) {
+                is TypeModel.StarArgument -> poetesse.xStar()
+                is TypeModel.TypedArgument -> {
+                    val type = argument.type.ksType.lower(typeParameters, argument.type.arguments)
+                    when (argument) {
+                        is TypeModel.InvariantArgument -> type
+                        is TypeModel.CovariantArgument -> type.producer()
+                        is TypeModel.ContravariantArgument -> type.consumer()
+                    }
                 }
             }
         }
@@ -361,24 +365,18 @@ class Lowering(private val options: KspOptions, private val poetesse: Poetesse) 
         return poetesse.xType(packageName, simpleNames, nullable)
     }
 
-    private fun KSClassDeclaration.lower(): XClassName {
-        val packageName = packageName.asString()
-        val typesString = requireNotNull(qualifiedName) {
-            TODO("Guard this in validator")
-        }.asString().removePrefix("$packageName.")
-        val simpleNames = typesString.split(".")
-        return poetesse.xClass(packageName, simpleNames)
-    }
+    private fun ClassDeclarationModel.lower(): XClassName =
+        poetesse.xClass(packageName, qualifiedName.removePrefix("$packageName.").split("."))
 
-    private fun resolveMixinClassName(sourceClassName: XClassName, sourcePackageLCP: String?): XClassName {
-        val sourcePackageName = sourceClassName.packageName
-        val mixinPackageName = buildString {
+    private fun resolveMixinClassName(srcClassName: XClassName): XClassName {
+        val srcPackageName = srcClassName.packageName
+        val outPackageName = buildString {
             append(options.mixinPackage)
             options.mixinGeneratedSubpackage?.let { append(".$it") }
-            if (sourcePackageName != null && sourcePackageLCP != null && sourcePackageName != sourcePackageLCP) {
-                append(".${sourcePackageName.removePrefix("$sourcePackageLCP.")}")
+            if (srcPackageName != null && mixinSourcePackageLCP != null && srcPackageName != mixinSourcePackageLCP) {
+                append(".${srcPackageName.removePrefix("$mixinSourcePackageLCP.")}")
             }
         }
-        return poetesse.xClass(mixinPackageName, sourceClassName.simpleName).withSuffix("_Generated")
+        return poetesse.xClass(outPackageName, srcClassName.simpleName).withSuffix("_Generated")
     }
 }

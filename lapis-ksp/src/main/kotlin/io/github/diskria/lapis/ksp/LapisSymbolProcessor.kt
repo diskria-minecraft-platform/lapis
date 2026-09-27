@@ -6,14 +6,11 @@ import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.symbol.KSAnnotated
 import io.github.diskria.lapis.ksp.phases.generator.Generator
 import io.github.diskria.lapis.ksp.phases.lowering.Lowering
-import io.github.diskria.lapis.ksp.phases.lowering.models.FirKMixin
+import io.github.diskria.lapis.ksp.phases.lowering.models.KMixinFir
 import io.github.diskria.lapis.ksp.phases.parser.SymbolParser
 import io.github.diskria.lapis.ksp.phases.validator.FrontendValidator
 import io.github.diskria.poetesse.Poetesse
-import io.github.diskria.poetesse.java.JPAnnotation
 import io.github.diskria.poetesse.java.JPClassName
-import io.github.diskria.poetesse.java.JPTypeName
-import java.util.*
 
 class LapisSymbolProcessor(
     private val options: KspOptions,
@@ -29,20 +26,20 @@ class LapisSymbolProcessor(
         )
     }
 
-    private val lowering: Lowering by lazy { Lowering(options, poetesse) }
-    private val kMixins: SortedMap<String, FirKMixin> = sortedMapOf()
+    private val validator = FrontendValidator(options, logger)
+    private val firs: MutableList<KMixinFir> = mutableListOf()
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
-        val parser = SymbolParser(resolver)
         logger.setPhase(KspLogger.Phase.PARSING)
-        val parsedKMixins = parser.parseKMixins()
+        val nodes = SymbolParser(resolver).parseNodes()
 
         logger.setPhase(KspLogger.Phase.VALIDATION)
-        val validatedKMixins = FrontendValidator(options, logger).validate(parsedKMixins).toList()
+        val models = validator.validate(nodes).toList()
 
-        logger.setPhase(KspLogger.Phase.LOWERING)
-        val irKMixins = lowering.lower(validatedKMixins)
-        irKMixins.forEach { kMixins[it.className.qualifiedName] = it }
+        if (models.isNotEmpty()) {
+            logger.setPhase(KspLogger.Phase.LOWERING)
+            firs += Lowering(models, options, poetesse).lower()
+        }
 
         return emptyList()
     }
@@ -56,30 +53,8 @@ class LapisSymbolProcessor(
     }
 
     private fun generate() {
+        if (firs.isEmpty()) return
         logger.setPhase(KspLogger.Phase.GENERATION)
-        Generator(options, poetesse, codeGenerator).generate(kMixins.values.toList())
-    }
-}
-
-private class KspJavaNullabilityResolver(
-    private val nullableAnnotationClassName: JPClassName?,
-    private val nonNullAnnotationClassName: JPClassName?,
-) : Poetesse.JavaNullabilityResolver {
-
-    override fun isNullable(typeName: JPTypeName): Boolean =
-        nullableAnnotationClassName != null && typeName.annotations().any { it.type() == nullableAnnotationClassName }
-
-    override fun setNullable(typeName: JPTypeName, nullable: Boolean): JPTypeName {
-        if (nullableAnnotationClassName == null && nonNullAnnotationClassName == null) return typeName
-        val targetAnnotation = if (nullable) nullableAnnotationClassName else nonNullAnnotationClassName
-        val cleanAnnotations = typeName.annotations().filterNot {
-            it.type() == nullableAnnotationClassName || it.type() == nonNullAnnotationClassName
-        }
-        val finalAnnotations = if (targetAnnotation != null) {
-            cleanAnnotations + JPAnnotation.builder(targetAnnotation).build()
-        } else {
-            cleanAnnotations
-        }
-        return typeName.withoutAnnotations().annotated(finalAnnotations)
+        Generator(firs, options, poetesse, codeGenerator).generate()
     }
 }

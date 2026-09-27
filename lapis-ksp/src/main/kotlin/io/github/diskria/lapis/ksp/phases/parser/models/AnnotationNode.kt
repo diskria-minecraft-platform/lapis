@@ -3,12 +3,12 @@ package io.github.diskria.lapis.ksp.phases.parser.models
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSNode
 import io.github.diskria.lapis.ksp.extensions.qualifiedNameOf
-import io.github.diskria.lapis.ksp.phases.parser.models.ParsedAnnotation.Argument
+import io.github.diskria.lapis.ksp.phases.parser.models.AnnotationNode.Argument
 import kotlin.enums.enumEntries
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 
-sealed interface ParsedAnnotation : NodeHolder {
+sealed interface AnnotationNode : NodeHolder {
 
     sealed interface Argument : NodeHolder {
 
@@ -22,25 +22,30 @@ sealed interface ParsedAnnotation : NodeHolder {
         class FloatValue(val float: Float) : Value
         class DoubleValue(val double: Double) : Value
         class StringValue(val string: String) : Value
-        class TypeValue(val type: ParsedType) : Value
-        class EnumValue(val classDeclaration: KSClassDeclaration, val name: String) : Value
-        class AnnotationValue(val annotation: ParsedAnnotation) : Value
+        class TypeValue(val type: TypeNode, override val node: KSNode) : Value, NodeHolder
+        class EnumValue(
+            val classDeclaration: KSClassDeclaration,
+            val name: NameNode,
+            override val node: KSNode,
+        ) : Value, NodeHolder
+
+        class AnnotationValue(val annotation: AnnotationNode) : Value
     }
 
     sealed interface ValidArgument : Argument {
-        val name: String
+        val name: NameNode
         val isExplicit: Boolean
     }
 
     class ScalarArgument(
-        override val name: String,
+        override val name: NameNode,
         override val isExplicit: Boolean,
         val value: Argument.Value,
         override val node: KSNode,
     ) : ValidArgument
 
     class ArrayArgument(
-        override val name: String,
+        override val name: NameNode,
         override val isExplicit: Boolean,
         val elements: List<Argument.Value>,
         override val node: KSNode,
@@ -49,23 +54,25 @@ sealed interface ParsedAnnotation : NodeHolder {
     class InvalidArgument(override val node: KSNode) : Argument
 }
 
-class ValidAnnotation(
-    val type: ValidType,
+class ValidAnnotationNode(
+    val type: ValidTypeNode,
     val arguments: List<Argument>,
     override val node: KSNode,
-) : ParsedAnnotation
+) : AnnotationNode
 
-class InvalidAnnotation(override val node: KSNode) : ParsedAnnotation
+class InvalidAnnotationNode(override val node: KSNode) : AnnotationNode
 
-class ParsedAnnotations(val api: List<ValidAnnotation>, val external: List<ParsedAnnotation>) {
+class AnnotationNodeContainer(val api: List<ValidAnnotationNode>, val external: List<AnnotationNode>) {
 
     inline fun <reified A : Annotation> hasApiAnnotation(): Boolean = findApiAnnotation<A>() != null
 
     @JvmName("findApiStringTypeScalarArgument")
     inline fun <reified A : Annotation> findApiArgument(property: KProperty1<out A, String>) =
         findApiAnnotation<A>()?.arguments?.firstNotNullOfOrNull { argument ->
-            if (argument is ParsedAnnotation.ScalarArgument && argument.name == property.name &&
-                argument.value is ParsedAnnotation.Argument.StringValue
+            if (argument is AnnotationNode.ScalarArgument &&
+                argument.name is ValidNameNode &&
+                argument.name.name == property.name &&
+                argument.value is AnnotationNode.Argument.StringValue
             ) {
                 ApiScalarArgument(argument.value.string, argument)
             } else null
@@ -74,8 +81,10 @@ class ParsedAnnotations(val api: List<ValidAnnotation>, val external: List<Parse
     @JvmName("findApiValidTypeScalarArgument")
     inline fun <reified A : Annotation> findApiArgument(property: KProperty1<out A, KClass<*>>) =
         findApiAnnotation<A>()?.arguments?.firstNotNullOfOrNull { argument ->
-            if (argument is ParsedAnnotation.ScalarArgument && argument.name == property.name &&
-                argument.value is ParsedAnnotation.Argument.TypeValue
+            if (argument is AnnotationNode.ScalarArgument &&
+                argument.name is ValidNameNode &&
+                argument.name.name == property.name &&
+                argument.value is AnnotationNode.Argument.TypeValue
             ) {
                 ApiScalarArgument(argument.value.type, argument)
             } else null
@@ -84,8 +93,10 @@ class ParsedAnnotations(val api: List<ValidAnnotation>, val external: List<Parse
     @JvmName("findApiEnumTypeScalarArgument")
     inline fun <reified A : Annotation, reified E : Enum<E>> findApiArgument(property: KProperty1<out A, E>) =
         findApiAnnotation<A>()?.arguments?.firstNotNullOfOrNull { argument ->
-            if (argument is ParsedAnnotation.ScalarArgument && argument.name == property.name &&
-                argument.value is ParsedAnnotation.Argument.EnumValue
+            if (argument is AnnotationNode.ScalarArgument &&
+                argument.name is ValidNameNode &&
+                argument.name.name == property.name &&
+                argument.value is AnnotationNode.Argument.EnumValue
             ) {
                 argument.value.getTypedOrNull<E>()?.let { ApiScalarArgument(it, argument) }
             } else null
@@ -94,21 +105,24 @@ class ParsedAnnotations(val api: List<ValidAnnotation>, val external: List<Parse
     @JvmName("findApiEnumTypeArrayArgument")
     inline fun <reified A : Annotation, reified E : Enum<E>> findApiArgument(property: KProperty1<A, Array<out E>>) =
         findApiAnnotation<A>()?.arguments?.firstNotNullOfOrNull { argument ->
-            if (argument is ParsedAnnotation.ArrayArgument && argument.name == property.name) {
+            if (argument is AnnotationNode.ArrayArgument &&
+                argument.name is ValidNameNode &&
+                argument.name.name == property.name
+            ) {
                 val elements = argument.elements.map { element ->
-                    val enumValue = element as? ParsedAnnotation.Argument.EnumValue
+                    val enumValue = element as? AnnotationNode.Argument.EnumValue
                     enumValue?.getTypedOrNull<E>() ?: return@firstNotNullOfOrNull null
                 }
                 ApiArrayArgument(elements, argument)
             } else null
         }
 
-    inline fun <reified E : Enum<E>> ParsedAnnotation.Argument.EnumValue.getTypedOrNull(): E? =
-        if (classDeclaration.qualifiedName?.asString() == qualifiedNameOf<E>()) {
-            enumEntries<E>().find { it.name == name }
+    inline fun <reified E : Enum<E>> AnnotationNode.Argument.EnumValue.getTypedOrNull(): E? =
+        if (name is ValidNameNode && classDeclaration.qualifiedName?.asString() == qualifiedNameOf<E>()) {
+            enumEntries<E>().find { it.name == name.name }
         } else null
 
-    inline fun <reified A : Annotation> findApiAnnotation(): ValidAnnotation? =
+    inline fun <reified A : Annotation> findApiAnnotation(): ValidAnnotationNode? =
         api.firstNotNullOfOrNull { annotation ->
             if (annotation.type.qualifiedName == qualifiedNameOf<A>()) annotation
             else null
