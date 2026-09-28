@@ -3,9 +3,4 @@ package io.github.diskria.lapis.ksp.phases.lowering.models
 import io.github.diskria.poetesse.interop.XTypeName
 import io.github.diskria.poetesse.interop.XTypeVariableName
 
-class IrType(val inKotlin: XTypeName, val inJava: XTypeName)
-
-class IrTypeVariables(
-    val inKotlin: List<XTypeVariableName>,
-    val inJava: List<XTypeVariableName>,
-)
+class IrType(val inKotlin: XTypeName, val inJava: XTypeName = inKotlin)

@@ -34,17 +34,17 @@ class Lowering(
 
     private fun KMixinModel.lower(): KMixinFir {
         val className = type.toXClassName()
-        val typeParameters = typeParameters.resolve(enclosing = null)
-        val mixin = deriveMixin(className, typeParameters)
+        val typeVariables = typeParameters.lower()
+        val mixin = deriveMixin(className, typeVariables)
         return when (classKind) {
             is KMixinModel.Class -> {
-                val constructorParameters = classKind.constructorParameters.map { it.lower(typeParameters) }
+                val constructorParameters = classKind.constructorParameters.map { it.lower() }
                 KMixinFirClass(
                     className = className,
-                    typeVariables = typeParameters.typeVariables,
+                    typeVariables = typeVariables,
                     mixin = mixin,
                     impl = if (classKind.isAbstract) {
-                        deriveImpl(className, typeParameters, constructorParameters, mixin.duck)
+                        deriveImpl(className, typeVariables, constructorParameters, mixin.duck)
                     } else null,
                     constructorParameters = constructorParameters,
                     initStrategy = initStrategy,
@@ -53,7 +53,7 @@ class Lowering(
 
             KMixinModel.Interface -> KMixinFirInterface(
                 className = className,
-                typeVariables = typeParameters.typeVariables,
+                typeVariables = typeVariables,
                 mixin = mixin,
             )
         }
@@ -61,13 +61,13 @@ class Lowering(
 
     private fun KMixinModel.deriveImpl(
         sourceClassName: XClassName,
-        sourceTypeParameters: TypeParameters,
+        typeVariables: IrTypeVariables,
         constructorParameters: List<KMixinFirClass.ConstructorParameter>,
         duck: IrMixinDuck?,
     ) = IrKMixinImpl(
         originatingFile = containingFile,
         className = sourceClassName.withSuffix("_Impl"),
-        typeVariables = sourceTypeParameters.typeVariables,
+        typeVariables = typeVariables,
         constructorParameters = buildList {
             constructorParameters.firstNotNullOfOrNull { it as? KMixinFirClass.ConstructorParameter.Origin }?.let {
                 add(IrKMixinImpl.ConstructorParameter.Instance(it.name, it.type))
@@ -78,16 +78,16 @@ class Lowering(
         },
     )
 
-    private fun KMixinModel.deriveMixin(sourceClassName: XClassName, sourceTypeParameters: TypeParameters) = IrMixin(
+    private fun KMixinModel.deriveMixin(sourceClassName: XClassName, typeVariables: IrTypeVariables) = IrMixin(
         originatingFile = containingFile,
         className = resolveMixinClassName(sourceClassName),
-        typeVariables = sourceTypeParameters.typeVariables,
+        typeVariables = typeVariables,
         side = side,
         injections = buildList {
-            addAll(injections.map { it.lowerAsMember(sourceTypeParameters) })
+            addAll(injections.map { it.lowerAsMember() })
             companionObject?.let { companion -> addAll(companion.injections.map { it.lowerAsStatic(companion) }) }
         },
-        duck = deriveMixinDuck(sourceClassName, sourceTypeParameters),
+        duck = deriveMixinDuck(sourceClassName, typeVariables),
         annotations = if (mixinAnnotations.isNotEmpty()) {
             mixinAnnotations.map { it.lower() }
         } else {
@@ -97,60 +97,57 @@ class Lowering(
         },
     )
 
-    private fun KMixinModel.deriveMixinDuck(sourceClassName: XClassName, typeParameters: TypeParameters): IrMixinDuck? {
-        val shadows = shadowSources.map { it.lower(classKind is KMixinModel.Interface, typeParameters) }
-        val extensions = extensionSources.map { it.lower(typeParameters) }
+    private fun KMixinModel.deriveMixinDuck(sourceClassName: XClassName, typeVariables: IrTypeVariables): IrMixinDuck? {
+        val shadows = shadowSources.map { it.lower(classKind is KMixinModel.Interface) }
+        val extensions = extensionSources.map { it.lower() }
         return if (shadows.isNotEmpty() || extensions.isNotEmpty()) {
             IrMixinDuck(
                 originatingFile = containingFile,
                 className = sourceClassName.withSuffix("_Duck"),
-                typeVariables = typeParameters.typeVariables,
+                typeVariables = typeVariables,
                 shadows = shadows,
                 extensions = extensions,
             )
         } else null
     }
 
-    private fun KMixinModel.Class.ConstructorParameter.lower(typeParameters: TypeParameters) = when (this) {
+    private fun KMixinModel.Class.ConstructorParameter.lower() = when (this) {
         is KMixinModel.Class.ConstructorParameter.Origin -> KMixinFirClass.ConstructorParameter.Origin(
             name = name,
-            type = type.lower(typeParameters),
+            type = type.lower(),
         )
     }
 
-    private fun KMixinModel.Extension.lower(enclosingTypeParameters: TypeParameters) = when (this) {
+    private fun KMixinModel.Extension.lower() = when (this) {
         is KMixinModel.Extension.Property -> IrMixinDuck.Extension.Property(
-            type = type.lower(enclosingTypeParameters),
+            type = type.lower(),
             declaredName = declaredName,
             declaredGetterJvmName = getterJvmName,
             declaredSetterJvmName = setterJvmName,
             getterName = getterJvmName.withUniqueModPrefix(),
             setterName = setterJvmName?.withUniqueModPrefix(),
-            receiverType = receiverType.lower(enclosingTypeParameters),
+            receiverType = receiverType.lower(),
         )
 
-        is KMixinModel.Extension.Function -> {
-            val scopeTypeParameters = typeParameters.resolve(enclosingTypeParameters)
-            IrMixinDuck.Extension.Function(
-                declaredName = declaredName,
-                sourceJvmName = jvmName,
-                name = jvmName.withUniqueModPrefix(),
-                parameters = parameters.map {
-                    IrFunctionParameter(
-                        name = it.name,
-                        type = it.type.lower(scopeTypeParameters),
-                    )
-                },
-                returnType = returnType?.lower(scopeTypeParameters),
-                receiverType = receiverType.lower(scopeTypeParameters),
-                typeVariables = scopeTypeParameters.typeVariables,
-            )
-        }
+        is KMixinModel.Extension.Function -> IrMixinDuck.Extension.Function(
+            declaredName = declaredName,
+            sourceJvmName = jvmName,
+            name = jvmName.withUniqueModPrefix(),
+            parameters = parameters.map {
+                IrFunctionParameter(
+                    name = it.name,
+                    type = it.type.lower(),
+                )
+            },
+            returnType = returnType?.lower(),
+            receiverType = receiverType.lower(),
+            typeVariables = typeParameters.lower(),
+        )
     }
 
-    private fun KMixinModel.Shadow.lower(isInterface: Boolean, enclosingTypeParameters: TypeParameters) = when (this) {
+    private fun KMixinModel.Shadow.lower(isInterface: Boolean) = when (this) {
         is KMixinModel.Shadow.Property -> IrMixinDuck.Shadow.Property(
-            type = type.lower(enclosingTypeParameters),
+            type = type.lower(),
             declaredName = declaredName,
             declaredGetterJvmName = getterJvmName,
             declaredSetterJvmName = setterJvmName,
@@ -171,68 +168,59 @@ class Lowering(
             },
         )
 
-        is KMixinModel.Shadow.Function -> {
-            val scopeTypeParameters = typeParameters.resolve(enclosingTypeParameters)
-            IrMixinDuck.Shadow.Function(
-                declaredName = declaredName,
-                sourceJvmName = jvmName,
-                name = jvmName.withUniqueModPrefix(),
-                parameters = parameters.map {
-                    IrFunctionParameter(
-                        name = it.name,
-                        type = it.type.lower(scopeTypeParameters),
-                    )
-                },
-                returnType = returnType?.lower(scopeTypeParameters),
-                mappingName = mappingName,
-                modifiers = modifiers.lowerToShadowModifiers(isInterface, isField = false),
-                annotations = if (mixinAnnotations.isNotEmpty()) {
-                    mixinAnnotations.map { it.lower() }
-                } else {
-                    listOf(IrAnnotation(poetesse.xClass(options.shadowAnnotation)))
-                },
-                typeVariables = scopeTypeParameters.typeVariables,
+        is KMixinModel.Shadow.Function -> IrMixinDuck.Shadow.Function(
+            declaredName = declaredName,
+            sourceJvmName = jvmName,
+            name = jvmName.withUniqueModPrefix(),
+            parameters = parameters.map {
+                IrFunctionParameter(
+                    name = it.name,
+                    type = it.type.lower(),
+                )
+            },
+            returnType = returnType?.lower(),
+            mappingName = mappingName,
+            modifiers = modifiers.lowerToShadowModifiers(isInterface, isField = false),
+            annotations = if (mixinAnnotations.isNotEmpty()) {
+                mixinAnnotations.map { it.lower() }
+            } else {
+                listOf(IrAnnotation(poetesse.xClass(options.shadowAnnotation)))
+            },
+            typeVariables = typeParameters.lower(),
+        )
+    }
+
+    private fun KMixinModel.Injection.lowerAsMember() = IrMixin.MemberInjection(
+        sourceJvmName = jvmName,
+        name = jvmName.withUniqueModPrefix(),
+        annotations = mixinAnnotations.map { it.lower() },
+        parameters = parameters.map { parameter ->
+            IrMixin.Injection.Parameter(
+                parameter.name,
+                parameter.type.lower(),
+                parameter.mixinAnnotations.map { it.lower() },
             )
-        }
-    }
+        },
+        returnType = returnType?.lower(),
+        extensionReceiverTargetTypeCast = extensionReceiverType?.lower(),
+        typeVariables = typeParameters.lower(),
+    )
 
-    private fun KMixinModel.Injection.lowerAsMember(enclosingTypeParameters: TypeParameters): IrMixin.MemberInjection {
-        val scopeTypeParameters = typeParameters.resolve(enclosingTypeParameters)
-        return IrMixin.MemberInjection(
-            sourceJvmName = jvmName,
-            name = jvmName.withUniqueModPrefix(),
-            annotations = mixinAnnotations.map { it.lower() },
-            parameters = parameters.map { parameter ->
-                IrMixin.Injection.Parameter(
-                    parameter.name,
-                    parameter.type.lower(scopeTypeParameters),
-                    parameter.mixinAnnotations.map { it.lower() },
-                )
-            },
-            returnType = returnType?.lower(scopeTypeParameters),
-            extensionReceiverTargetTypeCast = extensionReceiverType?.lower(scopeTypeParameters),
-            typeVariables = scopeTypeParameters.typeVariables,
-        )
-    }
-
-    private fun KMixinModel.Injection.lowerAsStatic(companion: KMixinModel.CompanionObject): IrMixin.StaticInjection {
-        val scopeTypeParameters = typeParameters.resolve(enclosing = null)
-        return IrMixin.StaticInjection(
-            sourceJvmName = jvmName,
-            name = jvmName.withUniqueModPrefix(),
-            annotations = mixinAnnotations.map { it.lower() },
-            parameters = parameters.map { parameter ->
-                IrMixin.Injection.Parameter(
-                    parameter.name,
-                    parameter.type.lower(scopeTypeParameters),
-                    parameter.mixinAnnotations.map { it.lower() },
-                )
-            },
-            returnType = returnType?.lower(scopeTypeParameters),
-            kMixinCompanionObjectName = companion.name,
-            typeVariables = scopeTypeParameters.typeVariables,
-        )
-    }
+    private fun KMixinModel.Injection.lowerAsStatic(companion: KMixinModel.CompanionObject) = IrMixin.StaticInjection(
+        sourceJvmName = jvmName,
+        name = jvmName.withUniqueModPrefix(),
+        annotations = mixinAnnotations.map { it.lower() },
+        parameters = parameters.map { parameter ->
+            IrMixin.Injection.Parameter(
+                parameter.name,
+                parameter.type.lower(),
+                parameter.mixinAnnotations.map { it.lower() },
+            )
+        },
+        returnType = returnType?.lower(),
+        kMixinCompanionObjectName = companion.name,
+        typeVariables = typeParameters.lower(),
+    )
 
     private fun MixinAnnotationModel.lower() = IrAnnotation(
         className = this@lower.type.toXClassName(),
@@ -289,79 +277,74 @@ class Lowering(
     private fun String.withUniqueModPrefix(): String =
         options.uniqueModPrefix + this
 
-    class TypeParameters(private val enclosing: TypeParameters?) {
-
-        val typeVariables get() = IrTypeVariables(inKotlin.values.toList(), inJava.values.toList())
-        val inKotlin = LinkedHashMap<String, XTypeVariableName>()
-        val inJava = LinkedHashMap<String, XTypeVariableName>()
-
-        operator fun get(name: String, forJava: Boolean): XTypeVariableName {
-            val map = if (forJava) inJava else inKotlin
-            return map[name] ?: enclosing?.get(name, forJava) ?: TODO("Guard this in validator")
+    private fun List<TypeParameterModel>.lower(): IrTypeVariables {
+        if (isEmpty()) return IrTypeVariables(emptyList())
+        val inKotlin = ArrayList<XTypeVariableName>(size)
+        val inJava = ArrayList<XTypeVariableName>(size)
+        forEach { typeParameter ->
+            if (typeParameter.bounds.isEmpty()) {
+                val variable = poetesse.xTypeVariable(typeParameter.name)
+                inKotlin += variable
+                inJava += variable
+            } else {
+                val bounds = typeParameter.bounds.map { it.lower() }
+                inKotlin += poetesse.xTypeVariable(typeParameter.name, bounds.map { it.inKotlin })
+                inJava += poetesse.xTypeVariable(typeParameter.name, bounds.map { it.inJava })
+            }
         }
+        return IrTypeVariables(inKotlin, inJava)
     }
 
-    private fun List<TypeParameterModel>.resolve(enclosing: TypeParameters?): TypeParameters {
-        val scopeTypeParameters = TypeParameters(enclosing)
-        forEach { typeParameter ->
-            scopeTypeParameters.inKotlin[typeParameter.name] = poetesse.xTypeVariable(typeParameter.name)
-            scopeTypeParameters.inJava[typeParameter.name] = poetesse.xTypeVariable(typeParameter.name)
-        }
-        forEach { typeParameter ->
-            val irBounds = typeParameter.bounds.map { it.lower(scopeTypeParameters) }
-            scopeTypeParameters.inKotlin[typeParameter.name] = poetesse.xTypeVariable(
-                name = typeParameter.name,
-                bounds = irBounds.map { it.inKotlin },
-            )
-            scopeTypeParameters.inJava[typeParameter.name] = poetesse.xTypeVariable(
-                name = typeParameter.name,
-                bounds = irBounds.map { it.inJava },
-            )
-        }
-        return scopeTypeParameters
-    }
-
-    private fun TypeModel.lower(typeParameters: TypeParameters): IrType = when (this) {
+    private fun TypeModel.lower(): IrType = when (this) {
         is ClassTypeModel -> {
-            val kotlinTypeName = toXTypeName(typeParameters, forJava = false)
-            val javaTypeName = toXTypeName(typeParameters, forJava = true)
-            IrType(kotlinTypeName, javaTypeName)
+            val inKotlin = toXTypeName(forJava = false)
+            val inJava = if (hasJavaDivergence()) {
+                toXTypeName(forJava = true)
+            } else {
+                inKotlin
+            }
+            IrType(inKotlin, inJava)
         }
 
-        is TypeArgumentModel -> {
-            val kotlinTypeName = typeParameters[name, false].nullable(isNullable)
-            val javaTypeName = typeParameters[name, true].nullable(isNullable)
-            IrType(kotlinTypeName, javaTypeName)
-        }
+        is TypeArgumentModel -> IrType(toXTypeName(forJava = false))
     }
 
-    private fun TypeModel.toXTypeName(typeParameters: TypeParameters, forJava: Boolean): XTypeName = when (this) {
+    private fun TypeModel.hasJavaDivergence(): Boolean =
+        this is ClassTypeModel && (canonicalType != null || arguments.any { argument ->
+            when (argument) {
+                is ClassTypeModel.StarArgument -> false
+                is ClassTypeModel.InvariantArgument -> argument.type.hasJavaDivergence()
+                is ClassTypeModel.CovariantArgument -> argument.type.hasJavaDivergence()
+                is ClassTypeModel.ContravariantArgument -> argument.type.hasJavaDivergence()
+            }
+        })
+
+    private fun TypeModel.toXTypeName(forJava: Boolean): XTypeName = when (this) {
         is ClassTypeModel -> {
             val type = if (forJava && canonicalType != null) canonicalType else this
-            val typeName = type.toXTypeName(type.isNullable)
+            val typeName = type.detectTypeName()
             if (typeName is XClassName && type.arguments.isNotEmpty()) {
-                typeName.generic(type.arguments.map { it.toXTypeName(typeParameters, forJava) })
+                typeName.generic(type.arguments.map { it.toXTypeName(forJava) })
             } else {
                 typeName
             }
         }
 
-        is TypeArgumentModel -> typeParameters[name, forJava].nullable(isNullable)
+        is TypeArgumentModel -> poetesse.xTypeVariable(name, nullable = isNullable)
     }
 
-    private fun ClassTypeModel.Argument.toXTypeName(typeParameters: TypeParameters, forJava: Boolean): XTypeName =
-        when (this) {
-            is ClassTypeModel.StarArgument -> poetesse.xStar()
-            is ClassTypeModel.InvariantArgument -> type.toXTypeName(typeParameters, forJava)
-            is ClassTypeModel.CovariantArgument -> type.toXTypeName(typeParameters, forJava).producer()
-            is ClassTypeModel.ContravariantArgument -> type.toXTypeName(typeParameters, forJava).consumer()
-        }
+    private fun ClassTypeModel.Argument.toXTypeName(forJava: Boolean): XTypeName = when (this) {
+        is ClassTypeModel.StarArgument -> poetesse.xStar()
+        is ClassTypeModel.InvariantArgument -> type.toXTypeName(forJava)
+        is ClassTypeModel.CovariantArgument -> type.toXTypeName(forJava).producer()
+        is ClassTypeModel.ContravariantArgument -> type.toXTypeName(forJava).consumer()
+    }
 
-    private fun ClassTypeModel.toXTypeName(isNullable: Boolean = false): XTypeName =
-        poetesse.xType(packageName, qualifiedName.removePrefix("$packageName.").split("."), isNullable)
+    private fun ClassTypeModel.detectTypeName(): XTypeName =
+        poetesse.xType(packageName, qualifiedName.removePrefix("$packageName.").split("."), nullable = isNullable)
 
-    private fun ClassTypeModel.toXClassName(isNullable: Boolean = false): XClassName =
-        poetesse.xClass(packageName, qualifiedName.removePrefix("$packageName.").split("."), isNullable)
+    private fun ClassTypeModel.toXClassName(): XClassName =
+        poetesse.xClass(packageName, qualifiedName.removePrefix("$packageName.").split("."), nullable = isNullable)
 
     private fun resolveMixinClassName(srcClassName: XClassName): XClassName {
         val srcPackageName = srcClassName.packageName
