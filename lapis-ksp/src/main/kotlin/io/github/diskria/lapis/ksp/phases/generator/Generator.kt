@@ -254,12 +254,12 @@ class Generator(
         } else null
         java.file(mixin.className) {
             class_(fileName) { _ ->
-                public()
-                abstract()
-                mixin.typeVariables.inJava.forEach { +it }
                 generatedMarker("Runtime entrypoint of the Mixin engine delegating logic to the KMixin")
                 suppressAllWarnings()
                 annotations(mixin.annotations)
+                public()
+                abstract()
+                mixin.typeVariables.inJava.forEach { +it }
                 mixin.duck?.let { superinterface(it.className.optionalGeneric(mixin.typeVariables.inJava)) }
                 val extensions = mixin.duck?.extensions.orEmpty()
                 val memberInjections = mixin.injections.filterIsInstance<IrMixin.MemberInjection>()
@@ -450,6 +450,7 @@ class Generator(
                 suppressAllWarnings()
                 annotations(mixin.annotations)
                 public()
+                mixin.typeVariables.inJava.forEach { +it }
                 superinterface(mixin.duck?.className ?: kMixinInterface.className)
                 mixin.duck?.shadows?.filterIsInstance<IrMixinDuck.Shadow.Function>()?.forEach { shadow ->
                     val shadowMethod = method("shadow$${shadow.mappingName}") {

@@ -223,7 +223,7 @@ class Lowering(
     )
 
     private fun MixinAnnotationModel.lower() = IrAnnotation(
-        className = this@lower.type.toXClassName(),
+        className = type.toXClassName(),
         arguments = arguments.map { argument ->
             when (argument) {
                 is MixinAnnotationModel.ScalarArgument -> IrAnnotation.ScalarArgument(
@@ -282,15 +282,9 @@ class Lowering(
         val inKotlin = ArrayList<XTypeVariableName>(size)
         val inJava = ArrayList<XTypeVariableName>(size)
         forEach { typeParameter ->
-            if (typeParameter.bounds.isEmpty()) {
-                val variable = poetesse.xTypeVariable(typeParameter.name)
-                inKotlin += variable
-                inJava += variable
-            } else {
-                val bounds = typeParameter.bounds.map { it.lower() }
-                inKotlin += poetesse.xTypeVariable(typeParameter.name, bounds.map { it.inKotlin })
-                inJava += poetesse.xTypeVariable(typeParameter.name, bounds.map { it.inJava })
-            }
+            val bounds = typeParameter.bounds.map { it.lower() }
+            inKotlin += poetesse.xTypeVariable(typeParameter.name, bounds.map { it.inKotlin })
+            inJava += poetesse.xTypeVariable(typeParameter.name, bounds.map { it.inJava })
         }
         return IrTypeVariables(inKotlin, inJava)
     }
