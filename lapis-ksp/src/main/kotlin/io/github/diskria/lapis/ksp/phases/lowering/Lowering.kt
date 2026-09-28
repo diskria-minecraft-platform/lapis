@@ -279,59 +279,43 @@ class Lowering(
 
     private fun List<TypeParameterModel>.lower(): IrTypeVariables {
         if (isEmpty()) return IrTypeVariables(emptyList())
-        val inKotlin = ArrayList<XTypeVariableName>(size)
-        val inJava = ArrayList<XTypeVariableName>(size)
-        forEach { typeParameter ->
-            val bounds = typeParameter.bounds.map { it.lower() }
-            inKotlin += poetesse.xTypeVariable(typeParameter.name, bounds.map { it.inKotlin })
-            inJava += poetesse.xTypeVariable(typeParameter.name, bounds.map { it.inJava })
-        }
-        return IrTypeVariables(inKotlin, inJava)
+        return IrTypeVariables(map { typeParameter ->
+            poetesse.xTypeVariable(typeParameter.name, typeParameter.bounds.map { it.lower().inKotlin })
+        })
     }
 
     private fun TypeModel.lower(): IrType = when (this) {
-        is ClassTypeModel -> {
-            val inKotlin = toXTypeName(forJava = false)
-            val inJava = if (hasJavaDivergence()) {
-                toXTypeName(forJava = true)
-            } else {
-                inKotlin
-            }
-            IrType(inKotlin, inJava)
-        }
-
-        is TypeArgumentModel -> IrType(toXTypeName(forJava = false))
+        is ClassTypeModel -> IrType(toXTypeName(), toXTypeName(forJava = true))
+        is TypeArgumentModel -> IrType(toXTypeName(), toXTypeName(forJava = true))
     }
 
-    private fun TypeModel.hasJavaDivergence(): Boolean =
-        this is ClassTypeModel && (canonicalType != null || arguments.any { argument ->
-            when (argument) {
-                is ClassTypeModel.StarArgument -> false
-                is ClassTypeModel.InvariantArgument -> argument.type.hasJavaDivergence()
-                is ClassTypeModel.CovariantArgument -> argument.type.hasJavaDivergence()
-                is ClassTypeModel.ContravariantArgument -> argument.type.hasJavaDivergence()
-            }
-        })
+    private fun TypeModel.toXTypeName(forJava: Boolean = false): XTypeName = when (this) {
+        is ClassTypeModel -> toXTypeName(forJava)
 
-    private fun TypeModel.toXTypeName(forJava: Boolean): XTypeName = when (this) {
-        is ClassTypeModel -> {
-            val type = if (forJava && canonicalType != null) canonicalType else this
-            val typeName = type.detectTypeName()
-            if (typeName is XClassName && type.arguments.isNotEmpty()) {
-                typeName.generic(type.arguments.map { it.toXTypeName(forJava) })
-            } else {
-                typeName
-            }
+        is TypeArgumentModel -> {
+            if (forJava) firstBound.toXTypeName(forJava = true)
+            else poetesse.xTypeVariable(name, nullable = isNullable)
         }
-
-        is TypeArgumentModel -> poetesse.xTypeVariable(name, nullable = isNullable)
     }
 
-    private fun ClassTypeModel.Argument.toXTypeName(forJava: Boolean): XTypeName = when (this) {
+    private fun ClassTypeModel.toXTypeName(forJava: Boolean = false): XTypeName {
+        val type = if (forJava && canonicalType != null) canonicalType else this
+        val typeName = type.detectTypeName()
+        return if (forJava) {
+            if (typeName is XParameterizedTypeName) typeName.rawType
+            else typeName
+        } else if (typeName is XClassName && type.arguments.isNotEmpty()) {
+            typeName.generic(type.arguments.map { it.toXTypeName() })
+        } else {
+            typeName
+        }
+    }
+
+    private fun ClassTypeModel.Argument.toXTypeName(): XTypeName = when (this) {
         is ClassTypeModel.StarArgument -> poetesse.xStar()
-        is ClassTypeModel.InvariantArgument -> type.toXTypeName(forJava)
-        is ClassTypeModel.CovariantArgument -> type.toXTypeName(forJava).producer()
-        is ClassTypeModel.ContravariantArgument -> type.toXTypeName(forJava).consumer()
+        is ClassTypeModel.InvariantArgument -> type.toXTypeName()
+        is ClassTypeModel.CovariantArgument -> type.toXTypeName().producer()
+        is ClassTypeModel.ContravariantArgument -> type.toXTypeName().consumer()
     }
 
     private fun ClassTypeModel.detectTypeName(): XTypeName =

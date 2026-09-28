@@ -64,13 +64,15 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             """.trimIndent()
         }
         val validTargetTypeNode = targetArgument.value.validate()
-        val targetTypeModel = kspRequireNotNull(validTargetTypeNode.toModel() as? ClassTypeModel) {
+        val targetTypeModel = kspRequireNotNull(validTargetTypeNode.toModel(emptyList()) as? ClassTypeModel) {
             ""
         }
+        val typeParameters = typeParameters.validate(enclosing = emptyList())
         val shadowProperties = mutableListOf<KMixinModel.Shadow.Property>()
         val extensionProperties = mutableListOf<KMixinModel.Extension.Property>()
         properties.mapValid { property ->
-            val getterMixinAnnotations = property.getter?.annotations?.filterMixinAnnotations().orEmpty()
+            val getterMixinAnnotations = property.getter?.annotations?.filterMixinAnnotations()?.map { it.toModel() }
+                .orEmpty()
             val hasShadowAnnotation = property.annotations.hasApiAnnotation<KShadow>()
             val hasExtensionAnnotation = property.annotations.hasApiAnnotation<Extension>()
             if (hasShadowAnnotation && hasExtensionAnnotation) {
@@ -83,7 +85,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
                 }
             }
             if (hasShadowAnnotation) {
-                shadowProperties += property.toShadowModel(isInterface, getterMixinAnnotations.map { it.toModel() })
+                shadowProperties += property.toShadowModel(isInterface, getterMixinAnnotations, typeParameters)
             } else if (hasExtensionAnnotation) {
                 property.kspRequire(getterMixinAnnotations.isEmpty()) {
                     """
@@ -92,15 +94,14 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
                     How to fix: Remove mixin annotations (such as @Inject) from the property getter.
                     """.trimIndent()
                 }
-                extensionProperties += property.toExtensionModel(targetTypeModel)
+                extensionProperties += property.toExtensionModel(targetTypeModel, typeParameters)
             }
         }
-
         val shadowFunctions = mutableListOf<KMixinModel.Shadow.Function>()
         val extensionFunctions = mutableListOf<KMixinModel.Extension.Function>()
         val injections = mutableListOf<KMixinModel.Injection>()
         functions.mapValid { function ->
-            val mixinAnnotations = function.annotations.filterMixinAnnotations()
+            val mixinAnnotations = function.annotations.filterMixinAnnotations().map { it.toModel() }
             val hasShadowAnnotation = function.annotations.hasApiAnnotation<KShadow>()
             val hasExtensionAnnotation = function.annotations.hasApiAnnotation<Extension>()
             if (hasShadowAnnotation && hasExtensionAnnotation) {
@@ -113,7 +114,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
                 }
             }
             if (hasShadowAnnotation) {
-                shadowFunctions += function.toShadowModel(isInterface, mixinAnnotations.map { it.toModel() })
+                shadowFunctions += function.toShadowModel(isInterface, mixinAnnotations, typeParameters)
             } else if (hasExtensionAnnotation) {
                 function.kspRequire(mixinAnnotations.isEmpty()) {
                     """
@@ -122,12 +123,13 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
                     How to fix: Remove mixin annotations (such as @Inject) from the function.
                     """.trimIndent()
                 }
-                extensionFunctions += function.toExtensionModel(targetTypeModel)
+                extensionFunctions += function.toExtensionModel(targetTypeModel, typeParameters)
             } else if (mixinAnnotations.isNotEmpty()) {
                 injections += function.validateAsInjection(
                     isInCompanionObject = false,
                     validTargetTypeNode,
-                    mixinAnnotations.map { it.toModel() },
+                    mixinAnnotations,
+                    typeParameters,
                 )
             }
         }
@@ -144,12 +146,13 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
                     How to fix: Remove @Extension annotation and call the companion object function directly.
                     """.trimIndent()
                 }
-                val mixinAnnotations = function.annotations.filterMixinAnnotations()
+                val mixinAnnotations = function.annotations.filterMixinAnnotations().map { it.toModel() }
                 if (mixinAnnotations.isNotEmpty()) {
                     injections += function.validateAsInjection(
                         isInCompanionObject = true,
                         validTargetTypeNode,
-                        mixinAnnotations.map { it.toModel() },
+                        mixinAnnotations,
+                        typeParameters,
                     )
                 }
             }
@@ -181,7 +184,9 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             }
             KMixinModel.Class(
                 isAbstract = isAbstract,
-                constructorParameters = constructor.parameters.mapValid { it.toModel(validTargetTypeNode) },
+                constructorParameters = constructor.parameters.mapValid {
+                    it.toModel(validTargetTypeNode, typeParameters)
+                },
             )
         } else if (isInterface) {
             KMixinModel.Interface
@@ -195,7 +200,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             }
         }
         val validTypeNode = type.validate()
-        val classTypeModel = kspRequireNotNull(validTypeNode.toModel() as? ClassTypeModel) { "" }
+        val classTypeModel = kspRequireNotNull(validTypeNode.toModel(emptyList()) as? ClassTypeModel) { "" }
         return KMixinModel(
             containingFile = node.containingFile,
             type = classTypeModel,
@@ -209,20 +214,26 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             injections = injections,
             companionObject = companionObject,
             mixinAnnotations = mixinAnnotations.map { it.toModel() },
-            typeParameters = typeParameters.validate(),
+            typeParameters = typeParameters,
         )
     }
 
-    private fun KMixinNode.Constructor.Parameter.toModel(targetType: ValidTypeNode) = when {
+    private fun KMixinNode.Constructor.Parameter.toModel(
+        targetType: ValidTypeNode,
+        enclosingTypeParameters: List<TypeParameterModel>,
+    ) = when {
         annotations.hasApiAnnotation<Origin>() -> KMixinModel.Class.ConstructorParameter.Origin(
             name = name.validate().toModel(),
-            type = type.validate().requireSubtypeOf(targetType, "@Origin parameter").toModel(),
+            type = type.validate().requireSubtypeOf(targetType, "@Origin parameter").toModel(enclosingTypeParameters),
         )
 
         else -> kspError { "" }
     }
 
-    private fun KMixinNode.Property.toExtensionModel(targetTypeModel: ClassTypeModel): KMixinModel.Extension.Property {
+    private fun KMixinNode.Property.toExtensionModel(
+        targetTypeModel: ClassTypeModel,
+        enclosingTypeParameters: List<TypeParameterModel>,
+    ): KMixinModel.Extension.Property {
         kspRequireNotNull(getter) { "" }
         kspRequireNotNull(getter.jvmName) { "" }
         kspRequire(isPublic) { "" }
@@ -233,35 +244,41 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             declaredName = name.validate().toModel(),
             getterJvmName = getter.jvmName,
             setterJvmName = if (setter != null) kspRequireNotNull(setter.jvmName) { "" } else null,
-            type = type.validate().toModel(),
+            type = type.validate().toModel(enclosingTypeParameters),
             receiverType = targetTypeModel,
         )
     }
 
-    private fun KMixinNode.Function.toExtensionModel(targetTypeModel: ClassTypeModel): KMixinModel.Extension.Function {
+    private fun KMixinNode.Function.toExtensionModel(
+        targetTypeModel: ClassTypeModel,
+        enclosingTypeParameters: List<TypeParameterModel>,
+    ): KMixinModel.Extension.Function {
         kspRequire(isPublic) { "" }
         kspRequireNotNull(jvmName) { "" }
         kspRequire(extensionReceiverType == null) { "" }
         kspRequire(!isOpen && !isAbstract) { "" }
+        val localTypeParameters = typeParameters.validate(enclosingTypeParameters)
+        val scopedTypeParameters = localTypeParameters + enclosingTypeParameters
         val parameters = parameters.map {
             FunctionParameterModel(
                 name = it.name.validate().toModel(),
-                type = it.type.validate().toModel(),
+                type = it.type.validate().toModel(scopedTypeParameters),
             )
         }
         return KMixinModel.Extension.Function(
             declaredName = name.validate().toModel(),
             jvmName = jvmName,
             parameters = parameters,
-            returnType = returnType?.validate()?.toModel(),
+            returnType = returnType?.validate()?.toModel(scopedTypeParameters),
             receiverType = targetTypeModel,
-            typeParameters = typeParameters.validate(),
+            typeParameters = localTypeParameters,
         )
     }
 
     private fun KMixinNode.Property.toShadowModel(
         isInterface: Boolean,
         mixinAnnotations: List<MixinAnnotationModel>,
+        enclosingTypeParameters: List<TypeParameterModel>,
     ): KMixinModel.Shadow.Property {
         kspRequire(isPublic) { "" }
         kspRequire(isAbstract) { "" }
@@ -282,7 +299,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             setterJvmName = if (setter != null) kspRequireNotNull(setter.jvmName) { "" } else null,
             mappingName = mappingName,
             modifiers = validateShadowModifiers(modifiersArgument?.elements.orEmpty(), isInterface, isProperty = true),
-            type = type.validate().toModel(),
+            type = type.validate().toModel(enclosingTypeParameters),
             mixinAnnotations = mixinAnnotations,
         )
     }
@@ -290,6 +307,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
     private fun KMixinNode.Function.toShadowModel(
         isInterface: Boolean,
         mixinAnnotations: List<MixinAnnotationModel>,
+        enclosingTypeParameters: List<TypeParameterModel>,
     ): KMixinModel.Shadow.Function {
         kspRequire(isPublic) { "" }
         kspRequireNotNull(jvmName) { "" }
@@ -302,6 +320,8 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             node.validateJavaIdentifierName(value, "@KShadow function's @MappingName value", sources = true)
         } ?: declaredName
         val modifiersArgument = annotations.findApiArgument(KShadow::modifiers)
+        val localTypeParameters = typeParameters.validate(enclosingTypeParameters)
+        val scopedTypeParameters = localTypeParameters + enclosingTypeParameters
         return KMixinModel.Shadow.Function(
             declaredName = declaredName,
             jvmName = jvmName,
@@ -309,13 +329,13 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             parameters = parameters.map {
                 FunctionParameterModel(
                     name = it.name.validate().toModel(),
-                    type = it.type.validate().toModel(),
+                    type = it.type.validate().toModel(scopedTypeParameters),
                 )
             },
-            returnType = returnType?.validate()?.toModel(),
+            returnType = returnType?.validate()?.toModel(scopedTypeParameters),
             mixinAnnotations = mixinAnnotations,
             modifiers = validateShadowModifiers(modifiersArgument?.elements.orEmpty(), isInterface, isProperty = false),
-            typeParameters = typeParameters.validate(),
+            typeParameters = localTypeParameters,
         )
     }
 
@@ -323,29 +343,34 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         isInCompanionObject: Boolean,
         targetType: ValidTypeNode,
         mixinAnnotations: List<MixinAnnotationModel>,
+        enclosingTypeParameters: List<TypeParameterModel>,
     ): KMixinModel.Injection {
         kspRequireNotNull(jvmName) { "" }
         kspRequire(!isOpen) { "" }
         if (isInCompanionObject) {
             kspRequire(extensionReceiverType == null) { "" }
         }
+        val localTypeParameters = typeParameters.validate(enclosingTypeParameters)
+        val scopedTypeParameters = localTypeParameters + enclosingTypeParameters
         val validType = extensionReceiverType
             ?.validate()
             ?.requireSubtypeOf(target = targetType, roleDesc = "Injection function extension receiver")
-            ?.toModel()
+            ?.toModel(scopedTypeParameters)
         return KMixinModel.Injection(
             jvmName = jvmName,
             extensionReceiverType = validType,
             mixinAnnotations = mixinAnnotations,
-            parameters = parameters.map { it.validateAsInjectionParameter() },
-            returnType = returnType?.validate()?.toModel(),
-            typeParameters = typeParameters.validate(),
+            parameters = parameters.map { it.validateAsInjectionParameter(scopedTypeParameters) },
+            returnType = returnType?.validate()?.toModel(scopedTypeParameters),
+            typeParameters = localTypeParameters,
         )
     }
 
-    private fun KMixinNode.Function.Parameter.validateAsInjectionParameter() = KMixinModel.Injection.Parameter(
+    private fun KMixinNode.Function.Parameter.validateAsInjectionParameter(
+        enclosingTypeParameters: List<TypeParameterModel>,
+    ) = KMixinModel.Injection.Parameter(
         name = name.validate().toModel(),
-        type = type.validate().toModel(),
+        type = type.validate().toModel(enclosingTypeParameters),
         mixinAnnotations = annotations.filterMixinAnnotations().map { it.toModel() },
     )
 
@@ -475,7 +500,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         val validType = type.validate()
         kspRequire(validType is ClassTypeNode) { "" }
         return MixinAnnotationModel(
-            type = validType.toModel(),
+            type = validType.toModel(emptyList()),
             arguments = arguments.validate(),
         )
     }
@@ -520,7 +545,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         is AnnotationNode.Argument.DoubleValue -> MixinAnnotationModel.Argument.DoubleValue(double)
         is AnnotationNode.Argument.StringValue -> MixinAnnotationModel.Argument.StringValue(string)
         is AnnotationNode.Argument.TypeValue -> {
-            val validTypeModel = type.validate().toModel()
+            val validTypeModel = type.validate().toModel(emptyList())
             val classTypeModel = type.kspRequireNotNull(validTypeModel as? ClassTypeModel) {
                 """
                 Class reference argument must resolve to a valid class declaration.
@@ -539,7 +564,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         }
 
         is AnnotationNode.Argument.EnumValue -> {
-            val validTypeModel = type.validate().toModel()
+            val validTypeModel = type.validate().toModel(emptyList())
             val classTypeModel = type.kspRequireNotNull(validTypeModel as? ClassTypeModel) { "" }
             MixinAnnotationModel.Argument.EnumValue(classTypeModel, name.validate().toModel())
         }
@@ -579,12 +604,42 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             """.trimIndent()
         }
 
-    private fun ValidTypeNode.toModel(): TypeModel = when (this) {
-        is ClassTypeNode -> toModel()
-        is TypeArgumentNode -> TypeArgumentModel(name = name.validate().toModel(), isNullable = isNullable)
+    private fun TypeArgumentNode.findParameter(
+        name: String,
+        scopedTypeParameters: List<TypeParameterModel>,
+    ): TypeParameterModel = kspRequireNotNull(scopedTypeParameters.find { it.name == name }) {
+        "Type parameter '$name' not found in scope"
     }
 
-    private fun ClassTypeNode.toModel(): ClassTypeModel = ClassTypeModel(
+    private fun ValidTypeNode.toModel(scopedTypeParameters: List<TypeParameterModel>): TypeModel = when (this) {
+        is ClassTypeNode -> toModel(scopedTypeParameters)
+        is TypeArgumentNode -> {
+            val name = name.validate().toModel()
+            val typeParameter = findParameter(name, scopedTypeParameters)
+            val firstBound = resolveFirstBound(typeParameter, scopedTypeParameters)
+            TypeArgumentModel(name = name, firstBound = firstBound, isNullable = isNullable)
+        }
+    }
+
+    private tailrec fun TypeArgumentNode.resolveFirstBound(
+        typeParameter: TypeParameterModel,
+        scopedTypeParameters: List<TypeParameterModel>,
+        visited: Set<String> = emptySet(),
+    ): ClassTypeModel {
+        kspRequire(typeParameter.name !in visited) {
+            "Cyclic type parameter boundary detected for ${typeParameter.name}"
+        }
+        val firstBound = typeParameter.bounds.firstOrNull() ?: AnyClassTypeModel
+        return when (firstBound) {
+            is ClassTypeModel -> firstBound
+            is TypeArgumentModel -> {
+                val nextTypeParameter = findParameter(firstBound.name, scopedTypeParameters)
+                resolveFirstBound(nextTypeParameter, scopedTypeParameters, visited + typeParameter.name)
+            }
+        }
+    }
+
+    private fun ClassTypeNode.toModel(scopedTypeParameters: List<TypeParameterModel>): ClassTypeModel = ClassTypeModel(
         packageName = kspRequireNotNull((packageName as? ValidNameNode)?.name) {
             """
             Class declarations must belong to a package.
@@ -599,21 +654,34 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             How to fix: Move the class declaration out of the local scope.
             """.trimIndent()
         },
-        arguments = arguments.map { it.validate() },
-        canonicalType = canonicalType?.toModel(),
+        arguments = arguments.map { it.validate(scopedTypeParameters) },
+        canonicalType = canonicalType?.toModel(scopedTypeParameters),
         isNullable = isNullable,
     )
 
-    private fun ClassTypeNode.Argument.validate(): ClassTypeModel.Argument = when (this) {
+    private fun ClassTypeNode.Argument.validate(
+        scopedTypeParameters: List<TypeParameterModel>
+    ): ClassTypeModel.Argument = when (this) {
         is ClassTypeNode.StarArgument -> ClassTypeModel.StarArgument
-        is ClassTypeNode.InvariantArgument -> ClassTypeModel.InvariantArgument(type.validate().toModel())
-        is ClassTypeNode.CovariantArgument -> ClassTypeModel.CovariantArgument(type.validate().toModel())
-        is ClassTypeNode.ContravariantArgument -> ClassTypeModel.ContravariantArgument(type.validate().toModel())
+        is ClassTypeNode.InvariantArgument -> ClassTypeModel.InvariantArgument(
+            type.validate().toModel(scopedTypeParameters)
+        )
+
+        is ClassTypeNode.CovariantArgument -> ClassTypeModel.CovariantArgument(
+            type.validate().toModel(scopedTypeParameters)
+        )
+
+        is ClassTypeNode.ContravariantArgument -> ClassTypeModel.ContravariantArgument(
+            type.validate().toModel(scopedTypeParameters)
+        )
     }
 
-    private fun List<TypeParameterNode>.validate() = validateAll { it.toModel() }
+    private fun List<TypeParameterNode>.validate(enclosing: List<TypeParameterModel>): List<TypeParameterModel> {
+        val stubs = map { TypeParameterModel(name = it.name.validate().toModel(), bounds = emptyList()) }
+        return validateAll { it.toModel(enclosing + stubs) }
+    }
 
-    private fun TypeParameterNode.toModel(): TypeParameterModel {
+    private fun TypeParameterNode.toModel(enclosing: List<TypeParameterModel>): TypeParameterModel {
         val name = name.validate().toModel()
         kspRequire(variance == Variance.INVARIANT) {
             """
@@ -636,10 +704,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             How to fix: Rename the type parameter to a valid Java identifier (e.g. 'T').
             """.trimIndent()
         }
-        return TypeParameterModel(
-            name = name,
-            bounds = bounds.mapValid { it.validate().toModel() },
-        )
+        return TypeParameterModel(name = name, bounds = bounds.mapValid { it.validate().toModel(enclosing) })
     }
 
     private fun NameNode.validate(): ValidNameNode =
@@ -728,3 +793,13 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
 }
 
 // TODO: User-friendly errors
+
+private val AnyClassTypeModel by lazy {
+    ClassTypeModel(
+        packageName = "kotlin",
+        qualifiedName = "kotlin.Any",
+        arguments = emptyList(),
+        canonicalType = null,
+        isNullable = true,
+    )
+}

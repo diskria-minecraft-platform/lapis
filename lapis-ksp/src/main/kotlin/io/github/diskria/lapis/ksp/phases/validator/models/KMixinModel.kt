@@ -125,6 +125,7 @@ class ClassTypeModel(
 
 class TypeArgumentModel(
     val name: String,
+    val firstBound: ClassTypeModel,
     override val isNullable: Boolean,
 ) : TypeModel
 
