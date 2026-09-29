@@ -683,25 +683,11 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
 
     private fun TypeParameterNode.toModel(enclosing: List<TypeParameterModel>): TypeParameterModel {
         val name = name.validate().toModel()
-        kspRequire(variance == Variance.INVARIANT) {
-            """
-            Type parameter '$name' cannot have variance modifier '${variance.label}'.
-            Why: Java type parameters are strictly invariant and do not support 'in' or 'out' modifiers.
-            How to fix: Remove variance modifier from type parameter.
-            """.trimIndent()
-        }
         kspRequire(!isReified) {
             """
             Reified type parameter '$name' is not supported in @KMixin.
             Why: 'reified' type parameters only exist in Kotlin inline functions and cannot be used in Java.
             How to fix: Remove the 'reified' keyword from parameter.
-            """.trimIndent()
-        }
-        kspRequire(SourceVersion.isIdentifier(name)) {
-            """
-            Type parameter name '$name' must be a valid Java identifier.
-            Why: This name is used to generate type parameters in Java Mixin.
-            How to fix: Rename the type parameter to a valid Java identifier (e.g. 'T').
             """.trimIndent()
         }
         return TypeParameterModel(name = name, bounds = bounds.mapValid { it.validate().toModel(enclosing) })
