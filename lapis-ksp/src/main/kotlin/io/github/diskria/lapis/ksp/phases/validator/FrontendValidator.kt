@@ -93,7 +93,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
                     How to fix: Remove mixin annotations (such as @Inject) from the property getter.
                     """.trimIndent()
                 }
-                extensionProperties += property.toExtensionModel(targetTypeModel, typeParameters)
+                extensionProperties += property.toExtensionModel(typeParameters)
             }
         }
         val shadowFunctions = mutableListOf<KMixinModel.Shadow.Function>()
@@ -122,7 +122,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
                     How to fix: Remove mixin annotations (such as @Inject) from the function.
                     """.trimIndent()
                 }
-                extensionFunctions += function.toExtensionModel(targetTypeModel, typeParameters)
+                extensionFunctions += function.toExtensionModel(typeParameters)
             } else if (mixinAnnotations.isNotEmpty()) {
                 injections += function.validateAsInjection(
                     isInCompanionObject = false,
@@ -207,7 +207,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             side = side,
             initStrategy = initStrategy,
             classKind = classKind,
-            targetClassDeclaration = targetTypeModel,
+            targetType = targetTypeModel,
             shadowSources = if (isAbstract || isInterface) shadowProperties + shadowFunctions else emptyList(),
             extensionSources = extensionProperties + extensionFunctions,
             injections = injections,
@@ -230,7 +230,6 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
     }
 
     private fun KMixinNode.Property.toExtensionModel(
-        targetTypeModel: ClassTypeModel,
         enclosingTypeParameters: List<TypeParameterModel>,
     ): KMixinModel.Extension.Property {
         kspRequireNotNull(getter) { "" }
@@ -244,12 +243,10 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             getterJvmName = getter.jvmName,
             setterJvmName = if (setter != null) kspRequireNotNull(setter.jvmName) { "" } else null,
             type = type.validate().toModel(enclosingTypeParameters),
-            receiverType = targetTypeModel,
         )
     }
 
     private fun KMixinNode.Function.toExtensionModel(
-        targetTypeModel: ClassTypeModel,
         enclosingTypeParameters: List<TypeParameterModel>,
     ): KMixinModel.Extension.Function {
         kspRequire(isPublic) { "" }
@@ -269,7 +266,6 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             jvmName = jvmName,
             parameters = parameters,
             returnType = returnType?.validate()?.toModel(scopedTypeParameters),
-            receiverType = targetTypeModel,
             typeParameters = localTypeParameters,
         )
     }
@@ -349,8 +345,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         if (isInCompanionObject) {
             kspRequire(extensionReceiverType == null) { "" }
         }
-        val localTypeParameters = typeParameters.validate(enclosingTypeParameters)
-        val scopedTypeParameters = localTypeParameters + enclosingTypeParameters
+        val scopedTypeParameters = typeParameters.validate(enclosingTypeParameters) + enclosingTypeParameters
         val validType = extensionReceiverType
             ?.validate()
             ?.requireSubtypeOf(target = targetType, roleDesc = "Injection function extension receiver")
@@ -361,7 +356,6 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             mixinAnnotations = mixinAnnotations,
             parameters = parameters.map { it.validateAsInjectionParameter(scopedTypeParameters) },
             returnType = returnType?.validate()?.toModel(scopedTypeParameters),
-            typeParameters = localTypeParameters,
         )
     }
 

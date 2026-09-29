@@ -313,6 +313,3 @@ class SymbolParser(private val resolver: Resolver) {
         private const val API_ANNOTATIONS_PACKAGE = "io.github.diskria.lapis.annotations"
     }
 }
-
-tailrec fun KSDeclaration.unwrapTypealiases(): KSDeclaration =
-    (this as? KSTypeAlias)?.type?.resolve()?.declaration?.unwrapTypealiases() ?: this

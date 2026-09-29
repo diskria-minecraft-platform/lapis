@@ -141,6 +141,7 @@ class Generator(
                     is IrMixinDuck.Extension.Function -> function(extension.declaredName) {
                         public()
                         inline()
+                        extension.typeVariables.forEach { +it }
                         extensionReceiver(extension.receiverType.inKotlin)
                         extension.parameters.forEach { parameter(it.name, it.type.inKotlin) }
                         extension.returnType?.let { returns(it.inKotlin) }
@@ -148,7 +149,7 @@ class Generator(
                             val returner = if (extension.returnType != null) "return " else ""
                             val callable = code { N(extension.name) }
                             val arguments = code { extension.parameters.joinToString { N(it.name) } }
-                            val cast = code { extension.returnType?.let { " as ${T(it.inKotlin)}" }.orEmpty() }
+                            val cast = code { extension.returnType?.let { castIfNeeded(it) }.orEmpty() }
                             line { "$returner${L(receiver)}.${L(callable)}(${L(arguments)})${L(cast)}" }
                         }
                     }
@@ -201,7 +202,7 @@ class Generator(
                                 expression {
                                     val receiver = code { N("duck") }
                                     val callable = code { N(shadow.getter.name) }
-                                    val cast = code { " as ${T(shadow.type.inKotlin)}" }
+                                    val cast = code { castIfNeeded(shadow.type) }
                                     "${L(receiver)}.${L(callable)}()${L(cast)}"
                                 }
                             }
@@ -228,7 +229,7 @@ class Generator(
                                 val receiver = code { N("duck") }
                                 val callable = code { N(shadow.name) }
                                 val arguments = code { shadow.parameters.joinToString { N(it.name) } }
-                                val cast = code { shadow.returnType?.let { " as ${T(it.inKotlin)}" }.orEmpty() }
+                                val cast = code { shadow.returnType?.let { castIfNeeded(it) }.orEmpty() }
                                 line { "$returner${L(receiver)}.${L(callable)}(${L(arguments)})${L(cast)}" }
                             }
                         }
@@ -578,8 +579,12 @@ class Generator(
     }
 }
 
-fun JavaCodeScope.unsafeCast(targetType: IrType): String =
+private fun JavaCodeScope.unsafeCast(targetType: IrType): String =
     "(${T(targetType.inJava)}) (${T<Any>()}) this"
+
+private fun KotlinCodeScope.castIfNeeded(targetType: IrType): String =
+    if (targetType.isJavaErased) " as ${T(targetType.inKotlin)}"
+    else ""
 
 private fun JavaTypeScope.suppressAllWarnings() {
     annotation<SuppressWarnings> {

@@ -18,7 +18,7 @@ class KMixinModel(
     val extensionSources: List<Extension>,
     val injections: List<Injection>,
     val companionObject: CompanionObject?,
-    val targetClassDeclaration: ClassTypeModel,
+    val targetType: ClassTypeModel,
     val mixinAnnotations: List<MixinAnnotationModel>,
     val typeParameters: List<TypeParameterModel>,
 ) {
@@ -36,14 +36,11 @@ class KMixinModel(
 
     sealed interface Extension {
 
-        val receiverType: ClassTypeModel
-
         class Property(
             override val declaredName: String,
             override val getterJvmName: String,
             override val setterJvmName: String?,
             override val type: TypeModel,
-            override val receiverType: ClassTypeModel,
         ) : DuckSourceModel.Property,
             Extension
 
@@ -52,7 +49,6 @@ class KMixinModel(
             override val jvmName: String,
             override val parameters: List<FunctionParameterModel>,
             override val returnType: TypeModel?,
-            override val receiverType: ClassTypeModel,
             override val typeParameters: List<TypeParameterModel>,
         ) : DuckSourceModel.Function,
             Extension
@@ -94,7 +90,6 @@ class KMixinModel(
         val mixinAnnotations: List<MixinAnnotationModel>,
         val parameters: List<Parameter>,
         val returnType: TypeModel?,
-        val typeParameters: List<TypeParameterModel>,
     ) {
         class Parameter(
             val name: String,

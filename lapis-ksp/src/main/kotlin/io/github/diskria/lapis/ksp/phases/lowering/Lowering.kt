@@ -89,7 +89,7 @@ class Lowering(
         annotations = if (mixinAnnotations.isNotEmpty()) {
             mixinAnnotations.map { it.lower() }
         } else {
-            val targetClassValue = IrAnnotation.Argument.ClassValue(targetClassDeclaration.toXClassName())
+            val targetClassValue = IrAnnotation.Argument.ClassValue(targetType.toXClassName())
             val valueArgument = IrAnnotation.ScalarArgument("value", targetClassValue)
             listOf(IrAnnotation(poetesse.xClass(options.mixinAnnotation), listOf(valueArgument)))
         },
@@ -97,7 +97,7 @@ class Lowering(
 
     private fun KMixinModel.deriveMixinDuck(sourceClassName: XClassName): IrMixinDuck? {
         val shadows = shadowSources.map { it.lower(classKind is KMixinModel.Interface) }
-        val extensions = extensionSources.map { it.lower() }
+        val extensions = extensionSources.map { it.lower(targetType, typeParameters) }
         return if (shadows.isNotEmpty() || extensions.isNotEmpty()) {
             IrMixinDuck(
                 originatingFile = containingFile,
@@ -115,7 +115,10 @@ class Lowering(
         )
     }
 
-    private fun KMixinModel.Extension.lower() = when (this) {
+    private fun KMixinModel.Extension.lower(
+        targetType: ClassTypeModel,
+        enclosingTypeParameters: List<TypeParameterModel>,
+    ) = when (this) {
         is KMixinModel.Extension.Property -> IrMixinDuck.Extension.Property(
             type = type.lower(),
             declaredName = declaredName,
@@ -123,7 +126,7 @@ class Lowering(
             declaredSetterJvmName = setterJvmName,
             getterName = getterJvmName.withUniqueModPrefix(),
             setterName = setterJvmName?.withUniqueModPrefix(),
-            receiverType = receiverType.lower(),
+            receiverType = targetType.lower(),
         )
 
         is KMixinModel.Extension.Function -> IrMixinDuck.Extension.Function(
@@ -137,7 +140,7 @@ class Lowering(
                 )
             },
             returnType = returnType?.lower(),
-            receiverType = receiverType.lower(),
+            receiverType = targetType.lower(),
             typeVariables = typeParameters.lower(),
         )
     }
@@ -286,47 +289,77 @@ class Lowering(
             )
         }
 
-    private fun TypeModel.lower(): IrType = when (this) {
-        is ClassTypeModel -> IrType(toXTypeName(), toXTypeName(forJava = true))
-        is TypeArgumentModel -> IrType(toXTypeName(), toXTypeName(forJava = true))
-    }
+    private class XTypeResult(
+        val typeName: XTypeName,
+        val erased: Boolean = false,
+    )
 
-    private fun TypeModel.toXTypeName(forJava: Boolean = false): XTypeName = when (this) {
-        is ClassTypeModel -> toXTypeName(forJava)
+    private fun TypeModel.lower(): IrType = when (this) {
+        is ClassTypeModel -> {
+            val kotlinResult = toXTypeName(forJava = false)
+            val javaResult = toXTypeName(forJava = true)
+            IrType(
+                inKotlin = kotlinResult.typeName,
+                inJava = javaResult.typeName,
+                isJavaErased = javaResult.erased,
+            )
+        }
 
         is TypeArgumentModel -> {
-            if (forJava) canonicalType.toXTypeName(forJava = true)
-            else poetesse.xTypeVariable(name = name, nullable = isNullable)
+            val kotlinResult = toXTypeName(forJava = false)
+            val javaResult = toXTypeName(forJava = true)
+            IrType(
+                inKotlin = kotlinResult.typeName,
+                inJava = javaResult.typeName,
+                isJavaErased = true,
+            )
         }
     }
 
-    private fun ClassTypeModel.toXTypeName(forJava: Boolean = false): XTypeName {
-        val type = if (forJava && canonicalType != null) canonicalType else this
-        val typeName = type.detectTypeName()
-        if (forJava && typeName is XParameterizedTypeName) {
-            return typeName.rawType
-        }
-        return typeName
-    }
-
-    private fun ClassTypeModel.TypeArgument.toXTypeName(): XTypeName = when (this) {
-        is ClassTypeModel.StarProjectionArgument -> poetesse.xStar()
-        is ClassTypeModel.GenericTypeArgument -> {
-            val typeName = type.toXTypeName()
-            when (variance) {
-                VarianceType.INVARIANT -> typeName
-                VarianceType.COVARIANT -> typeName.producer()
-                VarianceType.CONTRAVARIANT -> typeName.consumer()
+    private fun TypeModel.toXTypeName(forJava: Boolean): XTypeResult = when (this) {
+        is ClassTypeModel -> toXTypeName(forJava)
+        is TypeArgumentModel -> {
+            if (forJava) {
+                val canonicalResult = canonicalType.toXTypeName(forJava = true)
+                XTypeResult(canonicalResult.typeName, erased = true)
+            } else {
+                XTypeResult(poetesse.xTypeVariable(name = name, nullable = isNullable))
             }
         }
     }
 
-    private fun ClassTypeModel.detectTypeName(): XTypeName = poetesse.xType(
-        packageName = packageName,
-        simpleNames = qualifiedName.removePrefix("$packageName.").split("."),
-        typeArguments = arguments.map { it.toXTypeName() },
-        nullable = isNullable,
-    )
+    private fun ClassTypeModel.toXTypeName(forJava: Boolean): XTypeResult {
+        val type = if (forJava && canonicalType != null) canonicalType else this
+        val detected = type.detectTypeName(forJava)
+        if (forJava && detected.typeName is XParameterizedTypeName) {
+            return XTypeResult(detected.typeName.rawType, erased = true)
+        }
+        return detected
+    }
+
+    private fun ClassTypeModel.TypeArgument.toXTypeName(forJava: Boolean): XTypeResult = when (this) {
+        is ClassTypeModel.StarProjectionArgument -> XTypeResult(poetesse.xStar())
+        is ClassTypeModel.GenericTypeArgument -> {
+            val result = type.toXTypeName(forJava)
+            val typeName = when (variance) {
+                VarianceType.INVARIANT -> result.typeName
+                VarianceType.COVARIANT -> result.typeName.producer()
+                VarianceType.CONTRAVARIANT -> result.typeName.consumer()
+            }
+            XTypeResult(typeName, erased = result.erased)
+        }
+    }
+
+    private fun ClassTypeModel.detectTypeName(forJava: Boolean): XTypeResult {
+        val argumentResults = arguments.map { it.toXTypeName(forJava) }
+        val xType = poetesse.xType(
+            packageName = packageName,
+            simpleNames = qualifiedName.removePrefix("$packageName.").split("."),
+            typeArguments = argumentResults.map { it.typeName },
+            nullable = isNullable,
+        )
+        return XTypeResult(xType, erased = argumentResults.any { it.erased })
+    }
 
     private fun ClassTypeModel.toXClassName(): XClassName =
         poetesse.xClass(packageName, qualifiedName.removePrefix("$packageName.").split("."), nullable = isNullable)
