@@ -303,14 +303,10 @@ class Lowering(
     private fun ClassTypeModel.toXTypeName(forJava: Boolean = false): XTypeName {
         val type = if (forJava && canonicalType != null) canonicalType else this
         val typeName = type.detectTypeName()
-        return if (forJava) {
-            if (typeName is XParameterizedTypeName) typeName.rawType
-            else typeName
-        } else if (typeName is XClassName && type.arguments.isNotEmpty()) {
-            typeName.generic(type.arguments.map { it.toXTypeName() })
-        } else {
-            typeName
+        if (forJava && typeName is XParameterizedTypeName) {
+            return typeName.rawType
         }
+        return typeName
     }
 
     private fun ClassTypeModel.TypeArgument.toXTypeName(): XTypeName = when (this) {
@@ -325,8 +321,12 @@ class Lowering(
         }
     }
 
-    private fun ClassTypeModel.detectTypeName(): XTypeName =
-        poetesse.xType(packageName, qualifiedName.removePrefix("$packageName.").split("."), nullable = isNullable)
+    private fun ClassTypeModel.detectTypeName(): XTypeName = poetesse.xType(
+        packageName = packageName,
+        simpleNames = qualifiedName.removePrefix("$packageName.").split("."),
+        typeArguments = arguments.map { it.toXTypeName() },
+        nullable = isNullable,
+    )
 
     private fun ClassTypeModel.toXClassName(): XClassName =
         poetesse.xClass(packageName, qualifiedName.removePrefix("$packageName.").split("."), nullable = isNullable)

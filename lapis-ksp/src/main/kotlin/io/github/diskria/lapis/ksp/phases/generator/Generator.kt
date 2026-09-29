@@ -109,8 +109,7 @@ class Generator(
     // TODO: Migrate to FIR plugin
     private fun generateExtensions(duck: IrMixinDuck, kMixin: KMixinFir): Unit = poetesse {
         val extensions = duck.extensions.ifEmpty { return }
-        val duckClassName = duck.className
-        val receiver = kotlin.code { "(this as ${T(duckClassName)})" }
+        val receiver = kotlin.code { "(this as ${T(duck.className)})" }
         kotlin.file(kMixin.className.withSuffix("_Extensions")) {
             generatedMarker(
                 "Kotlin sugar providing zero-boilerplate access to the forwarded extensions in duck interface"
