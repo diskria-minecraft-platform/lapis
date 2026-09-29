@@ -8,7 +8,6 @@ import io.github.diskria.poetesse.interop.XClassName
 class IrMixin(
     val originatingFile: KSFile?,
     val className: XClassName,
-    val typeVariables: IrTypeVariables,
     val side: Side,
     val injections: List<Injection>,
     val duck: IrMixinDuck?,
@@ -21,7 +20,6 @@ class IrMixin(
         val annotations: List<IrAnnotation>
         val parameters: List<Parameter>
         val returnType: IrType?
-        val typeVariables: IrTypeVariables
 
         class Parameter(
             val name: String,
@@ -36,7 +34,6 @@ class IrMixin(
         override val annotations: List<IrAnnotation>,
         override val parameters: List<Parameter>,
         override val returnType: IrType?,
-        override val typeVariables: IrTypeVariables,
         val extensionReceiverTargetTypeCast: IrType?
     ) : Injection
 
@@ -46,7 +43,6 @@ class IrMixin(
         override val annotations: List<IrAnnotation>,
         override val parameters: List<Parameter>,
         override val returnType: IrType?,
-        override val typeVariables: IrTypeVariables,
         val kMixinCompanionObjectName: String,
     ) : Injection
 }

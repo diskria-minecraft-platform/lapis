@@ -5,13 +5,11 @@ import io.github.diskria.poetesse.interop.XClassName
 
 sealed interface KMixinFir {
     val className: XClassName
-    val typeVariables: IrTypeVariables
     val mixin: IrMixin
 }
 
 class KMixinFirClass(
     override val className: XClassName,
-    override val typeVariables: IrTypeVariables,
     override val mixin: IrMixin,
     val impl: IrKMixinImpl?,
     val constructorParameters: List<ConstructorParameter>,
@@ -24,6 +22,5 @@ class KMixinFirClass(
 
 class KMixinFirInterface(
     override val className: XClassName,
-    override val typeVariables: IrTypeVariables,
     override val mixin: IrMixin,
 ) : KMixinFir

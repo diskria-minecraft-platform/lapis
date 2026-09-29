@@ -4,6 +4,7 @@ import io.github.diskria.lapis.ksp.KspOptions
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
 import io.github.diskria.lapis.ksp.phases.validator.models.*
 import io.github.diskria.lapis.ksp.utils.JavaModifiers
+import io.github.diskria.lapis.ksp.utils.VarianceType
 import io.github.diskria.poetesse.Poetesse
 import io.github.diskria.poetesse.interop.*
 import io.github.diskria.poetesse.java.JPModifier
@@ -35,13 +36,12 @@ class Lowering(
     private fun KMixinModel.lower(): KMixinFir {
         val className = type.toXClassName()
         val typeVariables = typeParameters.lower()
-        val mixin = deriveMixin(className, typeVariables)
+        val mixin = deriveMixin(className)
         return when (classKind) {
             is KMixinModel.Class -> {
                 val constructorParameters = classKind.constructorParameters.map { it.lower() }
                 KMixinFirClass(
                     className = className,
-                    typeVariables = typeVariables,
                     mixin = mixin,
                     impl = if (classKind.isAbstract) {
                         deriveImpl(className, typeVariables, constructorParameters, mixin.duck)
@@ -53,7 +53,6 @@ class Lowering(
 
             KMixinModel.Interface -> KMixinFirInterface(
                 className = className,
-                typeVariables = typeVariables,
                 mixin = mixin,
             )
         }
@@ -61,7 +60,7 @@ class Lowering(
 
     private fun KMixinModel.deriveImpl(
         sourceClassName: XClassName,
-        typeVariables: IrTypeVariables,
+        typeVariables: List<XTypeVariableName>,
         constructorParameters: List<KMixinFirClass.ConstructorParameter>,
         duck: IrMixinDuck?,
     ) = IrKMixinImpl(
@@ -78,16 +77,15 @@ class Lowering(
         },
     )
 
-    private fun KMixinModel.deriveMixin(sourceClassName: XClassName, typeVariables: IrTypeVariables) = IrMixin(
+    private fun KMixinModel.deriveMixin(sourceClassName: XClassName) = IrMixin(
         originatingFile = containingFile,
         className = resolveMixinClassName(sourceClassName),
-        typeVariables = typeVariables,
         side = side,
         injections = buildList {
             addAll(injections.map { it.lowerAsMember() })
             companionObject?.let { companion -> addAll(companion.injections.map { it.lowerAsStatic(companion) }) }
         },
-        duck = deriveMixinDuck(sourceClassName, typeVariables),
+        duck = deriveMixinDuck(sourceClassName),
         annotations = if (mixinAnnotations.isNotEmpty()) {
             mixinAnnotations.map { it.lower() }
         } else {
@@ -97,14 +95,13 @@ class Lowering(
         },
     )
 
-    private fun KMixinModel.deriveMixinDuck(sourceClassName: XClassName, typeVariables: IrTypeVariables): IrMixinDuck? {
+    private fun KMixinModel.deriveMixinDuck(sourceClassName: XClassName): IrMixinDuck? {
         val shadows = shadowSources.map { it.lower(classKind is KMixinModel.Interface) }
         val extensions = extensionSources.map { it.lower() }
         return if (shadows.isNotEmpty() || extensions.isNotEmpty()) {
             IrMixinDuck(
                 originatingFile = containingFile,
                 className = sourceClassName.withSuffix("_Duck"),
-                typeVariables = typeVariables,
                 shadows = shadows,
                 extensions = extensions,
             )
@@ -203,7 +200,6 @@ class Lowering(
         },
         returnType = returnType?.lower(),
         extensionReceiverTargetTypeCast = extensionReceiverType?.lower(),
-        typeVariables = typeParameters.lower(),
     )
 
     private fun KMixinModel.Injection.lowerAsStatic(companion: KMixinModel.CompanionObject) = IrMixin.StaticInjection(
@@ -219,7 +215,6 @@ class Lowering(
         },
         returnType = returnType?.lower(),
         kMixinCompanionObjectName = companion.name,
-        typeVariables = typeParameters.lower(),
     )
 
     private fun MixinAnnotationModel.lower() = IrAnnotation(
@@ -277,12 +272,19 @@ class Lowering(
     private fun String.withUniqueModPrefix(): String =
         options.uniqueModPrefix + this
 
-    private fun List<TypeParameterModel>.lower(): IrTypeVariables {
-        if (isEmpty()) return IrTypeVariables(emptyList())
-        return IrTypeVariables(map { typeParameter ->
-            poetesse.xTypeVariable(typeParameter.name, typeParameter.bounds.map { it.lower().inKotlin })
-        })
-    }
+    private fun List<TypeParameterModel>.lower(): List<XTypeVariableName> =
+        map { typeParameter ->
+            val xVariance = when (typeParameter.variance) {
+                VarianceType.INVARIANT -> null
+                VarianceType.COVARIANT -> XVariance.OUT
+                VarianceType.CONTRAVARIANT -> XVariance.IN
+            }
+            poetesse.xTypeVariable(
+                name = typeParameter.name,
+                variance = xVariance,
+                bounds = typeParameter.bounds.map { it.lower().inKotlin },
+            )
+        }
 
     private fun TypeModel.lower(): IrType = when (this) {
         is ClassTypeModel -> IrType(toXTypeName(), toXTypeName(forJava = true))
@@ -293,8 +295,8 @@ class Lowering(
         is ClassTypeModel -> toXTypeName(forJava)
 
         is TypeArgumentModel -> {
-            if (forJava) firstBound.toXTypeName(forJava = true)
-            else poetesse.xTypeVariable(name, nullable = isNullable)
+            if (forJava) canonicalType.toXTypeName(forJava = true)
+            else poetesse.xTypeVariable(name = name, nullable = isNullable)
         }
     }
 
@@ -311,11 +313,16 @@ class Lowering(
         }
     }
 
-    private fun ClassTypeModel.Argument.toXTypeName(): XTypeName = when (this) {
-        is ClassTypeModel.StarArgument -> poetesse.xStar()
-        is ClassTypeModel.InvariantArgument -> type.toXTypeName()
-        is ClassTypeModel.CovariantArgument -> type.toXTypeName().producer()
-        is ClassTypeModel.ContravariantArgument -> type.toXTypeName().consumer()
+    private fun ClassTypeModel.TypeArgument.toXTypeName(): XTypeName = when (this) {
+        is ClassTypeModel.StarProjectionArgument -> poetesse.xStar()
+        is ClassTypeModel.GenericTypeArgument -> {
+            val typeName = type.toXTypeName()
+            when (variance) {
+                VarianceType.INVARIANT -> typeName
+                VarianceType.COVARIANT -> typeName.producer()
+                VarianceType.CONTRAVARIANT -> typeName.consumer()
+            }
+        }
     }
 
     private fun ClassTypeModel.detectTypeName(): XTypeName =

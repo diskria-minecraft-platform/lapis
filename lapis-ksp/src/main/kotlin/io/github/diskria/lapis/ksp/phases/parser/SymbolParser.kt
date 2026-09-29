@@ -8,6 +8,7 @@ import io.github.diskria.lapis.ksp.extensions.internalError
 import io.github.diskria.lapis.ksp.extensions.isSubpackageOf
 import io.github.diskria.lapis.ksp.extensions.qualifiedNameOf
 import io.github.diskria.lapis.ksp.phases.parser.models.*
+import io.github.diskria.lapis.ksp.utils.VarianceType
 
 class SymbolParser(private val resolver: Resolver) {
 
@@ -47,6 +48,7 @@ class SymbolParser(private val resolver: Resolver) {
                 ?.parseAsCompanionObject(),
             annotations = parseAnnotations(),
             typeParameters = typeParameters.parse(),
+            containingFile = containingFile,
             node = this,
         )
     }
@@ -227,16 +229,17 @@ class SymbolParser(private val resolver: Resolver) {
             packageName = declaration.packageName.parse(siteNode),
             qualifiedName = declaration.qualifiedName.parse(siteNode),
             arguments = arguments.map { argument ->
-                val variance = argument.variance
-                if (variance == Variance.STAR) {
-                    ClassTypeNode.StarArgument(siteNode)
+                val kspVariance = argument.variance
+                if (kspVariance == Variance.STAR) {
+                    ClassTypeNode.StarProjectionArgument(siteNode)
                 } else {
                     val type = argument.type.parse(siteNode)
-                    when (variance) {
-                        Variance.INVARIANT -> ClassTypeNode.InvariantArgument(type, siteNode)
-                        Variance.COVARIANT -> ClassTypeNode.CovariantArgument(type, siteNode)
-                        Variance.CONTRAVARIANT -> ClassTypeNode.ContravariantArgument(type, siteNode)
+                    val variance = when (kspVariance) {
+                        Variance.INVARIANT -> VarianceType.INVARIANT
+                        Variance.COVARIANT -> VarianceType.COVARIANT
+                        Variance.CONTRAVARIANT -> VarianceType.CONTRAVARIANT
                     }
+                    ClassTypeNode.GenericTypeArgument(type, variance, siteNode)
                 }
             },
             canonicalType = canonicalReference,
@@ -285,9 +288,15 @@ class SymbolParser(private val resolver: Resolver) {
 
     @JvmName("parseTypeParameters")
     private fun List<KSTypeParameter>.parse() = map { typeParameter ->
-        TypeParameterNode(
+        val variance = when (typeParameter.variance) {
+            Variance.STAR -> return@map InvalidTypeParameterNode(typeParameter)
+            Variance.INVARIANT -> VarianceType.INVARIANT
+            Variance.COVARIANT -> VarianceType.COVARIANT
+            Variance.CONTRAVARIANT -> VarianceType.CONTRAVARIANT
+        }
+        ValidTypeParameterNode(
             name = typeParameter.name.parse(typeParameter),
-            variance = typeParameter.variance,
+            variance = variance,
             isReified = typeParameter.isReified,
             bounds = typeParameter.bounds.map { it.parse() }.toList(),
             node = typeParameter,

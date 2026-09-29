@@ -1,6 +1,9 @@
 package io.github.diskria.lapis.ksp.phases.parser.models
 
-import com.google.devtools.ksp.symbol.*
+import com.google.devtools.ksp.symbol.KSFile
+import com.google.devtools.ksp.symbol.KSNode
+import com.google.devtools.ksp.symbol.KSType
+import io.github.diskria.lapis.ksp.utils.VarianceType
 
 class KMixinNode(
     val name: NameNode,
@@ -18,7 +21,8 @@ class KMixinNode(
     val properties: List<Property>,
     val functions: List<Function>,
     val annotations: AnnotationNodeContainer,
-    override val node: KSClassDeclaration,
+    val containingFile: KSFile?,
+    override val node: KSNode,
 ) : NodeHolder {
 
     class Constructor(
@@ -99,17 +103,15 @@ sealed interface ValidTypeNode : TypeNode {
 class ClassTypeNode(
     val packageName: NameNode,
     val qualifiedName: NameNode,
-    val arguments: List<Argument>,
+    val arguments: List<TypeArgument>,
     val canonicalType: ClassTypeNode?,
     override val isNullable: Boolean,
     override val ksType: KSType,
     override val node: KSNode,
 ) : ValidTypeNode {
-    sealed interface Argument : NodeHolder
-    class StarArgument(override val node: KSNode) : Argument
-    class InvariantArgument(val type: TypeNode, override val node: KSNode) : Argument
-    class CovariantArgument(val type: TypeNode, override val node: KSNode) : Argument
-    class ContravariantArgument(val type: TypeNode, override val node: KSNode) : Argument
+    sealed interface TypeArgument : NodeHolder
+    class StarProjectionArgument(override val node: KSNode) : TypeArgument
+    class GenericTypeArgument(val type: TypeNode, val variance: VarianceType, override val node: KSNode) : TypeArgument
 }
 
 class TypeArgumentNode(
@@ -121,13 +123,17 @@ class TypeArgumentNode(
 
 class InvalidTypeNode(override val node: KSNode) : TypeNode
 
-class TypeParameterNode(
+sealed interface TypeParameterNode : NodeHolder
+
+class ValidTypeParameterNode(
     val name: NameNode,
-    val variance: Variance,
+    val variance: VarianceType,
     val isReified: Boolean,
     val bounds: List<TypeNode>,
-    override val node: KSTypeParameter,
-) : NodeHolder
+    override val node: KSNode,
+) : TypeParameterNode
+
+class InvalidTypeParameterNode(override val node: KSNode) : TypeParameterNode
 
 sealed interface NameNode : NodeHolder
 class ValidNameNode(val name: String, override val node: KSNode) : NameNode

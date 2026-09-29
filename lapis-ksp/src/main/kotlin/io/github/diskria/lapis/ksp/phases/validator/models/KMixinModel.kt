@@ -3,6 +3,7 @@ package io.github.diskria.lapis.ksp.phases.validator.models
 import com.google.devtools.ksp.symbol.KSFile
 import io.github.diskria.lapis.annotations.InitStrategy
 import io.github.diskria.lapis.annotations.Side
+import io.github.diskria.lapis.ksp.utils.VarianceType
 import java.util.*
 import javax.lang.model.element.Modifier
 
@@ -112,24 +113,23 @@ sealed interface TypeModel {
 class ClassTypeModel(
     val packageName: String,
     val qualifiedName: String,
-    val arguments: List<Argument>,
+    val arguments: List<TypeArgument>,
     val canonicalType: ClassTypeModel?,
     override val isNullable: Boolean,
 ) : TypeModel {
-    sealed interface Argument
-    object StarArgument : Argument
-    class InvariantArgument(val type: TypeModel) : Argument
-    class CovariantArgument(val type: TypeModel) : Argument
-    class ContravariantArgument(val type: TypeModel) : Argument
+    sealed interface TypeArgument
+    object StarProjectionArgument : TypeArgument
+    class GenericTypeArgument(val type: TypeModel, val variance: VarianceType) : TypeArgument
 }
 
 class TypeArgumentModel(
     val name: String,
-    val firstBound: ClassTypeModel,
+    val canonicalType: ClassTypeModel,
     override val isNullable: Boolean,
 ) : TypeModel
 
 class TypeParameterModel(
     val name: String,
+    val variance: VarianceType,
     val bounds: List<TypeModel>,
 )

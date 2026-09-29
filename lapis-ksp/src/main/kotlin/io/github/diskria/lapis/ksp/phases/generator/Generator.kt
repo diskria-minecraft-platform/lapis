@@ -164,7 +164,7 @@ class Generator(
             suppressAllWarnings()
             class_(fileName) { _ ->
                 public()
-                kMixinImpl.typeVariables.inKotlin.forEach { +it }
+                kMixinImpl.typeVariables.forEach { +it }
                 if (kMixinImpl.constructorParameters.isNotEmpty()) {
                     constructor(primary = true) {
                         public()
@@ -181,8 +181,8 @@ class Generator(
                         }
                     }
                 }
-                val superclassName = if (kMixinImpl.typeVariables.inKotlin.isNotEmpty()) {
-                    kMixin.className.generic(kMixinImpl.typeVariables.inKotlin)
+                val superclassName = if (kMixinImpl.typeVariables.isNotEmpty()) {
+                    kMixin.className.generic(kMixinImpl.typeVariables)
                 } else kMixin.className
                 superclass(superclassName) {
                     kMixin.constructorParameters.forEach { parameter ->
@@ -221,7 +221,7 @@ class Generator(
                         is IrMixinDuck.Function -> function(shadow.declaredName) {
                             public()
                             override()
-                            shadow.typeVariables.inKotlin.forEach { +it }
+                            shadow.typeVariables.forEach { +it }
                             shadow.parameters.forEach { parameter(it.name, it.type.inKotlin) }
                             shadow.returnType?.let { returns(it.inKotlin) }
                             body {

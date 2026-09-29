@@ -1,6 +1,5 @@
 package io.github.diskria.lapis.ksp.phases.validator
 
-import com.google.devtools.ksp.symbol.Variance
 import io.github.diskria.lapis.annotations.*
 import io.github.diskria.lapis.ksp.KspLogger
 import io.github.diskria.lapis.ksp.KspOptions
@@ -202,7 +201,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         val validTypeNode = type.validate()
         val classTypeModel = kspRequireNotNull(validTypeNode.toModel(emptyList()) as? ClassTypeModel) { "" }
         return KMixinModel(
-            containingFile = node.containingFile,
+            containingFile = containingFile,
             type = classTypeModel,
             name = name.validate().toModel(),
             side = side,
@@ -553,7 +552,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
                 How to fix: Ensure the class argument has no compilation errors.
                 """.trimIndent()
             }
-            type.kspRequire(validTypeModel.arguments.all { it is ClassTypeModel.StarArgument }) {
+            type.kspRequire(validTypeModel.arguments.all { it is ClassTypeModel.StarProjectionArgument }) {
                 """
                 Generic type arguments in class reference are not supported.
                 Why: Generic type arguments cannot be mapped to Java Mixin annotations.
@@ -616,12 +615,12 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         is TypeArgumentNode -> {
             val name = name.validate().toModel()
             val typeParameter = findParameter(name, scopedTypeParameters)
-            val firstBound = resolveFirstBound(typeParameter, scopedTypeParameters)
-            TypeArgumentModel(name = name, firstBound = firstBound, isNullable = isNullable)
+            val canonicalType = resolveCanonicalType(typeParameter, scopedTypeParameters)
+            TypeArgumentModel(name = name, canonicalType = canonicalType, isNullable = isNullable)
         }
     }
 
-    private tailrec fun TypeArgumentNode.resolveFirstBound(
+    private tailrec fun TypeArgumentNode.resolveCanonicalType(
         typeParameter: TypeParameterModel,
         scopedTypeParameters: List<TypeParameterModel>,
         visited: Set<String> = emptySet(),
@@ -634,7 +633,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             is ClassTypeModel -> firstBound
             is TypeArgumentModel -> {
                 val nextTypeParameter = findParameter(firstBound.name, scopedTypeParameters)
-                resolveFirstBound(nextTypeParameter, scopedTypeParameters, visited + typeParameter.name)
+                resolveCanonicalType(nextTypeParameter, scopedTypeParameters, visited + typeParameter.name)
             }
         }
     }
@@ -659,29 +658,25 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         isNullable = isNullable,
     )
 
-    private fun ClassTypeNode.Argument.validate(
+    private fun ClassTypeNode.TypeArgument.validate(
         scopedTypeParameters: List<TypeParameterModel>
-    ): ClassTypeModel.Argument = when (this) {
-        is ClassTypeNode.StarArgument -> ClassTypeModel.StarArgument
-        is ClassTypeNode.InvariantArgument -> ClassTypeModel.InvariantArgument(
-            type.validate().toModel(scopedTypeParameters)
-        )
-
-        is ClassTypeNode.CovariantArgument -> ClassTypeModel.CovariantArgument(
-            type.validate().toModel(scopedTypeParameters)
-        )
-
-        is ClassTypeNode.ContravariantArgument -> ClassTypeModel.ContravariantArgument(
-            type.validate().toModel(scopedTypeParameters)
+    ): ClassTypeModel.TypeArgument = when (this) {
+        is ClassTypeNode.StarProjectionArgument -> ClassTypeModel.StarProjectionArgument
+        is ClassTypeNode.GenericTypeArgument -> ClassTypeModel.GenericTypeArgument(
+            type = type.validate().toModel(scopedTypeParameters),
+            variance = variance,
         )
     }
 
     private fun List<TypeParameterNode>.validate(enclosing: List<TypeParameterModel>): List<TypeParameterModel> {
-        val stubs = map { TypeParameterModel(name = it.name.validate().toModel(), bounds = emptyList()) }
+        val stubs = filterIsInstance<ValidTypeParameterNode>().map {
+            TypeParameterModel(name = it.name.validate().toModel(), variance = it.variance, bounds = emptyList())
+        }
         return validateAll { it.toModel(enclosing + stubs) }
     }
 
     private fun TypeParameterNode.toModel(enclosing: List<TypeParameterModel>): TypeParameterModel {
+        kspRequire(this is ValidTypeParameterNode) { "" }
         val name = name.validate().toModel()
         kspRequire(!isReified) {
             """
@@ -690,7 +685,11 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             How to fix: Remove the 'reified' keyword from parameter.
             """.trimIndent()
         }
-        return TypeParameterModel(name = name, bounds = bounds.mapValid { it.validate().toModel(enclosing) })
+        return TypeParameterModel(
+            name = name,
+            variance = variance,
+            bounds = bounds.mapValid { it.validate().toModel(enclosing) },
+        )
     }
 
     private fun NameNode.validate(): ValidNameNode =
