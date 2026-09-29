@@ -277,14 +277,8 @@ class Lowering(
 
     private fun List<TypeParameterModel>.lower(): List<XTypeVariableName> =
         map { typeParameter ->
-            val xVariance = when (typeParameter.variance) {
-                VarianceType.INVARIANT -> null
-                VarianceType.COVARIANT -> XVariance.OUT
-                VarianceType.CONTRAVARIANT -> XVariance.IN
-            }
             poetesse.xTypeVariable(
                 name = typeParameter.name,
-                variance = xVariance,
                 bounds = typeParameter.bounds.map { it.lower().inKotlin },
             )
         }

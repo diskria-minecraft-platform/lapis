@@ -123,17 +123,12 @@ class TypeArgumentNode(
 
 class InvalidTypeNode(override val node: KSNode) : TypeNode
 
-sealed interface TypeParameterNode : NodeHolder
-
-class ValidTypeParameterNode(
+class TypeParameterNode(
     val name: NameNode,
-    val variance: VarianceType,
     val isReified: Boolean,
     val bounds: List<TypeNode>,
     override val node: KSNode,
-) : TypeParameterNode
-
-class InvalidTypeParameterNode(override val node: KSNode) : TypeParameterNode
+) : NodeHolder
 
 sealed interface NameNode : NodeHolder
 class ValidNameNode(val name: String, override val node: KSNode) : NameNode

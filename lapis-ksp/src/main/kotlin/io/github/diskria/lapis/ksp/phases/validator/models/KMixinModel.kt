@@ -125,6 +125,5 @@ class TypeArgumentModel(
 
 class TypeParameterModel(
     val name: String,
-    val variance: VarianceType,
     val bounds: List<TypeModel>,
 )

@@ -288,15 +288,8 @@ class SymbolParser(private val resolver: Resolver) {
 
     @JvmName("parseTypeParameters")
     private fun List<KSTypeParameter>.parse() = map { typeParameter ->
-        val variance = when (typeParameter.variance) {
-            Variance.STAR -> return@map InvalidTypeParameterNode(typeParameter)
-            Variance.INVARIANT -> VarianceType.INVARIANT
-            Variance.COVARIANT -> VarianceType.COVARIANT
-            Variance.CONTRAVARIANT -> VarianceType.CONTRAVARIANT
-        }
-        ValidTypeParameterNode(
+        TypeParameterNode(
             name = typeParameter.name.parse(typeParameter),
-            variance = variance,
             isReified = typeParameter.isReified,
             bounds = typeParameter.bounds.map { it.parse() }.toList(),
             node = typeParameter,

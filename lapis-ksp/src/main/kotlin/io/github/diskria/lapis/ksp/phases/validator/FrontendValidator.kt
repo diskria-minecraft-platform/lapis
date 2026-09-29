@@ -663,14 +663,11 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
     }
 
     private fun List<TypeParameterNode>.validate(enclosing: List<TypeParameterModel>): List<TypeParameterModel> {
-        val stubs = filterIsInstance<ValidTypeParameterNode>().map {
-            TypeParameterModel(name = it.name.validate().toModel(), variance = it.variance, bounds = emptyList())
-        }
+        val stubs = map { TypeParameterModel(name = it.name.validate().toModel(), bounds = emptyList()) }
         return validateAll { it.toModel(enclosing + stubs) }
     }
 
     private fun TypeParameterNode.toModel(enclosing: List<TypeParameterModel>): TypeParameterModel {
-        kspRequire(this is ValidTypeParameterNode) { "" }
         val name = name.validate().toModel()
         kspRequire(!isReified) {
             """
@@ -681,7 +678,6 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         }
         return TypeParameterModel(
             name = name,
-            variance = variance,
             bounds = bounds.mapValid { it.validate().toModel(enclosing) },
         )
     }
