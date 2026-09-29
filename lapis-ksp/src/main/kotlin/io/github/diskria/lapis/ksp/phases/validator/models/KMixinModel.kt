@@ -115,6 +115,18 @@ class ClassTypeModel(
     sealed interface TypeArgument
     object StarProjectionArgument : TypeArgument
     class GenericTypeArgument(val type: TypeModel, val variance: VarianceType) : TypeArgument
+
+    companion object {
+        val ANY by lazy {
+            ClassTypeModel(
+                packageName = "kotlin",
+                qualifiedName = "kotlin.Any",
+                arguments = emptyList(),
+                canonicalType = null,
+                isNullable = true,
+            )
+        }
+    }
 }
 
 class TypeArgumentModel(
