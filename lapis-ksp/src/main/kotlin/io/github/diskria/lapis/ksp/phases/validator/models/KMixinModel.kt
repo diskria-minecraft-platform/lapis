@@ -114,7 +114,7 @@ class ClassTypeModel(
 ) : TypeModel {
     sealed interface TypeArgument
     object StarProjectionArgument : TypeArgument
-    class GenericTypeArgument(val type: TypeModel, val variance: VarianceType) : TypeArgument
+    class GenericTypeArgument(val type: TypeModel, val variance: VarianceType = VarianceType.INVARIANT) : TypeArgument
 
     companion object {
         val ANY by lazy {
@@ -131,8 +131,8 @@ class ClassTypeModel(
 
 class TypeArgumentModel(
     val name: String,
-    val canonicalType: ClassTypeModel,
-    override val isNullable: Boolean,
+    val canonicalType: ClassTypeModel = ClassTypeModel.ANY,
+    override val isNullable: Boolean = false,
 ) : TypeModel
 
 class TypeParameterModel(

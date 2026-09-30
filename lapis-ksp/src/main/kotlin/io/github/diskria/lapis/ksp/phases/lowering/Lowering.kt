@@ -132,63 +132,43 @@ class Lowering(
         is KMixinModel.Extension.Function -> {
             val loweredParameters = parameters.map { IrFunctionParameter(name = it.name, type = it.type.lower()) }
             val loweredReturnType = returnType?.lower()
-            val functionTypeParameterNames = typeParameters.mapTo(mutableSetOf()) { it.name }
-            val unshadowedEnclosingTypeParameterNames = enclosingTypeParameters
-                .mapTo(mutableSetOf()) { it.name }
-                .apply { removeAll(functionTypeParameterNames) }
-            val usedTypeParameterNames = buildSet {
+            val usedEnclosingTypeParameterNames = buildSet {
                 loweredParameters.forEach { addAll(it.type.usedTypeParameterNames) }
                 loweredReturnType?.let { addAll(it.usedTypeParameterNames) }
+                retainAll(enclosingTypeParameters.map { it.name }.toSet())
+                removeAll(typeParameters.map { it.name }.toSet())
             }
-            val activeReceiverTypeParameterNames = usedTypeParameterNames.filterTo(mutableSetOf()) {
-                it in unshadowedEnclosingTypeParameterNames
+            val requiredEnclosingTypeParameters = mutableListOf<TypeParameterModel>()
+            val enclosingTypeArguments = enclosingTypeParameters.map { typeParameter ->
+                if (typeParameter.name in usedEnclosingTypeParameterNames) {
+                    requiredEnclosingTypeParameters.add(typeParameter)
+                    ClassTypeModel.GenericTypeArgument(TypeArgumentModel(typeParameter.name))
+                } else {
+                    ClassTypeModel.StarProjectionArgument
+                }
             }
-            val loweredReceiverType = targetType.lowerAsReceiver(
-                enclosingTypeParameters = enclosingTypeParameters,
-                usedTypeParameterNames = activeReceiverTypeParameterNames,
-            )
-            val usedEnclosingTypeParameters = enclosingTypeParameters.filter {
-                it.name in activeReceiverTypeParameterNames
+            val receiverType = if (requiredEnclosingTypeParameters.isNotEmpty()) {
+                ClassTypeModel(
+                    packageName = targetType.packageName,
+                    qualifiedName = targetType.qualifiedName,
+                    arguments = enclosingTypeArguments,
+                    canonicalType = targetType.canonicalType,
+                    isNullable = targetType.isNullable,
+                )
+            } else {
+                targetType
             }
-            val requiredTypeParameters = usedEnclosingTypeParameters + typeParameters
+            val requiredTypeParameters = requiredEnclosingTypeParameters + typeParameters
             IrMixinDuck.Extension.Function(
                 declaredName = declaredName,
                 sourceJvmName = jvmName,
                 name = jvmName.withUniqueModPrefix(),
                 parameters = loweredParameters,
                 returnType = loweredReturnType,
-                receiverType = loweredReceiverType,
+                receiverType = receiverType.lower(),
                 typeVariables = requiredTypeParameters.lower(),
             )
         }
-    }
-
-    private fun ClassTypeModel.lowerAsReceiver(
-        enclosingTypeParameters: List<TypeParameterModel>,
-        usedTypeParameterNames: Set<String>,
-    ): IrType {
-        if (enclosingTypeParameters.isEmpty()) return lower()
-        val substitutedArguments = enclosingTypeParameters.map { param ->
-            if (param.name in usedTypeParameterNames) {
-                ClassTypeModel.GenericTypeArgument(
-                    type = TypeArgumentModel(
-                        name = param.name,
-                        canonicalType = ClassTypeModel.ANY,
-                        isNullable = false,
-                    ),
-                    variance = VarianceType.INVARIANT,
-                )
-            } else {
-                ClassTypeModel.StarProjectionArgument
-            }
-        }
-        return ClassTypeModel(
-            packageName = packageName,
-            qualifiedName = qualifiedName,
-            arguments = substitutedArguments,
-            canonicalType = canonicalType,
-            isNullable = isNullable,
-        ).lower()
     }
 
     private fun KMixinModel.Shadow.lower(isInterface: Boolean) = when (this) {
