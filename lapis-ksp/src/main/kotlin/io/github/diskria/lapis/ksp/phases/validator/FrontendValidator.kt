@@ -622,7 +622,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         kspRequire(typeParameter.name !in visited) {
             "Cyclic type parameter boundary detected for ${typeParameter.name}"
         }
-        val firstBound = typeParameter.bounds.firstOrNull() ?: ClassTypeModel.ANY
+        val firstBound = typeParameter.bounds.firstOrNull() ?: ClassTypeModel.NULLABLE_ANY
         return when (firstBound) {
             is ClassTypeModel -> firstBound
             is TypeArgumentModel -> {

@@ -95,11 +95,7 @@ class SymbolParser(private val resolver: Resolver) {
         name = simpleName.parse(this),
         jvmName = resolver.getJvmName(this),
         parameters = parameters.map { it.parseAsFunctionParameter() },
-        returnType = returnType.parse(this).takeIf {
-            if (it !is ClassTypeNode) return@takeIf true
-            val qualifiedName = (it.canonicalType ?: it).qualifiedName as? ValidNameNode ?: return@takeIf true
-            qualifiedName.name != "kotlin.Unit"
-        },
+        returnType = returnType.parse(this),
         isPublic = isPublic(),
         isOpen = Modifier.OPEN in modifiers,
         isAbstract = isAbstract,

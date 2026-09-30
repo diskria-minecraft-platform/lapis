@@ -5,6 +5,10 @@ import io.github.diskria.poetesse.interop.XTypeName
 class IrType(
     val inKotlin: XTypeName,
     val inJava: XTypeName = inKotlin,
-    val isJavaErased: Boolean,
+    val returnContext: IrReturnContext?,
     val usedTypeParameterNames: Set<String>,
+)
+
+class IrReturnContext(
+    val needsKotlinForwardCast: Boolean,
 )

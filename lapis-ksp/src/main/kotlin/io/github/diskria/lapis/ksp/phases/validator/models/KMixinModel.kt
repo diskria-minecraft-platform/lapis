@@ -108,30 +108,22 @@ sealed interface TypeModel {
 class ClassTypeModel(
     val packageName: String,
     val qualifiedName: String,
-    val arguments: List<TypeArgument>,
-    val canonicalType: ClassTypeModel?,
-    override val isNullable: Boolean,
+    val arguments: List<TypeArgument> = emptyList(),
+    val canonicalType: ClassTypeModel? = null,
+    override val isNullable: Boolean = false,
 ) : TypeModel {
     sealed interface TypeArgument
     object StarProjectionArgument : TypeArgument
     class GenericTypeArgument(val type: TypeModel, val variance: VarianceType = VarianceType.INVARIANT) : TypeArgument
 
     companion object {
-        val ANY by lazy {
-            ClassTypeModel(
-                packageName = "kotlin",
-                qualifiedName = "kotlin.Any",
-                arguments = emptyList(),
-                canonicalType = null,
-                isNullable = true,
-            )
-        }
+        val NULLABLE_ANY = ClassTypeModel(packageName = "kotlin", qualifiedName = "kotlin.Any", isNullable = true)
     }
 }
 
 class TypeArgumentModel(
     val name: String,
-    val canonicalType: ClassTypeModel = ClassTypeModel.ANY,
+    val canonicalType: ClassTypeModel = ClassTypeModel.NULLABLE_ANY,
     override val isNullable: Boolean = false,
 ) : TypeModel
 

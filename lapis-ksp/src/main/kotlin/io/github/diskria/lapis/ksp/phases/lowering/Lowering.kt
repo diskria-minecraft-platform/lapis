@@ -132,11 +132,12 @@ class Lowering(
         is KMixinModel.Extension.Function -> {
             val loweredParameters = parameters.map { IrFunctionParameter(name = it.name, type = it.type.lower()) }
             val loweredReturnType = returnType?.lower()
+            val functionTypeParameters = typeParameters
             val usedEnclosingTypeParameterNames = buildSet {
                 loweredParameters.forEach { addAll(it.type.usedTypeParameterNames) }
                 loweredReturnType?.let { addAll(it.usedTypeParameterNames) }
                 retainAll(enclosingTypeParameters.map { it.name }.toSet())
-                removeAll(typeParameters.map { it.name }.toSet())
+                removeAll(functionTypeParameters.map { it.name }.toSet())
             }
             val requiredEnclosingTypeParameters = mutableListOf<TypeParameterModel>()
             val enclosingTypeArguments = enclosingTypeParameters.map { typeParameter ->
@@ -158,7 +159,7 @@ class Lowering(
             } else {
                 targetType
             }
-            val requiredTypeParameters = requiredEnclosingTypeParameters + typeParameters
+            val requiredTypeParameters = requiredEnclosingTypeParameters + functionTypeParameters
             IrMixinDuck.Extension.Function(
                 declaredName = declaredName,
                 sourceJvmName = jvmName,
@@ -317,33 +318,43 @@ class Lowering(
 
     private fun TypeModel.lower(): IrType = when (this) {
         is ClassTypeModel -> {
-            val kotlinResult = toXTypeName(forJava = false)
-            val javaResult = toXTypeName(forJava = true)
+            val originalResult = toXTypeName(canonical = false)
+            val canonicalResult = toXTypeName(canonical = true)
+            val canonicalType = canonicalResult.typeName
+            val isUnit = canonicalType is XVoidTypeName && !canonicalType.isBoxed
+            val isNothing = canonicalType is XVoidTypeName && canonicalType.isNothing
+            val returnContext = if (!isUnit) {
+                IrReturnContext(needsKotlinForwardCast = canonicalResult.erased || isNothing)
+            } else null
             IrType(
-                inKotlin = kotlinResult.typeName,
-                inJava = javaResult.typeName,
-                isJavaErased = javaResult.erased,
-                usedTypeParameterNames = kotlinResult.usedTypeParameterNames,
+                inKotlin = originalResult.typeName,
+                inJava = canonicalType,
+                returnContext = returnContext,
+                usedTypeParameterNames = originalResult.usedTypeParameterNames,
             )
         }
 
         is TypeArgumentModel -> {
-            val kotlinResult = toXTypeName(forJava = false)
-            val javaResult = toXTypeName(forJava = true)
+            val originalResult = toXTypeName(canonical = false)
+            val canonicalType = toXTypeName(canonical = true).typeName
+            val isUnit = canonicalType is XVoidTypeName && !canonicalType.isBoxed
+            val returnContext = if (!isUnit) {
+                IrReturnContext(needsKotlinForwardCast = true)
+            } else null
             IrType(
-                inKotlin = kotlinResult.typeName,
-                inJava = javaResult.typeName,
-                isJavaErased = true,
-                usedTypeParameterNames = kotlinResult.usedTypeParameterNames,
+                inKotlin = originalResult.typeName,
+                inJava = canonicalType,
+                returnContext = returnContext,
+                usedTypeParameterNames = originalResult.usedTypeParameterNames,
             )
         }
     }
 
-    private fun TypeModel.toXTypeName(forJava: Boolean): XTypeResult = when (this) {
-        is ClassTypeModel -> toXTypeName(forJava)
+    private fun TypeModel.toXTypeName(canonical: Boolean): XTypeResult = when (this) {
+        is ClassTypeModel -> toXTypeName(canonical)
         is TypeArgumentModel -> {
-            if (forJava) {
-                val canonicalResult = canonicalType.toXTypeName(forJava = true)
+            if (canonical) {
+                val canonicalResult = canonicalType.toXTypeName(canonical = true)
                 XTypeResult(canonicalResult.typeName, erased = true)
             } else {
                 XTypeResult(
@@ -354,10 +365,10 @@ class Lowering(
         }
     }
 
-    private fun ClassTypeModel.toXTypeName(forJava: Boolean): XTypeResult {
-        val type = if (forJava && canonicalType != null) canonicalType else this
-        val detected = type.detectTypeName(forJava)
-        if (forJava && detected.typeName is XParameterizedTypeName) {
+    private fun ClassTypeModel.toXTypeName(canonical: Boolean): XTypeResult {
+        val type = if (canonical && canonicalType != null) canonicalType else this
+        val detected = type.detectTypeName(canonical)
+        if (canonical && detected.typeName is XParameterizedTypeName) {
             return XTypeResult(
                 typeName = detected.typeName.rawType,
                 erased = true,
@@ -367,10 +378,10 @@ class Lowering(
         return detected
     }
 
-    private fun ClassTypeModel.TypeArgument.toXTypeName(forJava: Boolean): XTypeResult = when (this) {
+    private fun ClassTypeModel.TypeArgument.toXTypeName(canonical: Boolean): XTypeResult = when (this) {
         is ClassTypeModel.StarProjectionArgument -> XTypeResult(poetesse.xStar())
         is ClassTypeModel.GenericTypeArgument -> {
-            val result = type.toXTypeName(forJava)
+            val result = type.toXTypeName(canonical)
             val typeName = when (variance) {
                 VarianceType.INVARIANT -> result.typeName
                 VarianceType.COVARIANT -> result.typeName.producer()
@@ -384,8 +395,8 @@ class Lowering(
         }
     }
 
-    private fun ClassTypeModel.detectTypeName(forJava: Boolean): XTypeResult {
-        val argumentResults = arguments.map { it.toXTypeName(forJava) }
+    private fun ClassTypeModel.detectTypeName(canonical: Boolean): XTypeResult {
+        val argumentResults = arguments.map { it.toXTypeName(canonical) }
         val xType = poetesse.xType(
             packageName = packageName,
             simpleNames = qualifiedName.removePrefix("$packageName.").split("."),

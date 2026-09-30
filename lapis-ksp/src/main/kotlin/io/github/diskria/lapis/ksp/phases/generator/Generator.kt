@@ -63,7 +63,7 @@ class Generator(
                         val prefixedMethod = method(kind.name) {
                             public()
                             abstract()
-                            kind.returnType?.let { returns(it.inJava) }
+                            returnsIfNeeded(kind.returnType)
                             kind.parameters.forEach { parameter(it.name, it.type.inJava) }
                         }
                         if (kMixinInterface != null) {
@@ -71,10 +71,9 @@ class Generator(
                                 annotation<Override>()
                                 public()
                                 default()
-                                kind.returnType?.let { returns(it.inJava) }
+                                val returner = returnsIfNeeded(kind.returnType)
                                 kind.parameters.forEach { parameter(it.name, it.type.inJava) }
                                 body {
-                                    val returner = if (kind.returnType != null) "return " else ""
                                     val callable = code { N(prefixedMethod) }
                                     val arguments = code { kind.parameters.joinToString { N(it.name) } }
                                     line { "$returner${L(callable)}(${L(arguments)})" }
@@ -88,11 +87,10 @@ class Generator(
                         method(kind.name) {
                             public()
                             if (kMixinInterface != null) default() else abstract()
-                            kind.returnType?.let { returns(it.inJava) }
+                            val returner = returnsIfNeeded(kind.returnType)
                             kind.parameters.forEach { parameter(it.name, it.type.inJava) }
                             if (kMixinInterface != null) {
                                 body {
-                                    val returner = if (kind.returnType != null) "return " else ""
                                     val receiver = code { "${T(kMixinInterface.className)}.super" }
                                     val callable = code { N(kind.sourceJvmName) }
                                     val arguments = code { kind.parameters.joinToString { N(it.name) } }
@@ -144,13 +142,12 @@ class Generator(
                         extension.typeVariables.forEach { +it }
                         extensionReceiver(extension.receiverType.inKotlin)
                         extension.parameters.forEach { parameter(it.name, it.type.inKotlin) }
-                        extension.returnType?.let { returns(it.inKotlin) }
+                        val returner = returnsIfNeeded(extension.returnType)
                         body {
-                            val returner = if (extension.returnType != null) "return " else ""
                             val callable = code { N(extension.name) }
                             val arguments = code { extension.parameters.joinToString { N(it.name) } }
-                            val cast = code { extension.returnType?.let { castIfNeeded(it) }.orEmpty() }
-                            line { "$returner${L(receiver)}.${L(callable)}(${L(arguments)})${L(cast)}" }
+                            val forwardCast = code { forwardCastIfNeeded(extension.returnType) }
+                            line { "$returner${L(receiver)}.${L(callable)}(${L(arguments)})${L(forwardCast)}" }
                         }
                     }
                 }
@@ -202,8 +199,8 @@ class Generator(
                                 expression {
                                     val receiver = code { N("duck") }
                                     val callable = code { N(shadow.getter.name) }
-                                    val cast = code { castIfNeeded(shadow.type) }
-                                    "${L(receiver)}.${L(callable)}()${L(cast)}"
+                                    val forwardCast = code { forwardCastIfNeeded(shadow.type) }
+                                    "${L(receiver)}.${L(callable)}()${L(forwardCast)}"
                                 }
                             }
                             shadow.setter?.let { setter ->
@@ -223,14 +220,13 @@ class Generator(
                             override()
                             shadow.typeVariables.forEach { +it }
                             shadow.parameters.forEach { parameter(it.name, it.type.inKotlin) }
-                            shadow.returnType?.let { returns(it.inKotlin) }
+                            val returner = returnsIfNeeded(shadow.returnType)
                             body {
-                                val returner = if (shadow.returnType != null) "return " else ""
                                 val receiver = code { N("duck") }
                                 val callable = code { N(shadow.name) }
                                 val arguments = code { shadow.parameters.joinToString { N(it.name) } }
-                                val cast = code { shadow.returnType?.let { castIfNeeded(it) }.orEmpty() }
-                                line { "$returner${L(receiver)}.${L(callable)}(${L(arguments)})${L(cast)}" }
+                                val forwardCast = code { forwardCastIfNeeded(shadow.returnType) }
+                                line { "$returner${L(receiver)}.${L(callable)}(${L(arguments)})${L(forwardCast)}" }
                             }
                         }
                     }
@@ -267,12 +263,12 @@ class Generator(
                                 method(kind.name) {
                                     annotation<Override>()
                                     public()
-                                    kind.returnType?.let { returns(it.inJava) }
+                                    val returner = returnsIfNeeded(kind.returnType)
                                     kind.parameters.forEach { parameter(it.name, it.type.inJava) }
                                     body {
                                         when (kind) {
                                             is IrMixinDuck.Property.Getter -> {
-                                                line { "return ${N(shadowField)}" }
+                                                line { "$returner${N(shadowField)}" }
                                             }
 
                                             is IrMixinDuck.Property.Setter -> {
@@ -288,7 +284,7 @@ class Generator(
                             val shadowMethod = method(shadow.mappingName) {
                                 annotations(shadow.annotations)
                                 shadow.modifiers.forEach { +it }
-                                shadow.returnType?.let { returns(it.inJava) }
+                                returnsIfNeeded(shadow.returnType)
                                 shadow.parameters.forEach { parameter(it.name, it.type.inJava) }
                                 if (JPModifier.STATIC in shadow.modifiers) {
                                     body { line { "throw new ${T<AssertionError>()}(${S("Stub!")})" } }
@@ -297,10 +293,9 @@ class Generator(
                             method(shadow.name) {
                                 annotation<Override>()
                                 public()
-                                shadow.returnType?.let { returns(it.inJava) }
+                                val returner = returnsIfNeeded(shadow.returnType)
                                 shadow.parameters.forEach { parameter(it.name, it.type.inJava) }
                                 body {
-                                    val returner = if (shadow.returnType != null) "return " else ""
                                     val callable = code { N(shadowMethod) }
                                     val arguments = code { shadow.parameters.joinToString { N(it.name) } }
                                     line { "$returner${L(callable)}(${L(arguments)})" }
@@ -315,10 +310,9 @@ class Generator(
                             method(kind.name) {
                                 annotation<Override>()
                                 public()
-                                kind.returnType?.let { returns(it.inJava) }
+                                val returner = returnsIfNeeded(kind.returnType)
                                 kind.parameters.forEach { parameter(it.name, it.type.inJava) }
                                 body {
-                                    val returner = if (kind.returnType != null) "return " else ""
                                     val callable = code { N(kind.sourceJvmName) }
                                     val arguments = code { kind.parameters.joinToString { N(it.name) } }
                                     line { "$returner${L(delegate)}.${L(callable)}(${L(arguments)})" }
@@ -439,7 +433,7 @@ class Generator(
                     val shadowMethod = method("shadow$${shadow.mappingName}") {
                         annotations(shadow.annotations)
                         shadow.modifiers.forEach { +it }
-                        shadow.returnType?.let { returns(it.inJava) }
+                        returnsIfNeeded(shadow.returnType)
                         shadow.parameters.forEach { parameter(it.name, it.type.inJava) }
                         if (JPModifier.STATIC in shadow.modifiers || JPModifier.PRIVATE in shadow.modifiers) {
                             body {
@@ -451,10 +445,9 @@ class Generator(
                         annotation<Override>()
                         public()
                         default()
-                        shadow.returnType?.let { returns(it.inJava) }
+                        val returner = returnsIfNeeded(shadow.returnType)
                         shadow.parameters.forEach { parameter(it.name, it.type.inJava) }
                         body {
-                            val returner = if (shadow.returnType != null) "return " else ""
                             val callable = code { N(shadowMethod) }
                             val arguments = code { shadow.parameters.joinToString { N(it.name) } }
                             line { "$returner${L(callable)}(${L(arguments)})" }
@@ -480,12 +473,11 @@ class Generator(
             annotations(injection.annotations)
             private()
             if (injection is IrMixin.StaticInjection) static()
-            injection.returnType?.let { returns(it.inJava) }
+            val returner = returnsIfNeeded(injection.returnType)
             injection.parameters.forEach { parameter ->
                 parameter(parameter.name, parameter.type.inJava) { annotations(parameter.annotations) }
             }
             body {
-                val returner = if (injection.returnType != null) "return " else ""
                 val callable = code { N(injection.sourceJvmName) }
                 val arguments = code {
                     buildList {
@@ -582,9 +574,22 @@ class Generator(
 private fun JavaCodeScope.unsafeCast(targetType: IrType): String =
     "(${T(targetType.inJava)}) (${T<Any>()}) this"
 
-private fun KotlinCodeScope.castIfNeeded(targetType: IrType): String =
-    if (targetType.isJavaErased) " as ${T(targetType.inKotlin)}"
-    else ""
+private fun KotlinCodeScope.forwardCastIfNeeded(targetType: IrType?): String =
+    if (targetType?.returnContext?.needsKotlinForwardCast == true) {
+        " as ${T(targetType.inKotlin)}"
+    } else ""
+
+private fun JavaMethodScope.returnsIfNeeded(type: IrType?): String =
+    if (type?.returnContext != null) {
+        returns(type.inJava)
+        "return "
+    } else ""
+
+private fun KotlinFunctionScope.returnsIfNeeded(type: IrType?): String =
+    if (type?.returnContext != null) {
+        returns(type.inKotlin)
+        "return "
+    } else ""
 
 private fun JavaTypeScope.suppressAllWarnings() {
     annotation<SuppressWarnings> {
