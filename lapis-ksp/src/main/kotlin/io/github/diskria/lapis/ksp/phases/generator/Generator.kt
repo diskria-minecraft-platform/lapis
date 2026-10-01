@@ -120,14 +120,14 @@ class Generator(
                         getter {
                             expression {
                                 val callable = code { N(extension.getter.name) }
-                                "${L(receiver)}.${L(callable)}()"
+                                "${L(receiver)}.${L(callable)}()".maybeReturnCastFromJavaTo(extension.type)
                             }
                         }
                         extension.setter?.let { setter ->
                             setter(setter.parameter.name) { newValue ->
                                 body {
                                     val callable = code { N(setter.name) }
-                                    val arguments = code { N(newValue) }
+                                    val arguments = code { N(newValue).maybeCastToJava(extension.type) }
                                     line { "${L(receiver)}.${L(callable)}(${L(arguments)})" }
                                 }
                             }
