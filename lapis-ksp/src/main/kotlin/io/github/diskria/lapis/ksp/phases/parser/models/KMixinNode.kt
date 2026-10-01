@@ -105,6 +105,7 @@ class ClassTypeNode(
     val qualifiedName: NameNode,
     val arguments: List<TypeArgument>,
     val canonicalType: ClassTypeNode?,
+    val functionalTypeDetails: FunctionalTypeDetails?,
     override val isNullable: Boolean,
     override val ksType: KSType,
     override val node: KSNode,
@@ -112,6 +113,15 @@ class ClassTypeNode(
     sealed interface TypeArgument : NodeHolder
     class StarProjectionArgument(override val node: KSNode) : TypeArgument
     class GenericTypeArgument(val type: TypeNode, val variance: VarianceType, override val node: KSNode) : TypeArgument
+
+    class FunctionalTypeDetails(
+        val receiverType: TypeNode?,
+        val parameters: List<Parameter>,
+        val returnType: TypeNode,
+        val isSuspend: Boolean,
+    ) {
+        class Parameter(val name: String?, val type: TypeNode)
+    }
 }
 
 class TypeArgumentNode(
@@ -125,8 +135,8 @@ class InvalidTypeNode(override val node: KSNode) : TypeNode
 
 class TypeParameterNode(
     val name: NameNode,
-    val isReified: Boolean,
     val bounds: List<TypeNode>,
+    val isReified: Boolean,
     override val node: KSNode,
 ) : NodeHolder
 

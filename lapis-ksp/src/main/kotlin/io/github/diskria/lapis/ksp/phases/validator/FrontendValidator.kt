@@ -597,71 +597,6 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             """.trimIndent()
         }
 
-    private fun TypeArgumentNode.findParameter(
-        name: String,
-        scopedTypeParameters: List<TypeParameterModel>,
-    ): TypeParameterModel = kspRequireNotNull(scopedTypeParameters.find { it.name == name }) {
-        "Type parameter '$name' not found in scope"
-    }
-
-    private fun ValidTypeNode.toModel(scopedTypeParameters: List<TypeParameterModel>): TypeModel = when (this) {
-        is ClassTypeNode -> toModel(scopedTypeParameters)
-        is TypeArgumentNode -> {
-            val name = name.validate().toModel()
-            val typeParameter = findParameter(name, scopedTypeParameters)
-            val canonicalType = resolveCanonicalType(typeParameter, scopedTypeParameters)
-            TypeArgumentModel(name = name, canonicalType = canonicalType, isNullable = isNullable)
-        }
-    }
-
-    private tailrec fun TypeArgumentNode.resolveCanonicalType(
-        typeParameter: TypeParameterModel,
-        scopedTypeParameters: List<TypeParameterModel>,
-        visited: Set<String> = emptySet(),
-    ): ClassTypeModel {
-        kspRequire(typeParameter.name !in visited) {
-            "Cyclic type parameter boundary detected for ${typeParameter.name}"
-        }
-        val firstBound = typeParameter.bounds.firstOrNull() ?: ClassTypeModel.NULLABLE_ANY
-        return when (firstBound) {
-            is ClassTypeModel -> firstBound
-            is TypeArgumentModel -> {
-                val nextTypeParameter = findParameter(firstBound.name, scopedTypeParameters)
-                resolveCanonicalType(nextTypeParameter, scopedTypeParameters, visited + typeParameter.name)
-            }
-        }
-    }
-
-    private fun ClassTypeNode.toModel(scopedTypeParameters: List<TypeParameterModel>): ClassTypeModel = ClassTypeModel(
-        packageName = kspRequireNotNull((packageName as? ValidNameNode)?.name) {
-            """
-            Class declarations must belong to a package.
-            Why: Java Mixin in a named package cannot access declarations in the default package.
-            How to fix: Move the class declaration into a named package.
-            """.trimIndent()
-        },
-        qualifiedName = kspRequireNotNull((qualifiedName as? ValidNameNode)?.name) {
-            """
-            Class declarations must have a fully qualified name; local classes are not supported.
-            Why: Java Mixin cannot access local class declarations.
-            How to fix: Move the class declaration out of the local scope.
-            """.trimIndent()
-        },
-        arguments = arguments.map { it.validate(scopedTypeParameters) },
-        canonicalType = canonicalType?.toModel(scopedTypeParameters),
-        isNullable = isNullable,
-    )
-
-    private fun ClassTypeNode.TypeArgument.validate(
-        scopedTypeParameters: List<TypeParameterModel>
-    ): ClassTypeModel.TypeArgument = when (this) {
-        is ClassTypeNode.StarProjectionArgument -> ClassTypeModel.StarProjectionArgument
-        is ClassTypeNode.GenericTypeArgument -> ClassTypeModel.GenericTypeArgument(
-            type = type.validate().toModel(scopedTypeParameters),
-            variance = variance,
-        )
-    }
-
     private fun List<TypeParameterNode>.validate(enclosing: List<TypeParameterModel>): List<TypeParameterModel> {
         val stubs = map { TypeParameterModel(name = it.name.validate().toModel(), bounds = emptyList()) }
         return validateAll { it.toModel(enclosing + stubs) }
@@ -680,6 +615,87 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             name = name,
             bounds = bounds.mapValid { it.validate().toModel(enclosing) },
         )
+    }
+
+    private fun ValidTypeNode.toModel(scopedTypeParameters: List<TypeParameterModel>): TypeModel = when (this) {
+        is ClassTypeNode -> toModel(scopedTypeParameters)
+        is TypeArgumentNode -> {
+            val name = name.validate().toModel()
+            val typeParameter = findParameter(name, scopedTypeParameters)
+            val canonicalType = resolveCanonicalType(typeParameter, scopedTypeParameters)
+            TypeArgumentModel(name = name, canonicalType = canonicalType, isNullable = isNullable)
+        }
+    }
+
+    private fun ClassTypeNode.toModel(scopedTypeParameters: List<TypeParameterModel>): ClassTypeModel {
+        val functionalTypeDetails = functionalTypeDetails?.let { details ->
+            kspRequire(!details.isSuspend) { "Suspend functional types are not supported." }
+            ClassTypeModel.FunctionalTypeDetails(
+                receiverType = details.receiverType?.validate()?.toModel(scopedTypeParameters),
+                parameters = details.parameters.map {
+                    ClassTypeModel.FunctionalTypeDetails.Parameter(
+                        name = it.name,
+                        type = it.type.validate().toModel(scopedTypeParameters),
+                    )
+                },
+                returnType = details.returnType.validate().toModel(scopedTypeParameters),
+            )
+        }
+        return ClassTypeModel(
+            packageName = kspRequireNotNull((packageName as? ValidNameNode)?.name) {
+                """
+                Class declarations must belong to a package.
+                Why: Java Mixin in a named package cannot access declarations in the default package.
+                How to fix: Move the class declaration into a named package.
+                """.trimIndent()
+            },
+            qualifiedName = kspRequireNotNull((qualifiedName as? ValidNameNode)?.name) {
+                """
+                Class declarations must have a fully qualified name; local classes are not supported.
+                Why: Java Mixin cannot access local class declarations.
+                How to fix: Move the class declaration out of the local scope.
+                """.trimIndent()
+            },
+            arguments = arguments.map { it.validate(scopedTypeParameters) },
+            canonicalType = canonicalType?.toModel(scopedTypeParameters),
+            functionalTypeDetails = functionalTypeDetails,
+            isNullable = isNullable,
+        )
+    }
+
+    private fun ClassTypeNode.TypeArgument.validate(
+        scopedTypeParameters: List<TypeParameterModel>
+    ): ClassTypeModel.TypeArgument = when (this) {
+        is ClassTypeNode.StarProjectionArgument -> ClassTypeModel.StarProjectionArgument
+        is ClassTypeNode.GenericTypeArgument -> ClassTypeModel.GenericTypeArgument(
+            type = type.validate().toModel(scopedTypeParameters),
+            variance = variance,
+        )
+    }
+
+    private fun TypeArgumentNode.findParameter(
+        name: String,
+        scopedTypeParameters: List<TypeParameterModel>,
+    ): TypeParameterModel = kspRequireNotNull(scopedTypeParameters.find { it.name == name }) {
+        "Type parameter '$name' not found in scope"
+    }
+
+    private tailrec fun TypeArgumentNode.resolveCanonicalType(
+        typeParameter: TypeParameterModel,
+        scopedTypeParameters: List<TypeParameterModel>,
+        visited: Set<String> = emptySet(),
+    ): ClassTypeModel {
+        kspRequire(typeParameter.name !in visited) {
+            "Cyclic type parameter boundary detected for ${typeParameter.name}"
+        }
+        val firstBound = typeParameter.bounds.firstOrNull() ?: ClassTypeModel.NULLABLE_ANY
+        return when (firstBound) {
+            is ClassTypeModel -> firstBound
+            is TypeArgumentModel -> {
+                val nextTypeParameter = findParameter(firstBound.name, scopedTypeParameters)
+                resolveCanonicalType(nextTypeParameter, scopedTypeParameters, visited + typeParameter.name)
+            }
+        }
     }
 
     private fun NameNode.validate(): ValidNameNode =

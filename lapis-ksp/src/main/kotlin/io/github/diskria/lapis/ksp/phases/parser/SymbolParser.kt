@@ -7,8 +7,10 @@ import io.github.diskria.lapis.annotations.KMixin
 import io.github.diskria.lapis.ksp.extensions.internalError
 import io.github.diskria.lapis.ksp.extensions.isSubpackageOf
 import io.github.diskria.lapis.ksp.extensions.qualifiedNameOf
+import io.github.diskria.lapis.ksp.extensions.simpleNameOf
 import io.github.diskria.lapis.ksp.phases.parser.models.*
 import io.github.diskria.lapis.ksp.utils.VarianceType
+import kotlin.reflect.KProperty1
 
 class SymbolParser(private val resolver: Resolver) {
 
@@ -221,6 +223,25 @@ class SymbolParser(private val resolver: Resolver) {
             expanded.canonicalType ?: expanded
         } else null
         if (declaration !is KSClassDeclaration && declaration !is KSTypeAlias) return InvalidTypeNode(siteNode)
+        val functionalTypeDetails = if (isFunctionType || isSuspendFunctionType) {
+            val parameters = arguments.toMutableList()
+            val returnType = parameters.removeLastOrNull()?.type?.parse(siteNode) ?: return InvalidTypeNode(siteNode)
+            val receiverType = if (annotations.hasAnnotation<ExtensionFunctionType>()) {
+                parameters.removeFirstOrNull()?.type?.parse(siteNode) ?: return InvalidTypeNode(siteNode)
+            } else null
+            ClassTypeNode.FunctionalTypeDetails(
+                receiverType = receiverType,
+                parameters = parameters.map { parameter ->
+                    val typeReference = parameter.type
+                    ClassTypeNode.FunctionalTypeDetails.Parameter(
+                        name = typeReference?.annotations?.findArgument(ParameterName::name),
+                        type = typeReference?.parse(siteNode) ?: InvalidTypeNode(siteNode)
+                    )
+                },
+                returnType = returnType,
+                isSuspend = isSuspendFunctionType,
+            )
+        } else null
         return ClassTypeNode(
             packageName = declaration.packageName.parse(siteNode),
             qualifiedName = declaration.qualifiedName.parse(siteNode),
@@ -239,6 +260,7 @@ class SymbolParser(private val resolver: Resolver) {
                 }
             },
             canonicalType = canonicalReference,
+            functionalTypeDetails = functionalTypeDetails,
             isNullable = isMarkedNullable,
             ksType = this,
             node = siteNode,
@@ -286,8 +308,8 @@ class SymbolParser(private val resolver: Resolver) {
     private fun List<KSTypeParameter>.parse() = map { typeParameter ->
         TypeParameterNode(
             name = typeParameter.name.parse(typeParameter),
-            isReified = typeParameter.isReified,
             bounds = typeParameter.bounds.map { it.parse() }.toList(),
+            isReified = typeParameter.isReified,
             node = typeParameter,
         )
     }
@@ -302,3 +324,24 @@ class SymbolParser(private val resolver: Resolver) {
         private const val API_ANNOTATIONS_PACKAGE = "io.github.diskria.lapis.annotations"
     }
 }
+
+private inline fun <reified A : Annotation> Sequence<KSAnnotation>.findAnnotation(): KSAnnotation? {
+    val expectedShortName = simpleNameOf<A>()
+    val expectedQualifiedName = qualifiedNameOf<A>()
+    return find { annotation ->
+        val annotationType = annotation.annotationType
+        if (annotation.shortName.asString() != expectedShortName) return@find false
+        if (annotationType.validate(enableNewFeatures = true)) {
+            annotationType.resolve().declaration.qualifiedName?.asString() == expectedQualifiedName
+        } else {
+            annotationType.toString() == "<ERROR TYPE: $expectedQualifiedName>"
+        }
+    }
+}
+
+private inline fun <reified A : Annotation> Sequence<KSAnnotation>.hasAnnotation(): Boolean =
+    findAnnotation<A>() != null
+
+private inline fun <reified A : Annotation> Sequence<KSAnnotation>.findArgument(
+    property: KProperty1<out A, String>
+): String? = findAnnotation<A>()?.arguments?.find { it.name?.asString() == property.name }?.value as? String

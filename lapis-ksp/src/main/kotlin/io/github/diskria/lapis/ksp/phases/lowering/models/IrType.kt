@@ -4,11 +4,10 @@ import io.github.diskria.poetesse.interop.XTypeName
 
 class IrType(
     val inKotlin: XTypeName,
-    val inJava: XTypeName = inKotlin,
-    val returnContext: IrReturnContext?,
-    val usedTypeParameterNames: Set<String>,
-)
-
-class IrReturnContext(
-    val needsKotlinForwardCast: Boolean,
-)
+    val inJava: XTypeName,
+    val castContext: CastContext,
+    val isReturnable: Boolean,
+    val isFunctionType: Boolean = false,
+) {
+    class CastContext(val toKotlin: XTypeName?, val toJava: XTypeName?)
+}

@@ -111,7 +111,7 @@ class Lowering(
     private fun KMixinModel.Class.ConstructorParameter.lower() = when (this) {
         is KMixinModel.Class.ConstructorParameter.Origin -> KMixinFirClass.ConstructorParameter.Origin(
             name = name,
-            type = type.lower(),
+            type = type.lower().irType,
         )
     }
 
@@ -120,22 +120,25 @@ class Lowering(
         enclosingTypeParameters: List<TypeParameterModel>,
     ) = when (this) {
         is KMixinModel.Extension.Property -> IrMixinDuck.Extension.Property(
-            type = type.lower(),
+            type = type.lower().irType,
             declaredName = declaredName,
             declaredGetterJvmName = getterJvmName,
             declaredSetterJvmName = setterJvmName,
             getterName = getterJvmName.withUniqueModPrefix(),
             setterName = setterJvmName?.withUniqueModPrefix(),
-            receiverType = targetType.lower(),
+            receiverType = targetType.lower().irType,
         )
 
         is KMixinModel.Extension.Function -> {
-            val loweredParameters = parameters.map { IrFunctionParameter(name = it.name, type = it.type.lower()) }
-            val loweredReturnType = returnType?.lower()
+            val allLoweredTypeResults = mutableSetOf<LoweredTypeResult>()
+            val loweredParameters = parameters.map { parameter ->
+                val loweredTypeResult = parameter.type.lower().also { allLoweredTypeResults += it }
+                IrFunctionParameter(name = parameter.name, type = loweredTypeResult.irType)
+            }
+            val loweredReturnTypeResult = returnType?.lower()?.also { allLoweredTypeResults += it }
             val functionTypeParameters = typeParameters
             val usedEnclosingTypeParameterNames = buildSet {
-                loweredParameters.forEach { addAll(it.type.usedTypeParameterNames) }
-                loweredReturnType?.let { addAll(it.usedTypeParameterNames) }
+                allLoweredTypeResults.forEach { addAll(it.usedTypeParameterNames) }
                 retainAll(enclosingTypeParameters.map { it.name }.toSet())
                 removeAll(functionTypeParameters.map { it.name }.toSet())
             }
@@ -148,7 +151,7 @@ class Lowering(
                     ClassTypeModel.StarProjectionArgument
                 }
             }
-            val receiverType = if (requiredEnclosingTypeParameters.isNotEmpty()) {
+            val receiverTypeModel = if (requiredEnclosingTypeParameters.isNotEmpty()) {
                 ClassTypeModel(
                     packageName = targetType.packageName,
                     qualifiedName = targetType.qualifiedName,
@@ -165,8 +168,8 @@ class Lowering(
                 sourceJvmName = jvmName,
                 name = jvmName.withUniqueModPrefix(),
                 parameters = loweredParameters,
-                returnType = loweredReturnType,
-                receiverType = receiverType.lower(),
+                returnType = loweredReturnTypeResult?.irType,
+                receiverType = receiverTypeModel.lower().irType,
                 typeVariables = requiredTypeParameters.lower(),
             )
         }
@@ -174,7 +177,7 @@ class Lowering(
 
     private fun KMixinModel.Shadow.lower(isInterface: Boolean) = when (this) {
         is KMixinModel.Shadow.Property -> IrMixinDuck.Shadow.Property(
-            type = type.lower(),
+            type = type.lower().irType,
             declaredName = declaredName,
             declaredGetterJvmName = getterJvmName,
             declaredSetterJvmName = setterJvmName,
@@ -202,10 +205,10 @@ class Lowering(
             parameters = parameters.map {
                 IrFunctionParameter(
                     name = it.name,
-                    type = it.type.lower(),
+                    type = it.type.lower().irType,
                 )
             },
-            returnType = returnType?.lower(),
+            returnType = returnType?.lower()?.irType,
             mappingName = mappingName,
             modifiers = modifiers.lowerToShadowModifiers(isInterface, isField = false),
             annotations = if (mixinAnnotations.isNotEmpty()) {
@@ -224,12 +227,12 @@ class Lowering(
         parameters = parameters.map { parameter ->
             IrMixin.Injection.Parameter(
                 parameter.name,
-                parameter.type.lower(),
+                parameter.type.lower().irType,
                 parameter.mixinAnnotations.map { it.lower() },
             )
         },
-        returnType = returnType?.lower(),
-        extensionReceiverTargetTypeCast = extensionReceiverType?.lower(),
+        returnType = returnType?.lower()?.irType,
+        extensionReceiverType = extensionReceiverType?.lower()?.irType,
     )
 
     private fun KMixinModel.Injection.lowerAsStatic(companion: KMixinModel.CompanionObject) = IrMixin.StaticInjection(
@@ -239,11 +242,11 @@ class Lowering(
         parameters = parameters.map { parameter ->
             IrMixin.Injection.Parameter(
                 parameter.name,
-                parameter.type.lower(),
+                parameter.type.lower().irType,
                 parameter.mixinAnnotations.map { it.lower() },
             )
         },
-        returnType = returnType?.lower(),
+        returnType = returnType?.lower()?.irType,
         kMixinCompanionObjectName = companion.name,
     )
 
@@ -306,47 +309,64 @@ class Lowering(
         map { typeParameter ->
             poetesse.xTypeVariable(
                 name = typeParameter.name,
-                bounds = typeParameter.bounds.map { it.lower().inKotlin },
+                bounds = typeParameter.bounds.map { it.lower().irType.inKotlin },
             )
         }
 
     private class XTypeResult(
-        val typeName: XTypeName,
-        val erased: Boolean = false,
+        val xType: XTypeName,
+        val isErased: Boolean = false,
         val usedTypeParameterNames: Set<String> = emptySet(),
     )
 
-    private fun TypeModel.lower(): IrType = when (this) {
+    private class LoweredTypeResult(
+        val irType: IrType,
+        val usedTypeParameterNames: Set<String>,
+    )
+
+    private fun TypeModel.lower(): LoweredTypeResult = when (this) {
         is ClassTypeModel -> {
-            val originalResult = toXTypeName(canonical = false)
-            val canonicalResult = toXTypeName(canonical = true)
-            val canonicalType = canonicalResult.typeName
-            val isUnit = canonicalType is XVoidTypeName && !canonicalType.isBoxed
-            val isNothing = canonicalType is XVoidTypeName && canonicalType.isNothing
-            val returnContext = if (!isUnit) {
-                IrReturnContext(needsKotlinForwardCast = canonicalResult.erased || isNothing)
-            } else null
-            IrType(
-                inKotlin = originalResult.typeName,
-                inJava = canonicalType,
-                returnContext = returnContext,
-                usedTypeParameterNames = originalResult.usedTypeParameterNames,
-            )
+            val originalXTypeResult = toXTypeName(canonical = false)
+            val originalXType = originalXTypeResult.xType
+            val canonicalXTypeResult = toXTypeName(canonical = true)
+            val canonicalXType = canonicalXTypeResult.xType
+            val irType = if (canonicalOrSelf.functionalTypeDetails != null) {
+                val originalToCanonicalXType = (canonicalXType as? XClassName)
+                    ?.takeIf { it.qualifiedName == XFunctionalTypeName.JVM_FUNCTION_N }
+                    ?.generic(poetesse.xStar())
+                IrType(
+                    inKotlin = originalXType,
+                    inJava = canonicalXType,
+                    castContext = IrType.CastContext(toKotlin = originalXType, toJava = originalToCanonicalXType),
+                    isReturnable = true,
+                    isFunctionType = true,
+                )
+            } else {
+                val isUnit = canonicalXType is XVoidTypeName && !canonicalXType.isBoxed
+                val isNothing = canonicalXType is XVoidTypeName && canonicalXType.isNothing
+                val canonicalToOriginalXType = if (canonicalXTypeResult.isErased || isNothing) originalXType else null
+                IrType(
+                    inKotlin = originalXType,
+                    inJava = canonicalXType,
+                    castContext = IrType.CastContext(toKotlin = canonicalToOriginalXType, toJava = null),
+                    isReturnable = !isUnit,
+                )
+            }
+            LoweredTypeResult(irType, originalXTypeResult.usedTypeParameterNames)
         }
 
         is TypeArgumentModel -> {
-            val originalResult = toXTypeName(canonical = false)
-            val canonicalType = toXTypeName(canonical = true).typeName
-            val isUnit = canonicalType is XVoidTypeName && !canonicalType.isBoxed
-            val returnContext = if (!isUnit) {
-                IrReturnContext(needsKotlinForwardCast = true)
-            } else null
-            IrType(
-                inKotlin = originalResult.typeName,
-                inJava = canonicalType,
-                returnContext = returnContext,
-                usedTypeParameterNames = originalResult.usedTypeParameterNames,
+            val originalXTypeResult = toXTypeName(canonical = false)
+            val originalXType = originalXTypeResult.xType
+            val canonicalXType = toXTypeName(canonical = true).xType
+            val isUnit = canonicalXType is XVoidTypeName && !canonicalXType.isBoxed
+            val irType = IrType(
+                inKotlin = originalXType,
+                inJava = canonicalXType,
+                castContext = IrType.CastContext(toKotlin = originalXType, toJava = null),
+                isReturnable = !isUnit,
             )
+            LoweredTypeResult(irType, originalXTypeResult.usedTypeParameterNames)
         }
     }
 
@@ -354,11 +374,14 @@ class Lowering(
         is ClassTypeModel -> toXTypeName(canonical)
         is TypeArgumentModel -> {
             if (canonical) {
-                val canonicalResult = canonicalType.toXTypeName(canonical = true)
-                XTypeResult(canonicalResult.typeName, erased = true)
+                val canonicalXTypeResult = canonicalType.toXTypeName(canonical = true)
+                XTypeResult(
+                    xType = canonicalXTypeResult.xType,
+                    isErased = true,
+                )
             } else {
                 XTypeResult(
-                    typeName = poetesse.xTypeVariable(name = name, nullable = isNullable),
+                    xType = poetesse.xTypeVariable(name = name, nullable = isNullable),
                     usedTypeParameterNames = setOf(name),
                 )
             }
@@ -366,12 +389,12 @@ class Lowering(
     }
 
     private fun ClassTypeModel.toXTypeName(canonical: Boolean): XTypeResult {
-        val type = if (canonical && canonicalType != null) canonicalType else this
+        val type = if (canonical) canonicalOrSelf else this
         val detected = type.detectTypeName(canonical)
-        if (canonical && detected.typeName is XParameterizedTypeName) {
+        if (canonical && detected.xType is XParameterizedTypeName) {
             return XTypeResult(
-                typeName = detected.typeName.rawType,
-                erased = true,
+                xType = detected.xType.rawType,
+                isErased = true,
                 usedTypeParameterNames = detected.usedTypeParameterNames,
             )
         }
@@ -381,32 +404,65 @@ class Lowering(
     private fun ClassTypeModel.TypeArgument.toXTypeName(canonical: Boolean): XTypeResult = when (this) {
         is ClassTypeModel.StarProjectionArgument -> XTypeResult(poetesse.xStar())
         is ClassTypeModel.GenericTypeArgument -> {
-            val result = type.toXTypeName(canonical)
-            val typeName = when (variance) {
-                VarianceType.INVARIANT -> result.typeName
-                VarianceType.COVARIANT -> result.typeName.producer()
-                VarianceType.CONTRAVARIANT -> result.typeName.consumer()
+            val xTypeResult = type.toXTypeName(canonical)
+            val xType = when (variance) {
+                VarianceType.INVARIANT -> xTypeResult.xType
+                VarianceType.COVARIANT -> xTypeResult.xType.producer()
+                VarianceType.CONTRAVARIANT -> xTypeResult.xType.consumer()
             }
             XTypeResult(
-                typeName = typeName,
-                erased = result.erased,
-                usedTypeParameterNames = result.usedTypeParameterNames,
+                xType = xType,
+                isErased = xTypeResult.isErased,
+                usedTypeParameterNames = xTypeResult.usedTypeParameterNames,
             )
         }
     }
 
     private fun ClassTypeModel.detectTypeName(canonical: Boolean): XTypeResult {
-        val argumentResults = arguments.map { it.toXTypeName(canonical) }
+        if (functionalTypeDetails != null) {
+            return functionalTypeDetails.toXTypeName(canonical = canonical, isNullable = isNullable)
+        }
+        val argumentXTypeResults = arguments.map { it.toXTypeName(canonical) }
         val xType = poetesse.xType(
             packageName = packageName,
             simpleNames = qualifiedName.removePrefix("$packageName.").split("."),
-            typeArguments = argumentResults.map { it.typeName },
+            typeArguments = argumentXTypeResults.map { it.xType },
             nullable = isNullable,
         )
         return XTypeResult(
-            typeName = xType,
-            erased = argumentResults.any { it.erased },
-            usedTypeParameterNames = argumentResults.flatMapTo(mutableSetOf()) { it.usedTypeParameterNames },
+            xType = xType,
+            isErased = argumentXTypeResults.any { it.isErased },
+            usedTypeParameterNames = if (canonical) {
+                emptySet()
+            } else {
+                argumentXTypeResults.flatMapTo(mutableSetOf()) { it.usedTypeParameterNames }
+            },
+        )
+    }
+
+    private fun ClassTypeModel.FunctionalTypeDetails.toXTypeName(canonical: Boolean, isNullable: Boolean): XTypeResult {
+        val allXTypeResults = mutableListOf<XTypeResult>()
+        val receiverXTypeResult = receiverType?.toXTypeName(canonical)?.also { allXTypeResults += it }
+        val xParameters = parameters.map { parameter ->
+            val typeResult = parameter.type.toXTypeName(canonical).also { allXTypeResults += it }
+            XParameter(name = parameter.name.orEmpty(), type = typeResult.xType)
+        }
+        val returnXTypeResult = returnType.toXTypeName(canonical).also { allXTypeResults += it }
+        val xFunctionalType = returnXTypeResult.xType.lambda(
+            receiver = receiverXTypeResult?.xType,
+            parameters = xParameters,
+            nullable = isNullable,
+        )
+        if (canonical) {
+            return XTypeResult(
+                xType = xFunctionalType.jvmRawClassName,
+                isErased = true,
+                usedTypeParameterNames = emptySet(),
+            )
+        }
+        return XTypeResult(
+            xType = xFunctionalType,
+            usedTypeParameterNames = allXTypeResults.flatMapTo(mutableSetOf()) { it.usedTypeParameterNames },
         )
     }
 

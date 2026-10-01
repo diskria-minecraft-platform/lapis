@@ -110,11 +110,23 @@ class ClassTypeModel(
     val qualifiedName: String,
     val arguments: List<TypeArgument> = emptyList(),
     val canonicalType: ClassTypeModel? = null,
+    val functionalTypeDetails: FunctionalTypeDetails? = null,
     override val isNullable: Boolean = false,
 ) : TypeModel {
+
+    val canonicalOrSelf: ClassTypeModel get() = canonicalType ?: this
+
     sealed interface TypeArgument
     object StarProjectionArgument : TypeArgument
     class GenericTypeArgument(val type: TypeModel, val variance: VarianceType = VarianceType.INVARIANT) : TypeArgument
+
+    class FunctionalTypeDetails(
+        val receiverType: TypeModel?,
+        val parameters: List<Parameter>,
+        val returnType: TypeModel,
+    ) {
+        class Parameter(val name: String?, val type: TypeModel)
+    }
 
     companion object {
         val NULLABLE_ANY = ClassTypeModel(packageName = "kotlin", qualifiedName = "kotlin.Any", isNullable = true)

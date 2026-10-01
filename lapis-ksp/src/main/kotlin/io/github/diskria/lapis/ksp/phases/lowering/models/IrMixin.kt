@@ -34,7 +34,7 @@ class IrMixin(
         override val annotations: List<IrAnnotation>,
         override val parameters: List<Parameter>,
         override val returnType: IrType?,
-        val extensionReceiverTargetTypeCast: IrType?
+        val extensionReceiverType: IrType?
     ) : Injection
 
     class StaticInjection(

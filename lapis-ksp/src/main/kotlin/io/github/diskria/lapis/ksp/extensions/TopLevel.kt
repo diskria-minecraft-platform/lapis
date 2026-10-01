@@ -8,4 +8,7 @@ fun internalError(message: String): Nothing =
     })
 
 inline fun <reified T : Any> qualifiedNameOf(): String =
-    T::class.qualifiedName ?: internalError("Failed to resolve qualified name for '${T::class.simpleName}'.")
+    T::class.qualifiedName ?: internalError("Failed to resolve qualified name for '${T::class}'.")
+
+inline fun <reified T : Any> simpleNameOf(): String =
+    T::class.simpleName ?: internalError("Failed to resolve simple name for '${T::class}'.")

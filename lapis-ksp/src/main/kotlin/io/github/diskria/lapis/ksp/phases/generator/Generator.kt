@@ -10,10 +10,7 @@ import io.github.diskria.lapis.ksp.phases.generator.models.GeneratedMixinsJson
 import io.github.diskria.lapis.ksp.phases.lowering.models.*
 import io.github.diskria.poetesse.Poetesse
 import io.github.diskria.poetesse.PoetesseFile
-import io.github.diskria.poetesse.interop.generic
-import io.github.diskria.poetesse.interop.nullable
-import io.github.diskria.poetesse.interop.withSuffix
-import io.github.diskria.poetesse.interop.xClass
+import io.github.diskria.poetesse.interop.*
 import io.github.diskria.poetesse.java.*
 import io.github.diskria.poetesse.kotlin.*
 import kotlinx.serialization.json.Json
@@ -35,7 +32,9 @@ class Generator(
         kMixins.forEach { kMixin ->
             kMixin.mixin.duck?.let {
                 generateMixinDuck(it, kMixin as? KMixinFirInterface)
-                generateExtensions(it, kMixin)
+                if (it.extensions.isNotEmpty()) {
+                    generateExtensions(it, kMixin)
+                }
             }
             when (kMixin) {
                 is KMixinFirClass -> {
@@ -105,15 +104,14 @@ class Generator(
     }.writeWith(aggregating = false, listOfNotNull(duck.originatingFile))
 
     // TODO: Migrate to FIR plugin
-    private fun generateExtensions(duck: IrMixinDuck, kMixin: KMixinFir): Unit = poetesse {
-        val extensions = duck.extensions.ifEmpty { return }
+    private fun generateExtensions(duck: IrMixinDuck, kMixin: KMixinFir) = poetesse {
         val receiver = kotlin.code { "(this as ${T(duck.className)})" }
         kotlin.file(kMixin.className.withSuffix("_Extensions")) {
             generatedMarker(
                 "Kotlin sugar providing zero-boilerplate access to the forwarded extensions in duck interface"
             )
             suppressAllWarnings()
-            extensions.forEach { extension ->
+            duck.extensions.forEach { extension ->
                 when (extension) {
                     is IrMixinDuck.Extension.Property -> property(extension.declaredName, extension.type.inKotlin) {
                         public()
@@ -141,13 +139,21 @@ class Generator(
                         inline()
                         extension.typeVariables.forEach { +it }
                         extensionReceiver(extension.receiverType.inKotlin)
-                        extension.parameters.forEach { parameter(it.name, it.type.inKotlin) }
+                        extension.parameters.forEach {
+                            parameter(it.name, it.type.inKotlin) {
+                                if (it.type.isFunctionType) noinline()
+                            }
+                        }
                         val returner = returnsIfNeeded(extension.returnType)
                         body {
                             val callable = code { N(extension.name) }
-                            val arguments = code { extension.parameters.joinToString { N(it.name) } }
-                            val forwardCast = code { forwardCastIfNeeded(extension.returnType) }
-                            line { "$returner${L(receiver)}.${L(callable)}(${L(arguments)})${L(forwardCast)}" }
+                            val arguments = code {
+                                extension.parameters.joinToString { N(it.name).maybeCastToJava(it.type) }
+                            }
+                            line {
+                                "$returner${L(receiver)}.${L(callable)}(${L(arguments)})"
+                                    .maybeReturnCastFromJavaTo(extension.returnType)
+                            }
                         }
                     }
                 }
@@ -199,8 +205,7 @@ class Generator(
                                 expression {
                                     val receiver = code { N("duck") }
                                     val callable = code { N(shadow.getter.name) }
-                                    val forwardCast = code { forwardCastIfNeeded(shadow.type) }
-                                    "${L(receiver)}.${L(callable)}()${L(forwardCast)}"
+                                    "${L(receiver)}.${L(callable)}()".maybeReturnCastFromJavaTo(shadow.type)
                                 }
                             }
                             shadow.setter?.let { setter ->
@@ -208,7 +213,7 @@ class Generator(
                                     body {
                                         val receiver = code { N("duck") }
                                         val callable = code { N(setter.name) }
-                                        val arguments = code { N(newValue) }
+                                        val arguments = code { N(newValue).maybeCastToJava(shadow.type) }
                                         line { "${L(receiver)}.${L(callable)}(${L(arguments)})" }
                                     }
                                 }
@@ -224,9 +229,13 @@ class Generator(
                             body {
                                 val receiver = code { N("duck") }
                                 val callable = code { N(shadow.name) }
-                                val arguments = code { shadow.parameters.joinToString { N(it.name) } }
-                                val forwardCast = code { forwardCastIfNeeded(shadow.returnType) }
-                                line { "$returner${L(receiver)}.${L(callable)}(${L(arguments)})${L(forwardCast)}" }
+                                val arguments = code {
+                                    shadow.parameters.joinToString { N(it.name).maybeCastToJava(it.type) }
+                                }
+                                line {
+                                    "$returner${L(receiver)}.${L(callable)}(${L(arguments)})"
+                                        .maybeReturnCastFromJavaTo(shadow.returnType)
+                                }
                             }
                         }
                     }
@@ -336,8 +345,8 @@ class Generator(
             kMixin.impl.className to code {
                 kMixin.impl.constructorParameters.joinToString { parameter ->
                     when (parameter) {
-                        is IrKMixinImpl.ConstructorParameter.Instance -> unsafeCast(parameter.type)
-                        is IrKMixinImpl.ConstructorParameter.Duck -> "this"
+                        is IrKMixinImpl.ConstructorParameter.Instance -> "this".unsafeCastTo(parameter.type)
+                        is IrKMixinImpl.ConstructorParameter.Duck -> "this".castTo(parameter.className)
                     }
                 }
             }
@@ -345,7 +354,7 @@ class Generator(
             kMixin.className to code {
                 kMixin.constructorParameters.joinToString { parameter ->
                     when (parameter) {
-                        is KMixinFirClass.ConstructorParameter.Origin -> unsafeCast(parameter.type)
+                        is KMixinFirClass.ConstructorParameter.Origin -> "this".unsafeCastTo(parameter.type)
                     }
                 }
             }
@@ -481,8 +490,8 @@ class Generator(
                 val callable = code { N(injection.sourceJvmName) }
                 val arguments = code {
                     buildList {
-                        if (injection is IrMixin.MemberInjection) {
-                            injection.extensionReceiverTargetTypeCast?.let { add(unsafeCast(it)) }
+                        if (injection is IrMixin.MemberInjection && injection.extensionReceiverType != null) {
+                            add("this".unsafeCastTo(injection.extensionReceiverType))
                         }
                         addAll(injection.parameters.map { N(it.name) })
                     }.joinToString()
@@ -571,22 +580,41 @@ class Generator(
     }
 }
 
-private fun JavaCodeScope.unsafeCast(targetType: IrType): String =
-    "(${T(targetType.inJava)}) (${T<Any>()}) this"
+context(scope: JavaCodeScope)
+private fun String.castTo(targetType: XTypeName): String = with(scope) {
+    "(${T(targetType)}) ${this@castTo}"
+}
 
-private fun KotlinCodeScope.forwardCastIfNeeded(targetType: IrType?): String =
-    if (targetType?.returnContext?.needsKotlinForwardCast == true) {
-        " as ${T(targetType.inKotlin)}"
-    } else ""
+context(scope: JavaCodeScope)
+private fun String.unsafeCastTo(targetType: IrType): String = with(scope) {
+    "(${T(targetType.inJava)}) (${T<Any>()}) ${this@unsafeCastTo}"
+}
+
+context(scope: KotlinCodeScope)
+private fun String.maybeCastFromJavaTo(targetType: IrType): String = with(scope) {
+    targetType.castContext.toKotlin?.let { "${this@maybeCastFromJavaTo} as ${T(it)}" }
+        ?: this@maybeCastFromJavaTo
+}
+
+context(scope: KotlinCodeScope)
+private fun String.maybeCastToJava(targetType: IrType): String = with(scope) {
+    targetType.castContext.toJava?.let { "${this@maybeCastToJava} as ${T(it)}" }
+        ?: this@maybeCastToJava
+}
+
+context(scope: KotlinCodeScope)
+private fun String.maybeReturnCastFromJavaTo(targetType: IrType?): String =
+    if (targetType != null && targetType.isReturnable) maybeCastFromJavaTo(targetType)
+    else this
 
 private fun JavaMethodScope.returnsIfNeeded(type: IrType?): String =
-    if (type?.returnContext != null) {
+    if (type != null && type.isReturnable) {
         returns(type.inJava)
         "return "
     } else ""
 
 private fun KotlinFunctionScope.returnsIfNeeded(type: IrType?): String =
-    if (type?.returnContext != null) {
+    if (type != null && type.isReturnable) {
         returns(type.inKotlin)
         "return "
     } else ""
