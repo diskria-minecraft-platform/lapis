@@ -31,7 +31,7 @@ class LapisSymbolProcessor(
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
         logger.setPhase(KspLogger.Phase.PARSING)
-        val nodes = SymbolParser(resolver).parseNodes()
+        val nodes = SymbolParser(resolver, logger).parseNodes()
 
         logger.setPhase(KspLogger.Phase.VALIDATION)
         val models = validator.validate(nodes).toList()

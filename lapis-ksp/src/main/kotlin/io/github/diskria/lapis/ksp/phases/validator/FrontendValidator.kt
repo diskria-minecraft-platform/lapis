@@ -243,6 +243,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             getterJvmName = getter.jvmName,
             setterJvmName = if (setter != null) kspRequireNotNull(setter.jvmName) { "" } else null,
             type = type.validate().toModel(enclosingTypeParameters),
+            contextParameters = contextParameters.mapValid { it.validate(enclosingTypeParameters) }
         )
     }
 
@@ -267,6 +268,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             parameters = parameters,
             returnType = returnType?.validate()?.toModel(scopedTypeParameters),
             typeParameters = localTypeParameters,
+            contextParameters = contextParameters.mapValid { it.validate(scopedTypeParameters) }
         )
     }
 
@@ -280,6 +282,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         kspRequire(!hasExtensionReceiver) { "" }
         kspRequireNotNull(getter) { "" }
         kspRequireNotNull(getter.jvmName) { "" }
+        kspRequire(contextParameters.isEmpty()) { "" }
         val declaredName = name.validate().toModel()
         val mappingNameArgument = annotations.findApiArgument(MappingName::name)
         validateJavaIdentifierName(declaredName, "@KShadow property name", mappingNameArgument == null)
@@ -308,6 +311,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         kspRequireNotNull(jvmName) { "" }
         kspRequire(isAbstract) { "" }
         kspRequire(extensionReceiverType == null) { "" }
+        kspRequire(contextParameters.isEmpty()) { "" }
         val declaredName = name.validate().toModel()
         val mappingNameArgument = annotations.findApiArgument(MappingName::name)
         validateJavaIdentifierName(declaredName, "@KShadow function name", mappingNameArgument == null)
@@ -346,15 +350,16 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             kspRequire(extensionReceiverType == null) { "" }
         }
         val scopedTypeParameters = typeParameters.validate(enclosingTypeParameters) + enclosingTypeParameters
-        val validType = extensionReceiverType
+        val extensionReceiverType = extensionReceiverType
             ?.validate()
-            ?.requireSubtypeOf(target = targetType, roleDesc = "Injection function extension receiver")
+            ?.requireSubtypeOf(target = targetType, roleDesc = "Injection extension receiver")
             ?.toModel(scopedTypeParameters)
         return KMixinModel.Injection(
             jvmName = jvmName,
-            extensionReceiverType = validType,
+            extensionReceiverType = extensionReceiverType,
             mixinAnnotations = mixinAnnotations,
             parameters = parameters.map { it.validateAsInjectionParameter(scopedTypeParameters) },
+            contextParameters = contextParameters.map { it.validateAsInjectionParameter(enclosingTypeParameters) },
             returnType = returnType?.validate()?.toModel(scopedTypeParameters),
         )
     }
@@ -365,6 +370,21 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         name = name.validate().toModel(),
         type = type.validate().toModel(enclosingTypeParameters),
         mixinAnnotations = annotations.filterMixinAnnotations().map { it.toModel() },
+    )
+
+    private fun ContextParameterNode.validateAsInjectionParameter(
+        enclosingTypeParameters: List<TypeParameterModel>,
+    ) = KMixinModel.Injection.Parameter(
+        name = name.validate().toModel(),
+        type = type.validate().toModel(enclosingTypeParameters),
+        mixinAnnotations = annotations.filterMixinAnnotations().map { it.toModel() },
+    )
+
+    private fun ContextParameterNode.validate(
+        enclosingTypeParameters: List<TypeParameterModel>,
+    ) = ContextParameterModel(
+        name = name.validate().toModel(),
+        type = type.validate().toModel(enclosingTypeParameters),
     )
 
     private fun NodeHolder.validateShadowModifiers(

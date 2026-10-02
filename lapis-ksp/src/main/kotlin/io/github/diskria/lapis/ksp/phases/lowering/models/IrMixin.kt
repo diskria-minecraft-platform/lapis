@@ -19,6 +19,7 @@ class IrMixin(
         val sourceJvmName: String
         val annotations: List<IrAnnotation>
         val parameters: List<Parameter>
+        val contextParameters: List<Parameter>
         val returnType: IrType?
 
         class Parameter(
@@ -33,6 +34,7 @@ class IrMixin(
         override val sourceJvmName: String,
         override val annotations: List<IrAnnotation>,
         override val parameters: List<Parameter>,
+        override val contextParameters: List<Parameter>,
         override val returnType: IrType?,
         val extensionReceiverType: IrType?
     ) : Injection
@@ -42,6 +44,7 @@ class IrMixin(
         override val sourceJvmName: String,
         override val annotations: List<IrAnnotation>,
         override val parameters: List<Parameter>,
+        override val contextParameters: List<Parameter>,
         override val returnType: IrType?,
         val kMixinCompanionObjectName: String,
     ) : Injection

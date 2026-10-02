@@ -87,12 +87,13 @@ class Generator(
                             public()
                             if (kMixinInterface != null) default() else abstract()
                             val returner = returnsIfNeeded(kind.returnType)
-                            kind.parameters.forEach { parameter(it.name, it.type.inJava) }
+                            val allParameters = extension.contextParameters + kind.parameters
+                            allParameters.forEach { parameter(it.name, it.type.inJava) }
                             if (kMixinInterface != null) {
                                 body {
                                     val receiver = code { "${T(kMixinInterface.className)}.super" }
                                     val callable = code { N(kind.sourceJvmName) }
-                                    val arguments = code { kind.parameters.joinToString { N(it.name) } }
+                                    val arguments = code { allParameters.joinToString { N(it.name) } }
                                     line { "$returner${L(receiver)}.${L(callable)}(${L(arguments)})" }
                                 }
                             }
@@ -114,20 +115,31 @@ class Generator(
             duck.extensions.forEach { extension ->
                 when (extension) {
                     is IrMixinDuck.Extension.Property -> property(extension.declaredName, extension.type.inKotlin) {
+                        extension.contextParameters.forEach { contextParameter(it.name, it.type.inKotlin) }
                         public()
                         inline()
                         extensionReceiver(extension.receiverType.inKotlin)
                         getter {
                             expression {
                                 val callable = code { N(extension.getter.name) }
-                                "${L(receiver)}.${L(callable)}()".maybeReturnCastFromJavaTo(extension.type)
+                                val arguments = code {
+                                    extension.contextParameters.joinToString { N(it.name).maybeCastToJava(it.type) }
+                                }
+                                "${L(receiver)}.${L(callable)}(${L(arguments)})"
+                                    .maybeReturnCastFromJavaTo(extension.type)
                             }
                         }
                         extension.setter?.let { setter ->
                             setter(setter.parameter.name) { newValue ->
                                 body {
                                     val callable = code { N(setter.name) }
-                                    val arguments = code { N(newValue).maybeCastToJava(extension.type) }
+                                    val arguments = code {
+                                        val nameToType = buildList {
+                                            addAll(extension.contextParameters.map { it.name to it.type })
+                                            add(newValue to extension.type)
+                                        }
+                                        nameToType.joinToString { (name, type) -> N(name).maybeCastToJava(type) }
+                                    }
                                     line { "${L(receiver)}.${L(callable)}(${L(arguments)})" }
                                 }
                             }
@@ -135,6 +147,7 @@ class Generator(
                     }
 
                     is IrMixinDuck.Extension.Function -> function(extension.declaredName) {
+                        extension.contextParameters.forEach { contextParameter(it.name, it.type.inKotlin) }
                         public()
                         inline()
                         extension.typeVariables.forEach { +it }
@@ -148,7 +161,8 @@ class Generator(
                         body {
                             val callable = code { N(extension.name) }
                             val arguments = code {
-                                extension.parameters.joinToString { N(it.name).maybeCastToJava(it.type) }
+                                (extension.contextParameters + extension.parameters)
+                                    .joinToString { N(it.name).maybeCastToJava(it.type) }
                             }
                             line {
                                 "$returner${L(receiver)}.${L(callable)}(${L(arguments)})"
@@ -320,10 +334,11 @@ class Generator(
                                 annotation<Override>()
                                 public()
                                 val returner = returnsIfNeeded(kind.returnType)
-                                kind.parameters.forEach { parameter(it.name, it.type.inJava) }
+                                val allParameters = extension.contextParameters + kind.parameters
+                                allParameters.forEach { parameter(it.name, it.type.inJava) }
                                 body {
                                     val callable = code { N(kind.sourceJvmName) }
-                                    val arguments = code { kind.parameters.joinToString { N(it.name) } }
+                                    val arguments = code { allParameters.joinToString { N(it.name) } }
                                     line { "$returner${L(delegate)}.${L(callable)}(${L(arguments)})" }
                                 }
                             }
@@ -483,7 +498,7 @@ class Generator(
             private()
             if (injection is IrMixin.StaticInjection) static()
             val returner = returnsIfNeeded(injection.returnType)
-            injection.parameters.forEach { parameter ->
+            (injection.parameters + injection.contextParameters).forEach { parameter ->
                 parameter(parameter.name, parameter.type.inJava) { annotations(parameter.annotations) }
             }
             body {
@@ -493,7 +508,7 @@ class Generator(
                         if (injection is IrMixin.MemberInjection && injection.extensionReceiverType != null) {
                             add("this".unsafeCastTo(injection.extensionReceiverType))
                         }
-                        addAll(injection.parameters.map { N(it.name) })
+                        addAll((injection.contextParameters + injection.parameters).map { N(it.name) })
                     }.joinToString()
                 }
                 line { "$returner${L(delegate)}.${L(callable)}(${L(arguments)})" }

@@ -119,18 +119,29 @@ class Lowering(
         targetType: ClassTypeModel,
         enclosingTypeParameters: List<TypeParameterModel>,
     ) = when (this) {
-        is KMixinModel.Extension.Property -> IrMixinDuck.Extension.Property(
-            type = type.lower().irType,
-            declaredName = declaredName,
-            declaredGetterJvmName = getterJvmName,
-            declaredSetterJvmName = setterJvmName,
-            getterName = getterJvmName.withUniqueModPrefix(),
-            setterName = setterJvmName?.withUniqueModPrefix(),
-            receiverType = targetType.lower().irType,
-        )
+        is KMixinModel.Extension.Property -> {
+            val loweredContextParameters = contextParameters.map { contextParameter ->
+                val loweredTypeResult = contextParameter.type.lower()
+                IrFunctionParameter(name = contextParameter.name, type = loweredTypeResult.irType)
+            }
+            IrMixinDuck.Extension.Property(
+                type = type.lower().irType,
+                declaredName = declaredName,
+                declaredGetterJvmName = getterJvmName,
+                declaredSetterJvmName = setterJvmName,
+                getterName = getterJvmName.withUniqueModPrefix(),
+                setterName = setterJvmName?.withUniqueModPrefix(),
+                receiverType = targetType.lower().irType,
+                contextParameters = loweredContextParameters,
+            )
+        }
 
         is KMixinModel.Extension.Function -> {
             val allLoweredTypeResults = mutableSetOf<LoweredTypeResult>()
+            val loweredContextParameters = contextParameters.map { contextParameter ->
+                val loweredTypeResult = contextParameter.type.lower().also { allLoweredTypeResults += it }
+                IrFunctionParameter(name = contextParameter.name, type = loweredTypeResult.irType)
+            }
             val loweredParameters = parameters.map { parameter ->
                 val loweredTypeResult = parameter.type.lower().also { allLoweredTypeResults += it }
                 IrFunctionParameter(name = parameter.name, type = loweredTypeResult.irType)
@@ -168,6 +179,7 @@ class Lowering(
                 sourceJvmName = jvmName,
                 name = jvmName.withUniqueModPrefix(),
                 parameters = loweredParameters,
+                contextParameters = loweredContextParameters,
                 returnType = loweredReturnTypeResult?.irType,
                 receiverType = receiverTypeModel.lower().irType,
                 typeVariables = requiredTypeParameters.lower(),
@@ -224,13 +236,8 @@ class Lowering(
         sourceJvmName = jvmName,
         name = jvmName.withUniqueModPrefix(),
         annotations = mixinAnnotations.map { it.lower() },
-        parameters = parameters.map { parameter ->
-            IrMixin.Injection.Parameter(
-                parameter.name,
-                parameter.type.lower().irType,
-                parameter.mixinAnnotations.map { it.lower() },
-            )
-        },
+        parameters = parameters.map { it.lower() },
+        contextParameters = contextParameters.map { it.lower() },
         returnType = returnType?.lower()?.irType,
         extensionReceiverType = extensionReceiverType?.lower()?.irType,
     )
@@ -239,15 +246,16 @@ class Lowering(
         sourceJvmName = jvmName,
         name = jvmName.withUniqueModPrefix(),
         annotations = mixinAnnotations.map { it.lower() },
-        parameters = parameters.map { parameter ->
-            IrMixin.Injection.Parameter(
-                parameter.name,
-                parameter.type.lower().irType,
-                parameter.mixinAnnotations.map { it.lower() },
-            )
-        },
+        parameters = parameters.map { it.lower() },
+        contextParameters = contextParameters.map { it.lower() },
         returnType = returnType?.lower()?.irType,
         kMixinCompanionObjectName = companion.name,
+    )
+
+    private fun KMixinModel.Injection.Parameter.lower() = IrMixin.Injection.Parameter(
+        name = name,
+        type = type.lower().irType,
+        annotations = mixinAnnotations.map { it.lower() },
     )
 
     private fun MixinAnnotationModel.lower() = IrAnnotation(

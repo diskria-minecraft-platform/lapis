@@ -36,11 +36,14 @@ class KMixinModel(
 
     sealed interface Extension {
 
+        val contextParameters: List<ContextParameterModel>
+
         class Property(
             override val declaredName: String,
             override val getterJvmName: String,
             override val setterJvmName: String?,
             override val type: TypeModel,
+            override val contextParameters: List<ContextParameterModel>,
         ) : DuckSourceModel.Property,
             Extension
 
@@ -50,6 +53,7 @@ class KMixinModel(
             override val parameters: List<FunctionParameterModel>,
             override val returnType: TypeModel?,
             override val typeParameters: List<TypeParameterModel>,
+            override val contextParameters: List<ContextParameterModel>,
         ) : DuckSourceModel.Function,
             Extension
     }
@@ -89,6 +93,7 @@ class KMixinModel(
         val extensionReceiverType: TypeModel?,
         val mixinAnnotations: List<MixinAnnotationModel>,
         val parameters: List<Parameter>,
+        val contextParameters: List<Parameter>,
         val returnType: TypeModel?,
     ) {
         class Parameter(
@@ -100,6 +105,11 @@ class KMixinModel(
 
     class CompanionObject(val name: String, val injections: List<Injection>)
 }
+
+class ContextParameterModel(
+    val name: String,
+    val type: TypeModel,
+)
 
 sealed interface TypeModel {
     val isNullable: Boolean

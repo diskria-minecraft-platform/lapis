@@ -18,7 +18,9 @@ class LapisSymbolProcessorProvider : SymbolProcessorProvider {
     override fun create(environment: SymbolProcessorEnvironment): SymbolProcessor {
         val logger = KspLogger(environment.logger)
         val kspOptions = parseOptions(environment.options, logger)
-        return LapisSymbolProcessor(kspOptions, environment.codeGenerator, logger)
+        return LapisSymbolProcessor(kspOptions, environment.codeGenerator, logger).apply {
+            environment.registerProcessorForNewFeatures(this)
+        }
     }
 
     private fun parseOptions(options: Map<String, String>, logger: KspLogger): KspOptions {

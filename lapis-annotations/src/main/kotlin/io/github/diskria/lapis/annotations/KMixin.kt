@@ -31,3 +31,8 @@ annotation class KShadow(vararg val modifiers: Modifier = [])
 @Target(FUNCTION, PROPERTY)
 @Retention(SOURCE)
 annotation class MappingName(val name: String)
+
+// TODO: Clean up the @ContextParams workaround
+@Target(FUNCTION, PROPERTY)
+@Retention(SOURCE)
+annotation class ContextParams(val count: Int)

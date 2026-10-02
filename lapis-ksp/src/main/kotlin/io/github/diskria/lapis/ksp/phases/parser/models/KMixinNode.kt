@@ -46,6 +46,7 @@ class KMixinNode(
         val isOpen: Boolean,
         val isAbstract: Boolean,
         val hasExtensionReceiver: Boolean,
+        val contextParameters: List<ContextParameterNode>,
         val typeParameters: List<TypeParameterNode>,
         val annotations: AnnotationNodeContainer,
         val getter: Getter?,
@@ -67,6 +68,7 @@ class KMixinNode(
         val name: NameNode,
         val jvmName: String?,
         val parameters: List<Parameter>,
+        val contextParameters: List<ContextParameterNode>,
         val returnType: TypeNode?,
         val isPublic: Boolean,
         val isOpen: Boolean,
@@ -92,6 +94,13 @@ class KMixinNode(
         override val node: KSNode,
     ) : NodeHolder
 }
+
+class ContextParameterNode(
+    val name: NameNode,
+    val type: TypeNode,
+    val annotations: AnnotationNodeContainer,
+    override val node: KSNode,
+) : NodeHolder
 
 sealed interface TypeNode : NodeHolder
 

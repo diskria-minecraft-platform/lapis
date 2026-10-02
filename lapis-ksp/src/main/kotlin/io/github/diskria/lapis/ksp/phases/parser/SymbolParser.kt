@@ -3,7 +3,9 @@ package io.github.diskria.lapis.ksp.phases.parser
 import com.google.devtools.ksp.*
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.symbol.*
+import io.github.diskria.lapis.annotations.ContextParams
 import io.github.diskria.lapis.annotations.KMixin
+import io.github.diskria.lapis.ksp.KspLogger
 import io.github.diskria.lapis.ksp.extensions.internalError
 import io.github.diskria.lapis.ksp.extensions.isSubpackageOf
 import io.github.diskria.lapis.ksp.extensions.qualifiedNameOf
@@ -12,7 +14,7 @@ import io.github.diskria.lapis.ksp.phases.parser.models.*
 import io.github.diskria.lapis.ksp.utils.VarianceType
 import kotlin.reflect.KProperty1
 
-class SymbolParser(private val resolver: Resolver) {
+class SymbolParser(private val resolver: Resolver, private val logger: KspLogger) {
 
     fun parseNodes(): Sequence<KMixinNode> =
         resolver
@@ -69,45 +71,102 @@ class SymbolParser(private val resolver: Resolver) {
     )
 
     @OptIn(KspExperimental::class)
-    private fun KSPropertyDeclaration.parse() = KMixinNode.Property(
-        name = simpleName.parse(type),
-        type = type.parse(),
-        isPublic = isPublic(),
-        isOpen = Modifier.OPEN in modifiers,
-        isAbstract = Modifier.ABSTRACT in modifiers,
-        hasExtensionReceiver = extensionReceiver != null,
-        getter = getter?.let {
-            KMixinNode.Property.Getter(
-                jvmName = resolver.getJvmName(it),
-                annotations = parseAnnotations(),
-            )
-        },
-        setter = setter?.takeIf { Modifier.PUBLIC in it.modifiers }?.let {
-            KMixinNode.Property.Setter(
-                jvmName = resolver.getJvmName(it),
-            )
-        },
-        typeParameters = typeParameters.parse(),
-        annotations = parseAnnotations(),
-        node = this,
-    )
+    private fun KSPropertyDeclaration.parse(): KMixinNode.Property {
+        // TODO: Clean up the @ContextParams workaround
+        val contextParameters = if (contextParameters.isNotEmpty()) {
+            logger.warn("KSP now supports context parameters. Time to clean up the @ContextParams workaround!", this)
+            contextParameters.map { it.parse() }
+        } else {
+            val contextParamsCount = annotations.findArgument(ContextParams::count) ?: 0
+            if (contextParamsCount < 0) {
+                logger.error("ContextParams count ($contextParamsCount) cannot be negative.", this)
+                emptyList()
+            } else {
+                List(contextParamsCount) { index ->
+                    ContextParameterNode(
+                        name = ValidNameNode("ctx$index", this),
+                        type = type.parse(),
+                        annotations = type.parseAnnotations(),
+                        node = this,
+                    )
+                }
+            }
+        }
+        return KMixinNode.Property(
+            name = simpleName.parse(type),
+            type = type.parse(),
+            isPublic = isPublic(),
+            isOpen = Modifier.OPEN in modifiers,
+            isAbstract = Modifier.ABSTRACT in modifiers,
+            hasExtensionReceiver = extensionReceiver != null,
+            getter = getter?.let {
+                KMixinNode.Property.Getter(
+                    jvmName = resolver.getJvmName(it),
+                    annotations = parseAnnotations(),
+                )
+            },
+            setter = setter?.takeUnless { Modifier.PRIVATE in it.modifiers }?.let {
+                KMixinNode.Property.Setter(
+                    jvmName = resolver.getJvmName(it),
+                )
+            },
+            contextParameters = contextParameters,
+            typeParameters = typeParameters.parse(),
+            annotations = parseAnnotations(),
+            node = this,
+        )
+    }
 
     @OptIn(KspExperimental::class)
-    private fun KSFunctionDeclaration.parseAsFunction() = KMixinNode.Function(
-        name = simpleName.parse(this),
-        jvmName = resolver.getJvmName(this),
-        parameters = parameters.map { it.parseAsFunctionParameter() },
-        returnType = returnType.parse(this),
-        isPublic = isPublic(),
-        isOpen = Modifier.OPEN in modifiers,
-        isAbstract = isAbstract,
-        extensionReceiverType = extensionReceiver?.parse(),
-        typeParameters = typeParameters.parse(),
+    private fun KSFunctionDeclaration.parseAsFunction(): KMixinNode.Function {
+        // TODO: Clean up the @ContextParams workaround
+        val (parameters, contextParameters) = if (contextParameters.isNotEmpty()) {
+            logger.warn("KSP now supports context parameters. Time to clean up the @ContextParams workaround!", this)
+            parameters.map { it.parseAsFunctionParameter() } to contextParameters.map { it.parse() }
+        } else {
+            val contextParamsCount = annotations.findArgument(ContextParams::count) ?: 0
+            if (contextParamsCount !in 0..parameters.size) {
+                logger.error("ContextParams count ($contextParamsCount) is out of range [0, ${parameters.size}].", this)
+                emptyList<KMixinNode.Function.Parameter>() to emptyList()
+            } else if (contextParamsCount > 0) {
+                val syntheticContexts = parameters.take(contextParamsCount).map { parameter ->
+                    ContextParameterNode(
+                        name = parameter.name.parse(parameter),
+                        type = parameter.type.parse(),
+                        annotations = parameter.parseAnnotations(),
+                        node = parameter,
+                    )
+                }
+                val remainingParameters = parameters.drop(contextParamsCount).map { it.parseAsFunctionParameter() }
+                remainingParameters to syntheticContexts
+            } else {
+                parameters.map { it.parseAsFunctionParameter() } to emptyList()
+            }
+        }
+        return KMixinNode.Function(
+            name = simpleName.parse(this),
+            jvmName = resolver.getJvmName(this),
+            parameters = parameters,
+            contextParameters = contextParameters,
+            returnType = returnType.parse(this),
+            isPublic = isPublic(),
+            isOpen = Modifier.OPEN in modifiers,
+            isAbstract = isAbstract,
+            extensionReceiverType = extensionReceiver?.parse(),
+            typeParameters = typeParameters.parse(),
+            annotations = parseAnnotations(),
+            node = this,
+        )
+    }
+
+    private fun KSValueParameter.parseAsFunctionParameter() = KMixinNode.Function.Parameter(
+        name = name.parse(this),
+        type = type.parse(),
         annotations = parseAnnotations(),
         node = this,
     )
 
-    private fun KSValueParameter.parseAsFunctionParameter() = KMixinNode.Function.Parameter(
+    private fun KSContextParameter.parse() = ContextParameterNode(
         name = name.parse(this),
         type = type.parse(),
         annotations = parseAnnotations(),
@@ -342,6 +401,6 @@ private inline fun <reified A : Annotation> Sequence<KSAnnotation>.findAnnotatio
 private inline fun <reified A : Annotation> Sequence<KSAnnotation>.hasAnnotation(): Boolean =
     findAnnotation<A>() != null
 
-private inline fun <reified A : Annotation> Sequence<KSAnnotation>.findArgument(
-    property: KProperty1<out A, String>
-): String? = findAnnotation<A>()?.arguments?.find { it.name?.asString() == property.name }?.value as? String
+private inline fun <reified A : Annotation, reified V> Sequence<KSAnnotation>.findArgument(
+    property: KProperty1<out A, V>
+): V? = findAnnotation<A>()?.arguments?.find { it.name?.asString() == property.name }?.value as? V
