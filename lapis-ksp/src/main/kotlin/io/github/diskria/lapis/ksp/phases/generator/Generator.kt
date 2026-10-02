@@ -118,6 +118,7 @@ class Generator(
                         extension.contextParameters.forEach { contextParameter(it.name, it.type.inKotlin) }
                         public()
                         inline()
+                        extension.typeVariables.forEach { +it }
                         extensionReceiver(extension.receiverType.inKotlin)
                         getter {
                             expression {

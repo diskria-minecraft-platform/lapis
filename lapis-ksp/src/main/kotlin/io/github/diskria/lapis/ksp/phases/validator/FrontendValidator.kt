@@ -237,13 +237,15 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         kspRequire(isPublic) { "" }
         kspRequire(!hasExtensionReceiver) { "" }
         kspRequire(!isOpen && !isAbstract) { "" }
-        kspRequire(typeParameters.isEmpty()) { "" }
+        val localTypeParameters = typeParameters.validate(enclosingTypeParameters)
+        val scopedTypeParameters = localTypeParameters + enclosingTypeParameters
         return KMixinModel.Extension.Property(
             declaredName = name.validate().toModel(),
             getterJvmName = getter.jvmName,
             setterJvmName = if (setter != null) kspRequireNotNull(setter.jvmName) { "" } else null,
-            type = type.validate().toModel(enclosingTypeParameters),
-            contextParameters = contextParameters.mapValid { it.validate(enclosingTypeParameters) }
+            type = type.validate().toModel(scopedTypeParameters),
+            typeParameters = localTypeParameters,
+            contextParameters = contextParameters.mapValid { it.validate(scopedTypeParameters) }
         )
     }
 

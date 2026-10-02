@@ -120,38 +120,17 @@ class Lowering(
         enclosingTypeParameters: List<TypeParameterModel>,
     ) = when (this) {
         is KMixinModel.Extension.Property -> {
-            val loweredContextParameters = contextParameters.map { contextParameter ->
-                val loweredTypeResult = contextParameter.type.lower()
-                IrFunctionParameter(name = contextParameter.name, type = loweredTypeResult.irType)
-            }
-            IrMixinDuck.Extension.Property(
-                type = type.lower().irType,
-                declaredName = declaredName,
-                declaredGetterJvmName = getterJvmName,
-                declaredSetterJvmName = setterJvmName,
-                getterName = getterJvmName.withUniqueModPrefix(),
-                setterName = setterJvmName?.withUniqueModPrefix(),
-                receiverType = targetType.lower().irType,
-                contextParameters = loweredContextParameters,
-            )
-        }
-
-        is KMixinModel.Extension.Function -> {
             val allLoweredTypeResults = mutableSetOf<LoweredTypeResult>()
             val loweredContextParameters = contextParameters.map { contextParameter ->
                 val loweredTypeResult = contextParameter.type.lower().also { allLoweredTypeResults += it }
                 IrFunctionParameter(name = contextParameter.name, type = loweredTypeResult.irType)
             }
-            val loweredParameters = parameters.map { parameter ->
-                val loweredTypeResult = parameter.type.lower().also { allLoweredTypeResults += it }
-                IrFunctionParameter(name = parameter.name, type = loweredTypeResult.irType)
-            }
-            val loweredReturnTypeResult = returnType?.lower()?.also { allLoweredTypeResults += it }
-            val functionTypeParameters = typeParameters
+            val loweredTypeResult = type.lower().also { allLoweredTypeResults += it }
+            val localTypeParameters = typeParameters
             val usedEnclosingTypeParameterNames = buildSet {
                 allLoweredTypeResults.forEach { addAll(it.usedTypeParameterNames) }
                 retainAll(enclosingTypeParameters.map { it.name }.toSet())
-                removeAll(functionTypeParameters.map { it.name }.toSet())
+                removeAll(localTypeParameters.map { it.name }.toSet())
             }
             val requiredEnclosingTypeParameters = mutableListOf<TypeParameterModel>()
             val enclosingTypeArguments = enclosingTypeParameters.map { typeParameter ->
@@ -173,7 +152,58 @@ class Lowering(
             } else {
                 targetType
             }
-            val requiredTypeParameters = requiredEnclosingTypeParameters + functionTypeParameters
+            val requiredTypeParameters = requiredEnclosingTypeParameters + localTypeParameters
+            IrMixinDuck.Extension.Property(
+                type = loweredTypeResult.irType,
+                declaredName = declaredName,
+                declaredGetterJvmName = getterJvmName,
+                declaredSetterJvmName = setterJvmName,
+                getterName = getterJvmName.withUniqueModPrefix(),
+                setterName = setterJvmName?.withUniqueModPrefix(),
+                receiverType = receiverTypeModel.lower().irType,
+                contextParameters = loweredContextParameters,
+                typeVariables = requiredTypeParameters.lower(),
+            )
+        }
+
+        is KMixinModel.Extension.Function -> {
+            val allLoweredTypeResults = mutableSetOf<LoweredTypeResult>()
+            val loweredContextParameters = contextParameters.map { contextParameter ->
+                val loweredTypeResult = contextParameter.type.lower().also { allLoweredTypeResults += it }
+                IrFunctionParameter(name = contextParameter.name, type = loweredTypeResult.irType)
+            }
+            val loweredParameters = parameters.map { parameter ->
+                val loweredTypeResult = parameter.type.lower().also { allLoweredTypeResults += it }
+                IrFunctionParameter(name = parameter.name, type = loweredTypeResult.irType)
+            }
+            val loweredReturnTypeResult = returnType?.lower()?.also { allLoweredTypeResults += it }
+            val localTypeParameters = typeParameters
+            val usedEnclosingTypeParameterNames = buildSet {
+                allLoweredTypeResults.forEach { addAll(it.usedTypeParameterNames) }
+                retainAll(enclosingTypeParameters.map { it.name }.toSet())
+                removeAll(localTypeParameters.map { it.name }.toSet())
+            }
+            val requiredEnclosingTypeParameters = mutableListOf<TypeParameterModel>()
+            val enclosingTypeArguments = enclosingTypeParameters.map { typeParameter ->
+                if (typeParameter.name in usedEnclosingTypeParameterNames) {
+                    requiredEnclosingTypeParameters.add(typeParameter)
+                    ClassTypeModel.GenericTypeArgument(TypeArgumentModel(typeParameter.name))
+                } else {
+                    ClassTypeModel.StarProjectionArgument
+                }
+            }
+            val receiverTypeModel = if (requiredEnclosingTypeParameters.isNotEmpty()) {
+                ClassTypeModel(
+                    packageName = targetType.packageName,
+                    qualifiedName = targetType.qualifiedName,
+                    arguments = enclosingTypeArguments,
+                    canonicalType = targetType.canonicalType,
+                    isNullable = targetType.isNullable,
+                )
+            } else {
+                targetType
+            }
+            val requiredTypeParameters = requiredEnclosingTypeParameters + localTypeParameters
             IrMixinDuck.Extension.Function(
                 declaredName = declaredName,
                 sourceJvmName = jvmName,

@@ -36,6 +36,7 @@ class KMixinModel(
 
     sealed interface Extension {
 
+        val typeParameters: List<TypeParameterModel>
         val contextParameters: List<ContextParameterModel>
 
         class Property(
@@ -43,6 +44,7 @@ class KMixinModel(
             override val getterJvmName: String,
             override val setterJvmName: String?,
             override val type: TypeModel,
+            override val typeParameters: List<TypeParameterModel>,
             override val contextParameters: List<ContextParameterModel>,
         ) : DuckSourceModel.Property,
             Extension

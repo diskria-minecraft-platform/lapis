@@ -76,6 +76,7 @@ class IrMixinDuck(
 
         val receiverType: IrType
         val contextParameters: List<IrFunctionParameter>
+        val typeVariables: List<XTypeVariableName>
 
         class Property(
             override val declaredName: String,
@@ -86,6 +87,7 @@ class IrMixinDuck(
             override val setterName: String?,
             override val receiverType: IrType,
             override val contextParameters: List<IrFunctionParameter>,
+            override val typeVariables: List<XTypeVariableName>,
         ) : IrMixinDuck.Property,
             Extension
 
