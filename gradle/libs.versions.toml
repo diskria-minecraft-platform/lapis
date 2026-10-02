@@ -1,7 +1,7 @@
 [versions]
 auto-service = "1.2.0"
 auto-service-annotations = "1.1.1"
-ksp = "2.3.12"
+ksp = "2.3.13-SNAPSHOT" # TODO: Required for Context Parameters support. Switch to stable once out.
 poetesse = "0.1.6-SNAPSHOT"
 kotlin-serialization-json = "1.11.0"
 
