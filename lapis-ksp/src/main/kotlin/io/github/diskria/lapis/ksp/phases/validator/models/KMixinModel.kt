@@ -122,7 +122,7 @@ class ClassTypeModel(
     val qualifiedName: String,
     val arguments: List<TypeArgument> = emptyList(),
     val canonicalType: ClassTypeModel? = null,
-    val functionalTypeDetails: FunctionalTypeDetails? = null,
+    val functionalType: FunctionalType? = null,
     override val isNullable: Boolean = false,
 ) : TypeModel {
 
@@ -132,7 +132,8 @@ class ClassTypeModel(
     object StarProjectionArgument : TypeArgument
     class GenericTypeArgument(val type: TypeModel, val variance: VarianceType = VarianceType.INVARIANT) : TypeArgument
 
-    class FunctionalTypeDetails(
+    class FunctionalType(
+        val contextTypes: List<TypeModel>,
         val receiverType: TypeModel?,
         val parameters: List<Parameter>,
         val returnType: TypeModel,

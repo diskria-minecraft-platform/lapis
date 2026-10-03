@@ -238,14 +238,14 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         kspRequire(!hasExtensionReceiver) { "" }
         kspRequire(!isOpen && !isAbstract) { "" }
         val localTypeParameters = typeParameters.validate(enclosingTypeParameters)
-        val scopedTypeParameters = localTypeParameters + enclosingTypeParameters
+        val scopeTypeParameters = localTypeParameters + enclosingTypeParameters
         return KMixinModel.Extension.Property(
             declaredName = name.validate().toModel(),
             getterJvmName = getter.jvmName,
             setterJvmName = if (setter != null) kspRequireNotNull(setter.jvmName) { "" } else null,
-            type = type.validate().toModel(scopedTypeParameters),
+            type = type.validate().toModel(scopeTypeParameters),
             typeParameters = localTypeParameters,
-            contextParameters = contextParameters.mapValid { it.validate(scopedTypeParameters) }
+            contextParameters = contextParameters.mapValid { it.validate(scopeTypeParameters) }
         )
     }
 
@@ -257,20 +257,20 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         kspRequire(extensionReceiverType == null) { "" }
         kspRequire(!isOpen && !isAbstract) { "" }
         val localTypeParameters = typeParameters.validate(enclosingTypeParameters)
-        val scopedTypeParameters = localTypeParameters + enclosingTypeParameters
+        val scopeTypeParameters = localTypeParameters + enclosingTypeParameters
         val parameters = parameters.map {
             FunctionParameterModel(
                 name = it.name.validate().toModel(),
-                type = it.type.validate().toModel(scopedTypeParameters),
+                type = it.type.validate().toModel(scopeTypeParameters),
             )
         }
         return KMixinModel.Extension.Function(
             declaredName = name.validate().toModel(),
             jvmName = jvmName,
             parameters = parameters,
-            returnType = returnType?.validate()?.toModel(scopedTypeParameters),
+            returnType = returnType?.validate()?.toModel(scopeTypeParameters),
             typeParameters = localTypeParameters,
-            contextParameters = contextParameters.mapValid { it.validate(scopedTypeParameters) }
+            contextParameters = contextParameters.mapValid { it.validate(scopeTypeParameters) }
         )
     }
 
@@ -322,7 +322,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         } ?: declaredName
         val modifiersArgument = annotations.findApiArgument(KShadow::modifiers)
         val localTypeParameters = typeParameters.validate(enclosingTypeParameters)
-        val scopedTypeParameters = localTypeParameters + enclosingTypeParameters
+        val scopeTypeParameters = localTypeParameters + enclosingTypeParameters
         return KMixinModel.Shadow.Function(
             declaredName = declaredName,
             jvmName = jvmName,
@@ -330,10 +330,10 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             parameters = parameters.map {
                 FunctionParameterModel(
                     name = it.name.validate().toModel(),
-                    type = it.type.validate().toModel(scopedTypeParameters),
+                    type = it.type.validate().toModel(scopeTypeParameters),
                 )
             },
-            returnType = returnType?.validate()?.toModel(scopedTypeParameters),
+            returnType = returnType?.validate()?.toModel(scopeTypeParameters),
             mixinAnnotations = mixinAnnotations,
             modifiers = validateShadowModifiers(modifiersArgument?.elements.orEmpty(), isInterface, isProperty = false),
             typeParameters = localTypeParameters,
@@ -351,18 +351,18 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         if (isInCompanionObject) {
             kspRequire(extensionReceiverType == null) { "" }
         }
-        val scopedTypeParameters = typeParameters.validate(enclosingTypeParameters) + enclosingTypeParameters
+        val scopeTypeParameters = typeParameters.validate(enclosingTypeParameters) + enclosingTypeParameters
         val extensionReceiverType = extensionReceiverType
             ?.validate()
             ?.requireSubtypeOf(target = targetType, roleDesc = "Injection extension receiver")
-            ?.toModel(scopedTypeParameters)
+            ?.toModel(scopeTypeParameters)
         return KMixinModel.Injection(
             jvmName = jvmName,
             extensionReceiverType = extensionReceiverType,
             mixinAnnotations = mixinAnnotations,
-            parameters = parameters.map { it.validateAsInjectionParameter(scopedTypeParameters) },
+            parameters = parameters.map { it.validateAsInjectionParameter(scopeTypeParameters) },
             contextParameters = contextParameters.map { it.validateAsInjectionParameter(enclosingTypeParameters) },
-            returnType = returnType?.validate()?.toModel(scopedTypeParameters),
+            returnType = returnType?.validate()?.toModel(scopeTypeParameters),
         )
     }
 
@@ -639,28 +639,29 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         )
     }
 
-    private fun ValidTypeNode.toModel(scopedTypeParameters: List<TypeParameterModel>): TypeModel = when (this) {
-        is ClassTypeNode -> toModel(scopedTypeParameters)
+    private fun ValidTypeNode.toModel(scopeTypeParameters: List<TypeParameterModel>): TypeModel = when (this) {
+        is ClassTypeNode -> toModel(scopeTypeParameters)
         is TypeArgumentNode -> {
             val name = name.validate().toModel()
-            val typeParameter = findParameter(name, scopedTypeParameters)
-            val canonicalType = resolveCanonicalType(typeParameter, scopedTypeParameters)
+            val typeParameter = findParameter(name, scopeTypeParameters)
+            val canonicalType = resolveCanonicalType(typeParameter, scopeTypeParameters)
             TypeArgumentModel(name = name, canonicalType = canonicalType, isNullable = isNullable)
         }
     }
 
-    private fun ClassTypeNode.toModel(scopedTypeParameters: List<TypeParameterModel>): ClassTypeModel {
-        val functionalTypeDetails = functionalTypeDetails?.let { details ->
-            kspRequire(!details.isSuspend) { "Suspend functional types are not supported." }
-            ClassTypeModel.FunctionalTypeDetails(
-                receiverType = details.receiverType?.validate()?.toModel(scopedTypeParameters),
-                parameters = details.parameters.map {
-                    ClassTypeModel.FunctionalTypeDetails.Parameter(
+    private fun ClassTypeNode.toModel(scopeTypeParameters: List<TypeParameterModel>): ClassTypeModel {
+        val functionalType = functionalType?.let { type ->
+            kspRequire(!type.isSuspend) { "Suspend functional types are not supported." }
+            ClassTypeModel.FunctionalType(
+                contextTypes = type.contextTypes.map { it.validate().toModel(scopeTypeParameters) },
+                receiverType = type.receiverType?.validate()?.toModel(scopeTypeParameters),
+                parameters = type.parameters.map {
+                    ClassTypeModel.FunctionalType.Parameter(
                         name = it.name,
-                        type = it.type.validate().toModel(scopedTypeParameters),
+                        type = it.type.validate().toModel(scopeTypeParameters),
                     )
                 },
-                returnType = details.returnType.validate().toModel(scopedTypeParameters),
+                returnType = type.returnType.validate().toModel(scopeTypeParameters),
             )
         }
         return ClassTypeModel(
@@ -678,33 +679,33 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
                 How to fix: Move the class declaration out of the local scope.
                 """.trimIndent()
             },
-            arguments = arguments.map { it.validate(scopedTypeParameters) },
-            canonicalType = canonicalType?.toModel(scopedTypeParameters),
-            functionalTypeDetails = functionalTypeDetails,
+            arguments = arguments.map { it.validate(scopeTypeParameters) },
+            canonicalType = canonicalType?.toModel(scopeTypeParameters),
+            functionalType = functionalType,
             isNullable = isNullable,
         )
     }
 
     private fun ClassTypeNode.TypeArgument.validate(
-        scopedTypeParameters: List<TypeParameterModel>
+        scopeTypeParameters: List<TypeParameterModel>
     ): ClassTypeModel.TypeArgument = when (this) {
         is ClassTypeNode.StarProjectionArgument -> ClassTypeModel.StarProjectionArgument
         is ClassTypeNode.GenericTypeArgument -> ClassTypeModel.GenericTypeArgument(
-            type = type.validate().toModel(scopedTypeParameters),
+            type = type.validate().toModel(scopeTypeParameters),
             variance = variance,
         )
     }
 
     private fun TypeArgumentNode.findParameter(
         name: String,
-        scopedTypeParameters: List<TypeParameterModel>,
-    ): TypeParameterModel = kspRequireNotNull(scopedTypeParameters.find { it.name == name }) {
+        scopeTypeParameters: List<TypeParameterModel>,
+    ): TypeParameterModel = kspRequireNotNull(scopeTypeParameters.find { it.name == name }) {
         "Type parameter '$name' not found in scope"
     }
 
     private tailrec fun TypeArgumentNode.resolveCanonicalType(
         typeParameter: TypeParameterModel,
-        scopedTypeParameters: List<TypeParameterModel>,
+        scopeTypeParameters: List<TypeParameterModel>,
         visited: Set<String> = emptySet(),
     ): ClassTypeModel {
         kspRequire(typeParameter.name !in visited) {
@@ -714,8 +715,8 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         return when (firstBound) {
             is ClassTypeModel -> firstBound
             is TypeArgumentModel -> {
-                val nextTypeParameter = findParameter(firstBound.name, scopedTypeParameters)
-                resolveCanonicalType(nextTypeParameter, scopedTypeParameters, visited + typeParameter.name)
+                val nextTypeParameter = findParameter(firstBound.name, scopeTypeParameters)
+                resolveCanonicalType(nextTypeParameter, scopeTypeParameters, visited + typeParameter.name)
             }
         }
     }

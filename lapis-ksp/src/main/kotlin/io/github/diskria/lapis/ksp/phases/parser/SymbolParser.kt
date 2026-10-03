@@ -74,7 +74,9 @@ class SymbolParser(private val resolver: Resolver, private val logger: KspLogger
     private fun KSPropertyDeclaration.parse(): KMixinNode.Property {
         // TODO: Clean up the @ContextParams workaround
         val contextParameters = if (contextParameters.isNotEmpty()) {
-            logger.warn("KSP now supports context parameters. Time to clean up the @ContextParams workaround!", this)
+            logger.warn(
+                "KSP now supports context parameters. Time to clean up the @ContextParams workaround!", this
+            )
             contextParameters.map { it.parse() }
         } else {
             val contextParamsCount = annotations.findArgument(ContextParams::count) ?: 0
@@ -121,7 +123,9 @@ class SymbolParser(private val resolver: Resolver, private val logger: KspLogger
     private fun KSFunctionDeclaration.parseAsFunction(): KMixinNode.Function {
         // TODO: Clean up the @ContextParams workaround
         val (parameters, contextParameters) = if (contextParameters.isNotEmpty()) {
-            logger.warn("KSP now supports context parameters. Time to clean up the @ContextParams workaround!", this)
+            logger.warn(
+                "KSP now supports context parameters. Time to clean up the @ContextParams workaround!", this
+            )
             parameters.map { it.parseAsFunctionParameter() } to contextParameters.map { it.parse() }
         } else {
             val contextParamsCount = annotations.findArgument(ContextParams::count) ?: 0
@@ -282,19 +286,32 @@ class SymbolParser(private val resolver: Resolver, private val logger: KspLogger
             expanded.canonicalType ?: expanded
         } else null
         if (declaration !is KSClassDeclaration && declaration !is KSTypeAlias) return InvalidTypeNode(siteNode)
-        val functionalTypeDetails = if (isFunctionType || isSuspendFunctionType) {
+        val functionalType = if (isFunctionType || isSuspendFunctionType) {
             val parameters = arguments.toMutableList()
-            val returnType = parameters.removeLastOrNull()?.type?.parse(siteNode) ?: return InvalidTypeNode(siteNode)
+            val contextParametersCount = annotations.findArgument(ContextFunctionTypeParams::count) ?: 0
+            val effectiveContextParametersCount = if (contextParametersCount > 0) {
+                logger.warn(
+                    "KSP now supports context parameters. Time to clean up the @ContextParams workaround!", siteNode
+                )
+                contextParametersCount
+            } else {
+                annotations.findArgument(ContextParams::count) ?: 0
+            }
+            val contextTypes = List(effectiveContextParametersCount) {
+                parameters.removeFirstOrNull()?.type?.parse(siteNode) ?: return InvalidTypeNode(siteNode)
+            }
             val receiverType = if (annotations.hasAnnotation<ExtensionFunctionType>()) {
                 parameters.removeFirstOrNull()?.type?.parse(siteNode) ?: return InvalidTypeNode(siteNode)
             } else null
-            ClassTypeNode.FunctionalTypeDetails(
+            val returnType = parameters.removeLastOrNull()?.type?.parse(siteNode) ?: return InvalidTypeNode(siteNode)
+            ClassTypeNode.FunctionalType(
+                contextTypes = contextTypes,
                 receiverType = receiverType,
                 parameters = parameters.map { parameter ->
                     val typeReference = parameter.type
-                    ClassTypeNode.FunctionalTypeDetails.Parameter(
+                    ClassTypeNode.FunctionalType.Parameter(
                         name = typeReference?.annotations?.findArgument(ParameterName::name),
-                        type = typeReference?.parse(siteNode) ?: InvalidTypeNode(siteNode)
+                        type = typeReference?.parse(siteNode) ?: return InvalidTypeNode(siteNode)
                     )
                 },
                 returnType = returnType,
@@ -319,7 +336,7 @@ class SymbolParser(private val resolver: Resolver, private val logger: KspLogger
                 }
             },
             canonicalType = canonicalReference,
-            functionalTypeDetails = functionalTypeDetails,
+            functionalType = functionalType,
             isNullable = isMarkedNullable,
             ksType = this,
             node = siteNode,

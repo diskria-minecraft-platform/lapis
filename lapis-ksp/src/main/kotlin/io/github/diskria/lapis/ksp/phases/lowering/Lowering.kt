@@ -368,7 +368,7 @@ class Lowering(
             val originalXType = originalXTypeResult.xType
             val canonicalXTypeResult = toXTypeName(canonical = true)
             val canonicalXType = canonicalXTypeResult.xType
-            val irType = if (canonicalOrSelf.functionalTypeDetails != null) {
+            val irType = if (canonicalOrSelf.functionalType != null) {
                 val originalToCanonicalXType = (canonicalXType as? XClassName)
                     ?.takeIf { it.qualifiedName == XFunctionalTypeName.JVM_FUNCTION_N }
                     ?.generic(poetesse.xStar())
@@ -457,8 +457,8 @@ class Lowering(
     }
 
     private fun ClassTypeModel.detectTypeName(canonical: Boolean): XTypeResult {
-        if (functionalTypeDetails != null) {
-            return functionalTypeDetails.toXTypeName(canonical = canonical, isNullable = isNullable)
+        if (functionalType != null) {
+            return functionalType.toXTypeName(canonical = canonical, isNullable = isNullable)
         }
         val argumentXTypeResults = arguments.map { it.toXTypeName(canonical) }
         val xType = poetesse.xType(
@@ -478,8 +478,9 @@ class Lowering(
         )
     }
 
-    private fun ClassTypeModel.FunctionalTypeDetails.toXTypeName(canonical: Boolean, isNullable: Boolean): XTypeResult {
+    private fun ClassTypeModel.FunctionalType.toXTypeName(canonical: Boolean, isNullable: Boolean): XTypeResult {
         val allXTypeResults = mutableListOf<XTypeResult>()
+        val contextXTypeResults = contextTypes.map { it.toXTypeName(canonical) }.also { allXTypeResults += it }
         val receiverXTypeResult = receiverType?.toXTypeName(canonical)?.also { allXTypeResults += it }
         val xParameters = parameters.map { parameter ->
             val typeResult = parameter.type.toXTypeName(canonical).also { allXTypeResults += it }
@@ -487,6 +488,7 @@ class Lowering(
         }
         val returnXTypeResult = returnType.toXTypeName(canonical).also { allXTypeResults += it }
         val xFunctionalType = returnXTypeResult.xType.lambda(
+            contextParameters = contextXTypeResults.map { it.xType },
             receiver = receiverXTypeResult?.xType,
             parameters = xParameters,
             nullable = isNullable,
