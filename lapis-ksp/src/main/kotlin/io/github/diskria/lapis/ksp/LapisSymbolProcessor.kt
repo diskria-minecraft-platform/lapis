@@ -19,7 +19,6 @@ class LapisSymbolProcessor(
 ) : SymbolProcessor {
 
     private val poetesse = Poetesse {
-        commentHeader = "Automatically generated file. DO NOT MODIFY"
         javaNullabilityResolver = KspJavaNullabilityResolver(
             nullableAnnotationClassName = options.nullableAnnotation?.let { JPClassName.bestGuess(it) },
             nonNullAnnotationClassName = options.nonNullAnnotation?.let { JPClassName.bestGuess(it) },

@@ -59,13 +59,13 @@ class Lowering(
     }
 
     private fun KMixinModel.deriveImpl(
-        sourceClassName: XClassName,
+        originClassName: XClassName,
         typeVariables: List<XTypeVariableName>,
         constructorParameters: List<KMixinFirClass.ConstructorParameter>,
         duck: IrMixinDuck?,
     ) = IrKMixinImpl(
         originatingFile = containingFile,
-        className = sourceClassName.withSuffix("_Impl"),
+        className = originClassName.withSuffix("_Impl"),
         typeVariables = typeVariables,
         constructorParameters = buildList {
             constructorParameters.firstNotNullOfOrNull { it as? KMixinFirClass.ConstructorParameter.Origin }?.let {
@@ -77,15 +77,15 @@ class Lowering(
         },
     )
 
-    private fun KMixinModel.deriveMixin(sourceClassName: XClassName) = IrMixin(
+    private fun KMixinModel.deriveMixin(originClassName: XClassName) = IrMixin(
         originatingFile = containingFile,
-        className = resolveMixinClassName(sourceClassName),
+        className = resolveMixinClassName(originClassName),
         side = side,
         injections = buildList {
             addAll(injections.map { it.lowerAsMember() })
             companionObject?.let { companion -> addAll(companion.injections.map { it.lowerAsStatic(companion) }) }
         },
-        duck = deriveMixinDuck(sourceClassName),
+        duck = deriveMixinDuck(originClassName),
         annotations = if (mixinAnnotations.isNotEmpty()) {
             mixinAnnotations.map { it.lower() }
         } else {
@@ -95,13 +95,13 @@ class Lowering(
         },
     )
 
-    private fun KMixinModel.deriveMixinDuck(sourceClassName: XClassName): IrMixinDuck? {
+    private fun KMixinModel.deriveMixinDuck(originClassName: XClassName): IrMixinDuck? {
         val shadows = shadowSources.map { it.lower(classKind is KMixinModel.Interface) }
         val extensions = extensionSources.map { it.lower(targetType, typeParameters) }
         return if (shadows.isNotEmpty() || extensions.isNotEmpty()) {
             IrMixinDuck(
                 originatingFile = containingFile,
-                className = sourceClassName.withSuffix("_Duck"),
+                className = originClassName.withSuffix("_Duck"),
                 shadows = shadows,
                 extensions = extensions,
             )

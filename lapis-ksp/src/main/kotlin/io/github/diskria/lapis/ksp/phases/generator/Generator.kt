@@ -14,8 +14,6 @@ import io.github.diskria.poetesse.interop.*
 import io.github.diskria.poetesse.java.*
 import io.github.diskria.poetesse.kotlin.*
 import kotlinx.serialization.json.Json
-import java.time.OffsetDateTime
-import java.time.format.DateTimeFormatter
 import javax.annotation.processing.Generated
 
 class Generator(
@@ -24,14 +22,10 @@ class Generator(
     private val poetesse: Poetesse,
     private val codeGenerator: CodeGenerator,
 ) {
-    private val generatedDate: String by lazy {
-        OffsetDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXX"))
-    }
-
     fun generate() {
         kMixins.forEach { kMixin ->
             kMixin.mixin.duck?.let {
-                generateMixinDuck(it, kMixin as? KMixinFirInterface)
+                generateMixinDuck(it, kMixin)
                 if (it.extensions.isNotEmpty()) {
                     generateExtensions(it, kMixin)
                 }
@@ -50,13 +44,18 @@ class Generator(
         generateMixinConfig(kMixins.map { it.mixin })
     }
 
-    private fun generateMixinDuck(duck: IrMixinDuck, kMixinInterface: KMixinFirInterface?) = poetesse {
+    private fun generateMixinDuck(duck: IrMixinDuck, kMixin: KMixinFir) = poetesse {
         java.file(duck.className) {
             interface_(fileName) { _ ->
-                generatedMarker("Duck interface for binding Mixin shadows and forwarding extensions")
+                generatedMarkers(
+                    originClassName = kMixin.className,
+                    roleDesc = "Duck interface for binding Mixin shadows and forwarding extensions",
+                )
                 suppressAllWarnings()
                 public()
-                kMixinInterface?.let { superinterface(it.className) }
+                if (kMixin is KMixinFirInterface) {
+                    superinterface(kMixin.className)
+                }
                 duck.shadows.forEach { shadow ->
                     shadow.kinds.forEach { kind ->
                         val prefixedMethod = method(kind.name) {
@@ -65,7 +64,7 @@ class Generator(
                             returnsIfNeeded(kind.returnType)
                             kind.parameters.forEach { parameter(it.name, it.type.inJava) }
                         }
-                        if (kMixinInterface != null) {
+                        if (kMixin is KMixinFirInterface) {
                             method(kind.sourceJvmName) {
                                 annotation<Override>()
                                 public()
@@ -85,13 +84,13 @@ class Generator(
                     extension.kinds.forEach { kind ->
                         method(kind.name) {
                             public()
-                            if (kMixinInterface != null) default() else abstract()
+                            if (kMixin is KMixinFirInterface) default() else abstract()
                             val returner = returnsIfNeeded(kind.returnType)
                             val allParameters = extension.contextParameters + kind.parameters
                             allParameters.forEach { parameter(it.name, it.type.inJava) }
-                            if (kMixinInterface != null) {
+                            if (kMixin is KMixinFirInterface) {
                                 body {
-                                    val receiver = code { "${T(kMixinInterface.className)}.super" }
+                                    val receiver = code { "${T(kMixin.className)}.super" }
                                     val callable = code { N(kind.sourceJvmName) }
                                     val arguments = code { allParameters.joinToString { N(it.name) } }
                                     line { "$returner${L(receiver)}.${L(callable)}(${L(arguments)})" }
@@ -108,10 +107,6 @@ class Generator(
     private fun generateExtensions(duck: IrMixinDuck, kMixin: KMixinFir) = poetesse {
         val receiver = kotlin.code { "(this as ${T(duck.className)})" }
         kotlin.file(kMixin.className.withSuffix("_Extensions")) {
-            generatedMarker(
-                "Kotlin sugar providing zero-boilerplate access to the forwarded extensions in duck interface"
-            )
-            suppressAllWarnings()
             duck.extensions.forEach { extension ->
                 when (extension) {
                     is IrMixinDuck.Extension.Property -> property(extension.declaredName, extension.type.inKotlin) {
@@ -178,9 +173,12 @@ class Generator(
 
     private fun generateKMixinImpl(kMixinImpl: IrKMixinImpl, kMixin: KMixinFirClass) = poetesse {
         kotlin.file(kMixinImpl.className) {
-            generatedMarker("KMixin implementation for binding Mixin shadows")
-            suppressAllWarnings()
             class_(fileName) { _ ->
+                generatedMarkers(
+                    originClassName = kMixin.className,
+                    roleDesc = "KMixin implementation for binding Mixin shadows",
+                )
+                suppressAllWarnings()
                 public()
                 kMixinImpl.typeVariables.forEach { +it }
                 if (kMixinImpl.constructorParameters.isNotEmpty()) {
@@ -267,7 +265,10 @@ class Generator(
         } else null
         java.file(mixin.className) {
             class_(fileName) { _ ->
-                generatedMarker("Runtime entrypoint of the Mixin engine delegating logic to the KMixin")
+                generatedMarkers(
+                    originClassName = kMixin.className,
+                    roleDesc = "Runtime entrypoint of the Mixin engine delegating logic to the KMixin",
+                )
                 suppressAllWarnings()
                 annotations(mixin.annotations)
                 public()
@@ -446,14 +447,17 @@ class Generator(
         return { "${N(getDelegate)}()" }
     }
 
-    private fun generateMixinInterface(mixin: IrMixin, kMixinInterface: KMixinFirInterface) = poetesse {
+    private fun generateMixinInterface(mixin: IrMixin, kMixin: KMixinFirInterface) = poetesse {
         java.file(mixin.className) {
             interface_(fileName) { _ ->
-                generatedMarker("Runtime entrypoint of the Mixin engine delegating logic to the KMixin")
+                generatedMarkers(
+                    originClassName = kMixin.className,
+                    roleDesc = "Runtime entrypoint of the Mixin engine delegating logic to the KMixin",
+                )
                 suppressAllWarnings()
                 annotations(mixin.annotations)
                 public()
-                superinterface(mixin.duck?.className ?: kMixinInterface.className)
+                superinterface(mixin.duck?.className ?: kMixin.className)
                 mixin.duck?.shadows?.filterIsInstance<IrMixinDuck.Shadow.Function>()?.forEach { shadow ->
                     val shadowMethod = method("shadow$${shadow.mappingName}") {
                         annotations(shadow.annotations)
@@ -481,12 +485,12 @@ class Generator(
                 }
                 mixin.injections.filterIsInstance<IrMixin.MemberInjection>().forEach { memberInjection ->
                     mixinInjection(memberInjection) {
-                        "${T(mixin.duck?.className ?: kMixinInterface.className)}.super"
+                        "${T(mixin.duck?.className ?: kMixin.className)}.super"
                     }
                 }
                 mixin.injections.filterIsInstance<IrMixin.StaticInjection>().forEach { staticInjection ->
                     mixinInjection(staticInjection) {
-                        "${T(kMixinInterface.className)}.${N(staticInjection.kMixinCompanionObjectName)}"
+                        "${T(kMixin.className)}.${N(staticInjection.kMixinCompanionObjectName)}"
                     }
                 }
             }
@@ -578,22 +582,6 @@ class Generator(
             extensionName = "",
         ).writer().use { it.write(buildText()) }
     }
-
-    private fun JavaTypeScope.generatedMarker(roleDesc: String) {
-        annotation<Generated> {
-            member(Generated::value, qualifiedNameOf<Generator>())
-            member(Generated::date, generatedDate)
-            member(Generated::comments, roleDesc)
-        }
-    }
-
-    private fun KotlinFileScope.generatedMarker(roleDesc: String) {
-        annotation<Generated> {
-            member(Generated::value, qualifiedNameOf<Generator>())
-            member(Generated::date, generatedDate)
-            member(Generated::comments, roleDesc)
-        }
-    }
 }
 
 context(scope: JavaCodeScope)
@@ -641,8 +629,30 @@ private fun JavaTypeScope.suppressAllWarnings() {
     }
 }
 
-private fun KotlinFileScope.suppressAllWarnings() {
+private fun KotlinTypeScope.suppressAllWarnings() {
     annotation<Suppress> {
         member(Suppress::names, "warnings")
+    }
+}
+
+private fun JavaTypeScope.generatedMarkers(originClassName: XClassName, roleDesc: String) {
+    documentation {
+        line { "AUTO-GENERATED FILE. DO NOT MODIFY." }
+        line { "Generated from origin: {@link ${originClassName.qualifiedName}}" }
+    }
+    annotation<Generated> {
+        member(Generated::value, qualifiedNameOf<Generator>())
+        member(Generated::comments, roleDesc)
+    }
+}
+
+private fun KotlinTypeScope.generatedMarkers(originClassName: XClassName, roleDesc: String) {
+    documentation {
+        line { "AUTO-GENERATED FILE. DO NOT MODIFY." }
+        line { "Generated from origin: [${originClassName.qualifiedName}]" }
+    }
+    annotation<Generated> {
+        member(Generated::value, qualifiedNameOf<Generator>())
+        member(Generated::comments, roleDesc)
     }
 }

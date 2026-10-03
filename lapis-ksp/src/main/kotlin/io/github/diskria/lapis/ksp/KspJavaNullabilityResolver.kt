@@ -10,9 +10,6 @@ class KspJavaNullabilityResolver(
     private val nonNullAnnotationClassName: JPClassName?,
 ) : Poetesse.JavaNullabilityResolver {
 
-    override fun isNullable(typeName: JPTypeName): Boolean =
-        nullableAnnotationClassName != null && typeName.annotations().any { it.type() == nullableAnnotationClassName }
-
     override fun setNullable(typeName: JPTypeName, nullable: Boolean): JPTypeName {
         if (nullableAnnotationClassName == null && nonNullAnnotationClassName == null) return typeName
         val targetAnnotation = if (nullable) nullableAnnotationClassName else nonNullAnnotationClassName
