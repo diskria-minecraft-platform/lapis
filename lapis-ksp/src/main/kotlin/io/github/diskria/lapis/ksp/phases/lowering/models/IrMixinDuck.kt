@@ -100,6 +100,7 @@ class IrMixinDuck(
             override val returnType: IrType?,
             override val receiverType: IrType,
             override val typeVariables: List<XTypeVariableName>,
+            val javaSyntheticParameters: List<IrFunctionParameter>,
         ) : IrMixinDuck.Function,
             Extension
     }

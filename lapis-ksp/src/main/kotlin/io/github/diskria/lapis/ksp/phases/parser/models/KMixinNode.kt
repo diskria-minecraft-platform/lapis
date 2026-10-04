@@ -73,6 +73,7 @@ class KMixinNode(
         val isPublic: Boolean,
         val isOpen: Boolean,
         val isAbstract: Boolean,
+        val isSuspend: Boolean,
         val extensionReceiverType: TypeNode?,
         val annotations: AnnotationNodeContainer,
         val typeParameters: List<TypeParameterNode>,
@@ -128,7 +129,7 @@ class ClassTypeNode(
         val receiverType: TypeNode?,
         val parameters: List<Parameter>,
         val returnType: TypeNode,
-        val isSuspend: Boolean,
+        val isSuspending: Boolean,
     ) {
         class Parameter(val name: String?, val type: TypeNode)
     }

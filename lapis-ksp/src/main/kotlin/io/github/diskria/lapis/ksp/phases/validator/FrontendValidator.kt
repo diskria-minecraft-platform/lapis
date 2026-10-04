@@ -270,7 +270,8 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
             parameters = parameters,
             returnType = returnType?.validate()?.toModel(scopeTypeParameters),
             typeParameters = localTypeParameters,
-            contextParameters = contextParameters.mapValid { it.validate(scopeTypeParameters) }
+            contextParameters = contextParameters.mapValid { it.validate(scopeTypeParameters) },
+            isSuspend = isSuspend,
         )
     }
 
@@ -314,6 +315,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         kspRequire(isAbstract) { "" }
         kspRequire(extensionReceiverType == null) { "" }
         kspRequire(contextParameters.isEmpty()) { "" }
+        kspRequire(!isSuspend) { "" }
         val declaredName = name.validate().toModel()
         val mappingNameArgument = annotations.findApiArgument(MappingName::name)
         validateJavaIdentifierName(declaredName, "@KShadow function name", mappingNameArgument == null)
@@ -348,6 +350,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
     ): KMixinModel.Injection {
         kspRequireNotNull(jvmName) { "" }
         kspRequire(!isOpen) { "" }
+        kspRequire(!isSuspend) { "" }
         if (isInCompanionObject) {
             kspRequire(extensionReceiverType == null) { "" }
         }
@@ -651,7 +654,6 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
 
     private fun ClassTypeNode.toModel(scopeTypeParameters: List<TypeParameterModel>): ClassTypeModel {
         val functionalType = functionalType?.let { type ->
-            kspRequire(!type.isSuspend) { "Suspend functional types are not supported." }
             ClassTypeModel.FunctionalType(
                 contextTypes = type.contextTypes.map { it.validate().toModel(scopeTypeParameters) },
                 receiverType = type.receiverType?.validate()?.toModel(scopeTypeParameters),
@@ -662,6 +664,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
                     )
                 },
                 returnType = type.returnType.validate().toModel(scopeTypeParameters),
+                isSuspending = type.isSuspending,
             )
         }
         return ClassTypeModel(
