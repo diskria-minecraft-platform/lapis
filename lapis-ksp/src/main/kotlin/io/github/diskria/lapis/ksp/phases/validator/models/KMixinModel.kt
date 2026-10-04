@@ -56,7 +56,6 @@ class KMixinModel(
             override val returnType: TypeModel?,
             override val typeParameters: List<TypeParameterModel>,
             override val contextParameters: List<ContextParameterModel>,
-            val isSuspend: Boolean,
         ) : DuckSourceModel.Function,
             Extension
     }
@@ -138,7 +137,6 @@ class ClassTypeModel(
         val receiverType: TypeModel?,
         val parameters: List<Parameter>,
         val returnType: TypeModel,
-        val isSuspending: Boolean,
     ) {
         class Parameter(val name: String?, val type: TypeModel)
     }

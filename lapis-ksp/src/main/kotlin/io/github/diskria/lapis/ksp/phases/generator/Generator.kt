@@ -62,7 +62,7 @@ class Generator(
                             public()
                             abstract()
                             returnsIfNeeded(kind.returnType)
-                            kind.parameters.forEach { parameter(it.name, it.type.java.type) }
+                            kind.parameters.forEach { parameter(it.name, it.type.inJava) }
                         }
                         if (kMixin is KMixinFirInterface) {
                             method(kind.sourceJvmName) {
@@ -70,7 +70,7 @@ class Generator(
                                 public()
                                 default()
                                 val returner = returnsIfNeeded(kind.returnType)
-                                kind.parameters.forEach { parameter(it.name, it.type.java.type) }
+                                kind.parameters.forEach { parameter(it.name, it.type.inJava) }
                                 body {
                                     val callable = code { N(prefixedMethod) }
                                     val arguments = code { kind.parameters.joinToString { N(it.name) } }
@@ -86,14 +86,8 @@ class Generator(
                             public()
                             if (kMixin is KMixinFirInterface) default() else abstract()
                             val returner = returnsIfNeeded(kind.returnType)
-                            val allParameters = buildList {
-                                addAll(extension.contextParameters)
-                                addAll(kind.parameters)
-                                if (extension is IrMixinDuck.Extension.Function) {
-                                    addAll(extension.javaSyntheticParameters)
-                                }
-                            }
-                            allParameters.forEach { parameter(it.name, it.type.java.type) }
+                            val allParameters = extension.contextParameters + kind.parameters
+                            allParameters.forEach { parameter(it.name, it.type.inJava) }
                             if (kMixin is KMixinFirInterface) {
                                 body {
                                     val receiver = code { "${T(kMixin.className)}.super" }
@@ -115,12 +109,12 @@ class Generator(
         kotlin.file(kMixin.className.withSuffix("_Extensions")) {
             duck.extensions.forEach { extension ->
                 when (extension) {
-                    is IrMixinDuck.Extension.Property -> property(extension.declaredName, extension.type.kotlin.type) {
-                        extension.contextParameters.forEach { contextParameter(it.name, it.type.kotlin.type) }
+                    is IrMixinDuck.Extension.Property -> property(extension.declaredName, extension.type.inKotlin) {
+                        extension.contextParameters.forEach { contextParameter(it.name, it.type.inKotlin) }
                         public()
                         inline()
                         extension.typeVariables.forEach { +it }
-                        extensionReceiver(extension.receiverType.kotlin.type)
+                        extensionReceiver(extension.receiverType.inKotlin)
                         getter {
                             expression {
                                 val callable = code { N(extension.getter.name) }
@@ -149,15 +143,14 @@ class Generator(
                     }
 
                     is IrMixinDuck.Extension.Function -> function(extension.declaredName) {
-                        extension.contextParameters.forEach { contextParameter(it.name, it.type.kotlin.type) }
+                        extension.contextParameters.forEach { contextParameter(it.name, it.type.inKotlin) }
                         public()
-                        if (extension.javaSyntheticParameters.isNotEmpty()) suspend()
                         inline()
                         extension.typeVariables.forEach { +it }
-                        extensionReceiver(extension.receiverType.kotlin.type)
+                        extensionReceiver(extension.receiverType.inKotlin)
                         extension.parameters.forEach {
-                            parameter(it.name, it.type.kotlin.type) {
-                                if (it.type.kotlin.isFunctionalType) noinline()
+                            parameter(it.name, it.type.inKotlin) {
+                                if (it.type.isFunctionType) noinline()
                             }
                         }
                         val returner = returnsIfNeeded(extension.returnType)
@@ -194,7 +187,7 @@ class Generator(
                         kMixinImpl.constructorParameters.forEach { parameter ->
                             when (parameter) {
                                 is IrKMixinImpl.ConstructorParameter.Instance -> {
-                                    parameter(parameter.name, parameter.type.kotlin.type)
+                                    parameter(parameter.name, parameter.type.inKotlin)
                                 }
 
                                 is IrKMixinImpl.ConstructorParameter.Duck -> {
@@ -218,7 +211,7 @@ class Generator(
                 }
                 kMixin.mixin.duck?.shadows?.forEach { shadow ->
                     when (shadow) {
-                        is IrMixinDuck.Property -> property(shadow.declaredName, shadow.type.kotlin.type) {
+                        is IrMixinDuck.Property -> property(shadow.declaredName, shadow.type.inKotlin) {
                             public()
                             override()
                             getter {
@@ -244,7 +237,7 @@ class Generator(
                             public()
                             override()
                             shadow.typeVariables.forEach { +it }
-                            shadow.parameters.forEach { parameter(it.name, it.type.kotlin.type) }
+                            shadow.parameters.forEach { parameter(it.name, it.type.inKotlin) }
                             val returner = returnsIfNeeded(shadow.returnType)
                             body {
                                 val receiver = code { N("duck") }
@@ -287,7 +280,7 @@ class Generator(
                 mixin.duck?.shadows?.forEach { shadow ->
                     when (shadow) {
                         is IrMixinDuck.Shadow.Property -> {
-                            val shadowField = field(shadow.mappingName, shadow.type.java.type) {
+                            val shadowField = field(shadow.mappingName, shadow.type.inJava) {
                                 annotations(shadow.annotations)
                                 shadow.modifiers.forEach { +it }
                             }
@@ -296,7 +289,7 @@ class Generator(
                                     annotation<Override>()
                                     public()
                                     val returner = returnsIfNeeded(kind.returnType)
-                                    kind.parameters.forEach { parameter(it.name, it.type.java.type) }
+                                    kind.parameters.forEach { parameter(it.name, it.type.inJava) }
                                     body {
                                         when (kind) {
                                             is IrMixinDuck.Property.Getter -> {
@@ -317,7 +310,7 @@ class Generator(
                                 annotations(shadow.annotations)
                                 shadow.modifiers.forEach { +it }
                                 returnsIfNeeded(shadow.returnType)
-                                shadow.parameters.forEach { parameter(it.name, it.type.java.type) }
+                                shadow.parameters.forEach { parameter(it.name, it.type.inJava) }
                                 if (JPModifier.STATIC in shadow.modifiers) {
                                     body { line { "throw new ${T<AssertionError>()}(${S("Stub!")})" } }
                                 }
@@ -326,7 +319,7 @@ class Generator(
                                 annotation<Override>()
                                 public()
                                 val returner = returnsIfNeeded(shadow.returnType)
-                                shadow.parameters.forEach { parameter(it.name, it.type.java.type) }
+                                shadow.parameters.forEach { parameter(it.name, it.type.inJava) }
                                 body {
                                     val callable = code { N(shadowMethod) }
                                     val arguments = code { shadow.parameters.joinToString { N(it.name) } }
@@ -343,14 +336,8 @@ class Generator(
                                 annotation<Override>()
                                 public()
                                 val returner = returnsIfNeeded(kind.returnType)
-                                val allParameters = buildList {
-                                    addAll(extension.contextParameters)
-                                    addAll(kind.parameters)
-                                    if (extension is IrMixinDuck.Extension.Function) {
-                                        addAll(extension.javaSyntheticParameters)
-                                    }
-                                }
-                                allParameters.forEach { parameter(it.name, it.type.java.type) }
+                                val allParameters = extension.contextParameters + kind.parameters
+                                allParameters.forEach { parameter(it.name, it.type.inJava) }
                                 body {
                                     val callable = code { N(kind.sourceJvmName) }
                                     val arguments = code { allParameters.joinToString { N(it.name) } }
@@ -476,7 +463,7 @@ class Generator(
                         annotations(shadow.annotations)
                         shadow.modifiers.forEach { +it }
                         returnsIfNeeded(shadow.returnType)
-                        shadow.parameters.forEach { parameter(it.name, it.type.java.type) }
+                        shadow.parameters.forEach { parameter(it.name, it.type.inJava) }
                         if (JPModifier.STATIC in shadow.modifiers || JPModifier.PRIVATE in shadow.modifiers) {
                             body {
                                 line { "throw new ${T<AssertionError>()}(${S("Stub!")})" }
@@ -488,7 +475,7 @@ class Generator(
                         public()
                         default()
                         val returner = returnsIfNeeded(shadow.returnType)
-                        shadow.parameters.forEach { parameter(it.name, it.type.java.type) }
+                        shadow.parameters.forEach { parameter(it.name, it.type.inJava) }
                         body {
                             val callable = code { N(shadowMethod) }
                             val arguments = code { shadow.parameters.joinToString { N(it.name) } }
@@ -517,7 +504,7 @@ class Generator(
             if (injection is IrMixin.StaticInjection) static()
             val returner = returnsIfNeeded(injection.returnType)
             (injection.parameters + injection.contextParameters).forEach { parameter ->
-                parameter(parameter.name, parameter.type.java.type) { annotations(parameter.annotations) }
+                parameter(parameter.name, parameter.type.inJava) { annotations(parameter.annotations) }
             }
             body {
                 val callable = code { N(injection.sourceJvmName) }
@@ -604,35 +591,35 @@ private fun String.castTo(targetType: XTypeName): String = with(scope) {
 
 context(scope: JavaCodeScope)
 private fun String.unsafeCastTo(targetType: IrType): String = with(scope) {
-    "(${T(targetType.java.type)}) (${T<Any>()}) ${this@unsafeCastTo}"
+    "(${T(targetType.inJava)}) (${T<Any>()}) ${this@unsafeCastTo}"
 }
 
 context(scope: KotlinCodeScope)
 private fun String.maybeCastFromJavaTo(targetType: IrType): String = with(scope) {
-    targetType.java.kotlinCastType?.let { "${this@maybeCastFromJavaTo} as ${T(it)}" }
+    targetType.castContext.toKotlin?.let { "${this@maybeCastFromJavaTo} as ${T(it)}" }
         ?: this@maybeCastFromJavaTo
 }
 
 context(scope: KotlinCodeScope)
 private fun String.maybeCastToJava(targetType: IrType): String = with(scope) {
-    targetType.kotlin.javaCastType?.let { "${this@maybeCastToJava} as ${T(it)}" }
+    targetType.castContext.toJava?.let { "${this@maybeCastToJava} as ${T(it)}" }
         ?: this@maybeCastToJava
 }
 
 context(scope: KotlinCodeScope)
 private fun String.maybeReturnCastFromJavaTo(targetType: IrType?): String =
-    if (targetType != null && targetType.kotlin.isReturnable) maybeCastFromJavaTo(targetType)
+    if (targetType != null && targetType.isReturnable) maybeCastFromJavaTo(targetType)
     else this
 
 private fun JavaMethodScope.returnsIfNeeded(type: IrType?): String =
-    if (type != null && type.java.isReturnable) {
-        returns(type.java.type)
+    if (type != null && type.isReturnable) {
+        returns(type.inJava)
         "return "
     } else ""
 
 private fun KotlinFunctionScope.returnsIfNeeded(type: IrType?): String =
-    if (type != null && type.kotlin.isReturnable) {
-        returns(type.kotlin.type)
+    if (type != null && type.isReturnable) {
+        returns(type.inKotlin)
         "return "
     } else ""
 
