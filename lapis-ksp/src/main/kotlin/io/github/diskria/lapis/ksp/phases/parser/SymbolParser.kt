@@ -155,6 +155,7 @@ class SymbolParser(private val resolver: Resolver, private val logger: KspLogger
             returnType = returnType.parse(this),
             isPublic = isPublic(),
             isOpen = Modifier.OPEN in modifiers,
+            isSuspending = Modifier.SUSPEND in modifiers,
             isAbstract = isAbstract,
             extensionReceiverType = extensionReceiver?.parse(),
             typeParameters = typeParameters.parse(),
@@ -315,7 +316,7 @@ class SymbolParser(private val resolver: Resolver, private val logger: KspLogger
                     )
                 },
                 returnType = returnType,
-                isSuspend = isSuspendFunctionType,
+                isSuspending = isSuspendFunctionType,
             )
         } else null
         return ClassTypeNode(

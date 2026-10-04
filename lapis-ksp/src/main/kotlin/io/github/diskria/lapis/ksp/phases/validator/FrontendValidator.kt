@@ -256,6 +256,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         kspRequireNotNull(jvmName) { "" }
         kspRequire(extensionReceiverType == null) { "" }
         kspRequire(!isOpen && !isAbstract) { "" }
+        kspRequire(!isSuspending) { "Suspend extensions are not supported yet." }
         val localTypeParameters = typeParameters.validate(enclosingTypeParameters)
         val scopeTypeParameters = localTypeParameters + enclosingTypeParameters
         val parameters = parameters.map {
@@ -314,6 +315,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
         kspRequire(isAbstract) { "" }
         kspRequire(extensionReceiverType == null) { "" }
         kspRequire(contextParameters.isEmpty()) { "" }
+        kspRequire(!isSuspending) { "Suspending is not allowed in @KShadow." }
         val declaredName = name.validate().toModel()
         val mappingNameArgument = annotations.findApiArgument(MappingName::name)
         validateJavaIdentifierName(declaredName, "@KShadow function name", mappingNameArgument == null)
@@ -348,6 +350,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
     ): KMixinModel.Injection {
         kspRequireNotNull(jvmName) { "" }
         kspRequire(!isOpen) { "" }
+        kspRequire(!isSuspending) { "Suspending is not allowed in injections." }
         if (isInCompanionObject) {
             kspRequire(extensionReceiverType == null) { "" }
         }
@@ -651,7 +654,7 @@ class FrontendValidator(private val options: KspOptions, private val logger: Ksp
 
     private fun ClassTypeNode.toModel(scopeTypeParameters: List<TypeParameterModel>): ClassTypeModel {
         val functionalType = functionalType?.let { type ->
-            kspRequire(!type.isSuspend) { "Suspend functional types are not supported." }
+            kspRequire(!type.isSuspending) { "Suspending functional types are not supported yet." }
             ClassTypeModel.FunctionalType(
                 contextTypes = type.contextTypes.map { it.validate().toModel(scopeTypeParameters) },
                 receiverType = type.receiverType?.validate()?.toModel(scopeTypeParameters),
