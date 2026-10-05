@@ -1,0 +1,28 @@
+package io.github.diskria.lapis.core.lowering.models
+
+import io.github.diskria.poetesse.interop.XClassName
+
+class IrAnnotation(val className: XClassName, val arguments: List<Argument> = emptyList()) {
+
+    sealed interface Argument {
+
+        val name: String
+
+        sealed interface Value
+        class BooleanValue(val boolean: Boolean) : Value
+        class ByteValue(val byte: Byte) : Value
+        class ShortValue(val short: Short) : Value
+        class IntValue(val int: Int) : Value
+        class LongValue(val long: Long) : Value
+        class CharValue(val char: Char) : Value
+        class FloatValue(val float: Float) : Value
+        class DoubleValue(val double: Double) : Value
+        class StringValue(val string: String) : Value
+        class ClassValue(val className: XClassName) : Value
+        class EnumValue(val className: XClassName, val name: String) : Value
+        class AnnotationValue(val annotation: IrAnnotation) : Value
+    }
+
+    class ScalarArgument(override val name: String, val value: Argument.Value) : Argument
+    class ArrayArgument(override val name: String, val elements: List<Argument.Value>) : Argument
+}

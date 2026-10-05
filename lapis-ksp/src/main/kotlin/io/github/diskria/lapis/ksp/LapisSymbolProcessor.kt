@@ -4,16 +4,18 @@ import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.symbol.KSAnnotated
-import io.github.diskria.lapis.ksp.phases.generator.Generator
-import io.github.diskria.lapis.ksp.phases.lowering.Lowering
-import io.github.diskria.lapis.ksp.phases.lowering.models.KMixinFir
-import io.github.diskria.lapis.ksp.phases.parser.SymbolParser
-import io.github.diskria.lapis.ksp.phases.validator.FrontendValidator
+import com.google.devtools.ksp.symbol.KSFile
+import io.github.diskria.lapis.core.CoreOptions
+import io.github.diskria.lapis.core.lowering.CoreLowering
+import io.github.diskria.lapis.core.lowering.models.IrKMixin
+import io.github.diskria.lapis.core.validator.CoreValidator
+import io.github.diskria.lapis.ksp.phases.generator.KspGenerator
+import io.github.diskria.lapis.ksp.phases.parser.KspParser
 import io.github.diskria.poetesse.Poetesse
 import io.github.diskria.poetesse.java.JPClassName
 
 class LapisSymbolProcessor(
-    private val options: KspOptions,
+    private val options: CoreOptions,
     private val codeGenerator: CodeGenerator,
     private val logger: KspLogger,
 ) : SymbolProcessor {
@@ -25,19 +27,18 @@ class LapisSymbolProcessor(
         )
     }
 
-    private val validator = FrontendValidator(options, logger)
-    private val firs: MutableList<KMixinFir> = mutableListOf()
+    private val loweredKMixins: MutableList<IrKMixin<KSFile>> = mutableListOf()
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
         logger.setPhase(KspLogger.Phase.PARSING)
-        val nodes = SymbolParser(resolver, logger).parseNodes()
+        val nodes = KspParser(resolver, logger).parseNodes()
 
         logger.setPhase(KspLogger.Phase.VALIDATION)
-        val models = validator.validate(nodes).toList()
+        val models = CoreValidator(nodes, options).validate().toList()
 
         if (models.isNotEmpty()) {
             logger.setPhase(KspLogger.Phase.LOWERING)
-            firs += Lowering(models, options, poetesse).lower()
+            loweredKMixins += CoreLowering(models, options, poetesse).lower()
         }
 
         return emptyList()
@@ -52,8 +53,8 @@ class LapisSymbolProcessor(
     }
 
     private fun generate() {
-        if (firs.isEmpty()) return
+        if (loweredKMixins.isEmpty()) return
         logger.setPhase(KspLogger.Phase.GENERATION)
-        Generator(firs, options, poetesse, codeGenerator).generate()
+        KspGenerator(loweredKMixins, options, poetesse, codeGenerator).generate()
     }
 }

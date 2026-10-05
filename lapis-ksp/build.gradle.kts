@@ -12,6 +12,7 @@ projekt {
 
 dependencies {
     implementation(project(":lapis-annotations"))
+    implementation(project(":lapis-core"))
     implementation(libs.ksp.api)
     implementation(libs.poetesse)
     implementation(libs.kotlin.serialization.json)

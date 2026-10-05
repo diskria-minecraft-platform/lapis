@@ -18,6 +18,7 @@ projektor {
         gradlePlugin(":lapis-gradle-plugin", "lapis")
         kotlinLibrary(":lapis-ksp")
         kotlinLibrary(":lapis-annotations")
+        kotlinLibrary(":lapis-core")
     }
 }
 

@@ -4,6 +4,7 @@ import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.symbol.FileLocation
 import com.google.devtools.ksp.symbol.KSNode
 import com.google.devtools.ksp.symbol.NonExistLocation
+import io.github.diskria.lapis.core.exceptions.LapisException
 
 class KspLogger(private val logger: KSPLogger) {
 
