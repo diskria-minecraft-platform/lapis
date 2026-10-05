@@ -7,6 +7,7 @@ import org.jetbrains.kotlin.compiler.plugin.CliOption
 import org.jetbrains.kotlin.compiler.plugin.CommandLineProcessor
 import org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi
 import org.jetbrains.kotlin.config.CompilerConfiguration
+import org.jetbrains.kotlin.config.CompilerConfigurationKey
 
 @OptIn(ExperimentalCompilerApi::class)
 @AutoService(CommandLineProcessor::class)
@@ -25,7 +26,12 @@ class KcpCliProcessor : CommandLineProcessor {
         }
 
     override fun processOption(option: AbstractCliOption, value: String, configuration: CompilerConfiguration) {
-        val currentMap = configuration[KcpKeys.RAW_ARGUMENTS_KEY].orEmpty()
-        configuration.put(KcpKeys.RAW_ARGUMENTS_KEY, currentMap + (option.optionName to value))
+        configuration.appendMap(KcpKeys.RAW_ARGUMENTS_KEY, option.optionName, value)
     }
+}
+
+private fun <K, V> CompilerConfiguration.appendMap(option: CompilerConfigurationKey<Map<K, V>>, key: K, value: V) {
+    val map = getMap(option).toMutableMap()
+    map[key] = value
+    put(option, map)
 }
