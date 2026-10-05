@@ -1,6 +1,5 @@
 package io.github.diskria.lapis.core
 
-import io.github.diskria.lapis.core.extensions.elements
 import io.github.diskria.lapis.core.extensions.internalError
 import io.github.diskria.lapis.core.extensions.quoted
 import io.github.diskria.lapis.core.extensions.simpleNameOf
@@ -121,11 +120,14 @@ data class CoreOptions(
         private fun String.withArgumentPrefix(): String = ARGUMENT_PREFIX + this
         private fun String.removeArgumentPrefix(): String = removePrefix(ARGUMENT_PREFIX)
 
-        val specs = serialDescriptor<CoreOptions>().elements.map {
-            OptionSpec(
-                name = it.name.withArgumentPrefix(),
-                isRequired = !it.isOptional,
-            )
+        val specs by lazy {
+            val descriptor = serialDescriptor<CoreOptions>()
+            (0..<descriptor.elementsCount).map { index ->
+                OptionSpec(
+                    name = descriptor.getElementName(index).withArgumentPrefix(),
+                    isRequired = !descriptor.isElementOptional(index),
+                )
+            }
         }
 
         fun fromArguments(
