@@ -1,4 +1,4 @@
-package io.github.diskria.lapis.ksp.phases.parser
+package io.github.diskria.lapis.ksp.parser
 
 import com.google.devtools.ksp.*
 import com.google.devtools.ksp.processing.Resolver
@@ -230,7 +230,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
             }
             return AnnotationNode.ArrayArgument(
                 name = name,
-                isExplicit = origin != com.google.devtools.ksp.symbol.Origin.SYNTHETIC,
+                isExplicit = origin != Origin.SYNTHETIC,
                 elements = elements,
                 node = toNode(),
             )
@@ -238,7 +238,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
         val rawValue = value ?: return AnnotationNode.InvalidArgument(toNode())
         return AnnotationNode.ScalarArgument(
             name = name,
-            isExplicit = origin != com.google.devtools.ksp.symbol.Origin.SYNTHETIC,
+            isExplicit = origin != Origin.SYNTHETIC,
             value = parseValue(rawValue),
             node = toNode(),
         )

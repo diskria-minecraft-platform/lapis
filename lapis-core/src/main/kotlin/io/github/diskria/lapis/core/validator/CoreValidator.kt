@@ -501,16 +501,14 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         return name
     }
 
-    private fun AnnotationNode.isMixinAnnotation(mixinPackages: List<String>): Boolean {
+    private fun AnnotationNode.isMixinAnnotation(): Boolean {
         val type = (this as? ValidAnnotationNode)?.type as? ClassTypeNode ?: return true
         val packageName = (type.packageName as? ValidNameNode)?.name ?: return true
-        return mixinPackages.any { packageName.isSubpackageOf(it) }
+        return options.mixinAnnotationPackages.any { packageName.isSubpackageOf(it) }
     }
 
     private fun AnnotationNodeContainer.filterMixinAnnotations(): List<ValidAnnotationNode> =
-        external
-            .filter { it.isMixinAnnotation(options.mixinAnnotationPackages) }
-            .validateAll { it.validate() }
+        external.filter { it.isMixinAnnotation() }.validateAll { it.validate() }
 
     private fun AnnotationNode.validate(): ValidAnnotationNode =
         kspRequireNotNull(this as? ValidAnnotationNode) {

@@ -7,16 +7,16 @@ import com.google.devtools.ksp.processing.SymbolProcessorProvider
 import io.github.diskria.lapis.core.CoreOptions
 
 @AutoService(SymbolProcessorProvider::class)
-class LapisSymbolProcessorProvider : SymbolProcessorProvider {
+class KspProvider : SymbolProcessorProvider {
 
     override fun create(environment: SymbolProcessorEnvironment): SymbolProcessor {
         val logger = KspLogger(environment.logger)
         val options = CoreOptions.fromArguments(
-            map = environment.options,
-            warn = { logger.warn(it) },
-            error = { logger.fatal(it) },
+            rawArguments = environment.options,
+            onWarn = { message -> logger.warn(message) },
+            onError = { message -> logger.fatal(message) },
         )
-        return LapisSymbolProcessor(options, environment.codeGenerator, logger).apply {
+        return Ksp(options, environment.codeGenerator, logger).apply {
             environment.registerProcessorForNewFeatures(this)
         }
     }

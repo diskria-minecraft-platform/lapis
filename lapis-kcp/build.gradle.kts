@@ -6,16 +6,14 @@ projekt {
     kotlinLibrary()
     distribute {
         mavenLocal()
-        mavenCentral()
     }
 }
 
 dependencies {
     implementation(project(":lapis-annotations"))
     implementation(project(":lapis-core"))
-    implementation(libs.ksp.api)
+    compileOnly(libs.kotlin.compiler)
     ksp(libs.auto.service.ksp)
     compileOnly(libs.auto.service.annotations)
     implementation(libs.poetesse)
-    implementation(libs.kotlin.serialization.json)
 }

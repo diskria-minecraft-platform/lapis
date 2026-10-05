@@ -9,12 +9,12 @@ import io.github.diskria.lapis.core.CoreOptions
 import io.github.diskria.lapis.core.lowering.CoreLowering
 import io.github.diskria.lapis.core.lowering.models.IrKMixin
 import io.github.diskria.lapis.core.validator.CoreValidator
-import io.github.diskria.lapis.ksp.phases.generator.KspGenerator
-import io.github.diskria.lapis.ksp.phases.parser.KspParser
+import io.github.diskria.lapis.ksp.generator.KspGenerator
+import io.github.diskria.lapis.ksp.parser.KspParser
 import io.github.diskria.poetesse.Poetesse
 import io.github.diskria.poetesse.java.JPClassName
 
-class LapisSymbolProcessor(
+class Ksp(
     private val options: CoreOptions,
     private val codeGenerator: CodeGenerator,
     private val logger: KspLogger,

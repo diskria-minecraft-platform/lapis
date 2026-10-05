@@ -1,4 +1,4 @@
-package io.github.diskria.lapis.ksp.phases.parser
+package io.github.diskria.lapis.ksp.parser
 
 import com.google.devtools.ksp.symbol.KSType
 import io.github.diskria.lapis.core.parser.models.Type

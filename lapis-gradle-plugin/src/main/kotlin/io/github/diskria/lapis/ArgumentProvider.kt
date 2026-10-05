@@ -13,9 +13,10 @@ import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.*
 import org.gradle.process.CommandLineArgumentProvider
+import org.jetbrains.kotlin.gradle.plugin.SubpluginOption
 import javax.inject.Inject
 
-abstract class KspArgumentProvider @Inject constructor(layout: ProjectLayout) : CommandLineArgumentProvider {
+abstract class ArgumentProvider @Inject constructor(layout: ProjectLayout) : CommandLineArgumentProvider {
 
     @get:Optional
     @get:Input
@@ -69,7 +70,7 @@ abstract class KspArgumentProvider @Inject constructor(layout: ProjectLayout) : 
     @get:Internal
     private val mixinConfigPath: Provider<String> = mixinConfig.map { it.asFile.getRootRelativePath(layout) }
 
-    override fun asArguments(): Iterable<String> {
+    fun asKcpArguments(): List<SubpluginOption> {
         val uniqueModPrefix = requireNotNull(uniqueModPrefix.orNull) {
             "Property 'lapis.uniqueModPrefix' is required but not set."
         }
@@ -116,9 +117,11 @@ abstract class KspArgumentProvider @Inject constructor(layout: ProjectLayout) : 
                 "Property '$prefixedKey' cannot be empty or contain whitespace characters, " +
                     "but got: ${valueStr.doubleQuoted()}."
             }
-            "$prefixedKey=$valueStr"
+            SubpluginOption(prefixedKey, valueStr)
         }
     }
+
+    override fun asArguments(): Iterable<String> = asKcpArguments().map { "${it.key}=${it.value}" }
 }
 
 private fun String.isValidArgumentValue() = isNotEmpty() && none { it.isWhitespace() }

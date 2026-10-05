@@ -5,127 +5,149 @@ import io.github.diskria.lapis.api.LapisExtension
 import io.github.diskria.lapis.api.LapisSourceSetSpec
 import io.github.diskria.lapis.extensions.capitalized
 import io.github.diskria.lapis.extensions.register
-import org.gradle.api.Plugin
+import io.github.diskria.lapis.tasks.MergeMixinConfigsTask
 import org.gradle.api.Project
+import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.SourceSet
 import org.gradle.api.tasks.SourceSetContainer
-import org.gradle.kotlin.dsl.create
-import org.gradle.kotlin.dsl.getByType
-import org.gradle.kotlin.dsl.newInstance
-import org.gradle.kotlin.dsl.withType
+import org.gradle.kotlin.dsl.*
 import org.gradle.language.jvm.tasks.ProcessResources
+import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
+import org.jetbrains.kotlin.gradle.plugin.KotlinCompilerPluginSupportPlugin
+import org.jetbrains.kotlin.gradle.plugin.SubpluginArtifact
+import org.jetbrains.kotlin.gradle.plugin.SubpluginOption
 import kotlin.io.path.invariantSeparatorsPathString
 
-class LapisGradlePlugin : Plugin<Project> {
+class LapisGradlePlugin : KspSupportPlugin() {
 
-    override fun apply(project: Project) {
-        project.pluginManager.apply("com.google.devtools.ksp")
-        val lapisExtension = project.extensions.create<LapisExtension>("lapis")
-        lapisExtension.sourceSetSpecs.all { spec ->
-            val sourceSets = project.extensions.getByType<SourceSetContainer>()
-            sourceSets.matching { it.name == spec.name }.configureEach { sourceSet ->
-                configureSourceSet(project, sourceSet, spec, lapisExtension)
-            }
-        }
-        project.afterEvaluate {
-            lapisExtension.validateMixinConfigsSetup()
-        }
+    override fun apply(target: Project) {
+        super.apply(target)
+        val ext = target.extensions.create<LapisExtension>("lapis")
+        configureKsp(target, ext)
+    }
+}
+
+open class KspSupportPlugin : KcpSupportPlugin() {
+
+    override fun apply(target: Project) {
+        super.apply(target)
+        target.pluginManager.apply("com.google.devtools.ksp")
     }
 
-    private fun configureSourceSet(
-        project: Project,
-        sourceSet: SourceSet,
-        spec: LapisSourceSetSpec,
-        lapisExtension: LapisExtension,
-    ) {
-        addLapisDependency(project, sourceSet.kspConfigurationName, "lapis-ksp")
-        addLapisDependency(project, sourceSet.compileClasspathConfigurationName, "lapis-annotations")
+    fun configureKsp(target: Project, ext: LapisExtension) {
+        ext.sourceSetSpecs.all { spec ->
+            val sourceSets = target.extensions.getByType<SourceSetContainer>()
+            sourceSets.matching { it.name == spec.name }.configureEach { ss ->
+                configureSourceSet(target, ss, spec.effective(ext))
+            }
+        }
+        target.afterEvaluate { ext.validateMixinConfigsSetup() }
+    }
 
-        val mixinConfig = spec.getEffectiveMixinConfig(lapisExtension)
+    private fun configureSourceSet(project: Project, ss: SourceSet, effective: LapisSourceSetSpec.Effective) {
+        addLapisDependency(project, ss.kspConfigurationName, "lapis-ksp")
+        addLapisDependency(project, ss.compileClasspathConfigurationName, "lapis-annotations")
 
-        val kspTaskName = sourceSet.getTaskName("ksp", "kotlin")
+        val kspTaskName = ss.getTaskName("ksp", "kotlin")
         project.tasks.withType<KspAATask>().matching { it.name == kspTaskName }.configureEach { kspTask ->
-            kspTask.commandLineArgumentProviders.add(
-                project.objects.newInstance<KspArgumentProvider>().apply {
-                    uniqueModPrefix.set(spec.getEffectiveUniqueModPrefix(lapisExtension))
-                    mixinGeneratedSubpackage.set(spec.getEffectiveMixinGeneratedSubpackage(lapisExtension))
-                    disableLCP.set(spec.getEffectiveDisableLCP(lapisExtension))
-                    nullableAnnotation.set(spec.getEffectiveNullableAnnotation(lapisExtension))
-                    nonNullAnnotation.set(spec.getEffectiveNonNullAnnotation(lapisExtension))
-                    mixinAnnotation.set(spec.getEffectiveMixinAnnotation(lapisExtension))
-                    uniqueAnnotation.set(spec.getEffectiveUniqueAnnotation(lapisExtension))
-                    shadowAnnotation.set(spec.getEffectiveShadowAnnotation(lapisExtension))
-                    mutableAnnotation.set(spec.getEffectiveMutableAnnotation(lapisExtension))
-                    finalAnnotation.set(spec.getEffectiveFinalAnnotation(lapisExtension))
-                    mixinAnnotationPackages.set(spec.getEffectiveMixinAnnotationPackages(lapisExtension))
-                    this.mixinConfig.set(mixinConfig)
-                }
-            )
+            kspTask.commandLineArgumentProviders.add(createArgumentProvider(project, effective))
         }
 
+        val mixinConfig = effective.mixinConfig
         val relativePathProvider = mixinConfig.map {
             val userConfigPath = it.asFile.toPath()
-            sourceSet.resources.srcDirs.firstOrNull { srcDir -> userConfigPath.startsWith(srcDir.toPath()) }
+            ss.resources.srcDirs.firstOrNull { srcDir -> userConfigPath.startsWith(srcDir.toPath()) }
                 ?.toPath()
                 ?.relativize(userConfigPath)
                 ?.invariantSeparatorsPathString
                 ?: userConfigPath.fileName.toString()
         }
-        val buildDirectory = project.layout.buildDirectory
-        val kspResourcesDirectory = buildDirectory.dir("generated/ksp/${sourceSet.name}/resources")
-        val mergedResourcesDirectory = buildDirectory.dir("generated/lapis-merged/${sourceSet.name}/resources")
+        val buildDir = project.layout.buildDirectory
+        val kspResDir = buildDir.dir("generated/ksp/${ss.name}/resources")
+        val mergedResDir = buildDir.dir("generated/lapis-merged/${ss.name}/resources")
 
-        val mergeMixinConfigsTask = project.tasks.register<MergeMixinConfigsTask>(
-            name = sourceSet.getTaskName("merge", "mixinConfigs")
-        ) { mergeMixinConfigsTask ->
-            mergeMixinConfigsTask.dependsOn(kspTaskName)
-            mergeMixinConfigsTask.userConfig.set(mixinConfig)
-            mergeMixinConfigsTask.generatedConfig.set(
-                kspResourcesDirectory.map { it.file("lapis-intermediates/generated-mixins.json") }
-            )
-            mergeMixinConfigsTask.mergedConfig.set(
-                relativePathProvider.flatMap { relativePath ->
-                    mergedResourcesDirectory.map { it.file(relativePath) }
-                }
-            )
+        val mergeMixinConfigs = ss.getTaskName("merge", "mixinConfigs")
+        val mergeMixinConfigsTask = project.tasks.register<MergeMixinConfigsTask>(name = mergeMixinConfigs) { task ->
+            task.dependsOn(kspTaskName)
+            task.userConfig.set(mixinConfig)
+            task.generatedConfig.set(kspResDir.map { it.file("lapis-intermediates/generated-mixins.json") })
+            task.mergedConfig.set(relativePathProvider.flatMap { mergedResDir.map { dir -> dir.file(it) } })
         }
-        project.tasks.withType<ProcessResources>()
-            .matching { it.name == sourceSet.processResourcesTaskName }
-            .configureEach { processResourcesTask ->
-                processResourcesTask.exclude { element ->
-                    kspResourcesDirectory.orNull?.asFile?.let {
-                        if (element.file.startsWith(it)) return@exclude true
-                    }
-                    mergedResourcesDirectory.orNull?.asFile?.let {
-                        if (element.file.startsWith(it)) return@exclude false
-                    }
-                    val relativePath = relativePathProvider.orNull ?: return@exclude false
-                    element.relativePath.pathString == relativePath
+        val processResources = ss.processResourcesTaskName
+        project.tasks.withType<ProcessResources>().matching { it.name == processResources }.configureEach { task ->
+            task.exclude { element ->
+                kspResDir.orNull?.asFile?.let {
+                    if (element.file.startsWith(it)) return@exclude true
                 }
-                processResourcesTask.from(
-                    mergeMixinConfigsTask.flatMap {
-                        it.mergedConfig.zip(relativePathProvider) { outputFile, relativePath ->
-                            val resourcesPath = outputFile.asFile.absolutePath.removeSuffix(relativePath)
-                            project.layout.projectDirectory.dir(resourcesPath)
-                        }
-                    }
-                )
+                mergedResDir.orNull?.asFile?.let {
+                    if (element.file.startsWith(it)) return@exclude false
+                }
+                val relativePath = relativePathProvider.orNull ?: return@exclude false
+                element.relativePath.pathString == relativePath
             }
+            task.from(
+                mergeMixinConfigsTask.flatMap {
+                    it.mergedConfig.zip(relativePathProvider) { outputFile, relativePath ->
+                        val resourcesPath = outputFile.asFile.absolutePath.removeSuffix(relativePath)
+                        project.layout.projectDirectory.dir(resourcesPath)
+                    }
+                }
+            )
+        }
     }
 
-    private fun addLapisDependency(project: Project, targetConfigurationName: String, artifactId: String) {
-        val lapisConfigurationName = "lapis${targetConfigurationName.capitalized()}"
-        val lapisConfiguration = project.configurations.maybeCreate(lapisConfigurationName).apply {
-            dependencies.add(project.dependencies.create("io.github.diskria:$artifactId:$PLUGIN_VERSION"))
+    private fun addLapisDependency(project: Project, targetConfigName: String, artifactId: String) {
+        val superConfig = project.configurations.maybeCreate("lapis${targetConfigName.capitalized()}").apply {
+            dependencies.add(project.dependencies.create("$GROUP_ID:$artifactId:$VERSION"))
         }
-        project.configurations.matching { it.name == targetConfigurationName }.configureEach { targetConfiguration ->
-            targetConfiguration.extendsFrom(lapisConfiguration)
+        project.configurations.matching { it.name == targetConfigName }.configureEach { it.extendsFrom(superConfig) }
+    }
+
+    private val SourceSet.kspConfigurationName: String get() = getTaskName("ksp", "")
+}
+
+open class KcpSupportPlugin : KotlinCompilerPluginSupportPlugin {
+
+    override fun apply(target: Project) {
+        super.apply(target)
+    }
+
+    override fun getCompilerPluginId() = "io.github.diskria.lapis.kcp"
+    override fun getPluginArtifact() = SubpluginArtifact(GROUP_ID, "lapis-kcp", VERSION)
+
+    override fun isApplicable(kotlinCompilation: KotlinCompilation<*>): Boolean {
+        val project = kotlinCompilation.target.project
+        val ext = project.extensions.findByType<LapisExtension>() ?: return false
+        return kotlinCompilation.compilationName in ext.sourceSetSpecs.names
+    }
+
+    override fun applyToCompilation(kotlinCompilation: KotlinCompilation<*>): Provider<List<SubpluginOption>> {
+        val project = kotlinCompilation.target.project
+        val ext = project.extensions.getByType<LapisExtension>()
+        return project.provider {
+            val spec = ext.sourceSetSpecs.getByName(kotlinCompilation.compilationName)
+            createArgumentProvider(project, spec.effective(ext)).asKcpArguments()
         }
     }
 
-    private companion object {
-        const val PLUGIN_VERSION = "0.10.0-SNAPSHOT"
+    protected companion object {
+        const val GROUP_ID = "io.github.diskria"
+        const val VERSION = "0.10.0-SNAPSHOT"
     }
 }
 
-private val SourceSet.kspConfigurationName: String get() = getTaskName("ksp", "")
+private fun createArgumentProvider(project: Project, effective: LapisSourceSetSpec.Effective): ArgumentProvider =
+    project.objects.newInstance<ArgumentProvider>().apply {
+        uniqueModPrefix.set(effective.uniqueModPrefix)
+        mixinGeneratedSubpackage.set(effective.mixinGeneratedSubpackage)
+        disableLCP.set(effective.disableLCP)
+        nullableAnnotation.set(effective.nullableAnnotation)
+        nonNullAnnotation.set(effective.nonNullAnnotation)
+        mixinAnnotation.set(effective.mixinAnnotation)
+        uniqueAnnotation.set(effective.uniqueAnnotation)
+        shadowAnnotation.set(effective.shadowAnnotation)
+        mutableAnnotation.set(effective.mutableAnnotation)
+        finalAnnotation.set(effective.finalAnnotation)
+        mixinAnnotationPackages.set(effective.mixinAnnotationPackages)
+        mixinConfig.set(effective.mixinConfig)
+    }

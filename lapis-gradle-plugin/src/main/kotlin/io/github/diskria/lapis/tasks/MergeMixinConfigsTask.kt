@@ -1,4 +1,4 @@
-package io.github.diskria.lapis
+package io.github.diskria.lapis.tasks
 
 import kotlinx.serialization.json.*
 import org.gradle.api.DefaultTask

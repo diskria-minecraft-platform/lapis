@@ -97,6 +97,12 @@ data class CoreOptions(
         return getOrNull(dotIndex + 1)?.isUpperCase() == true
     }
 
+    class OptionSpec(
+        val name: String,
+        val isRequired: Boolean,
+        val description: String = "Option '$name'"
+    )
+
     companion object {
         private const val SPONGE_ANNOTATIONS_PACKAGE = "org.spongepowered.asm.mixin"
 
@@ -115,18 +121,28 @@ data class CoreOptions(
         private fun String.withArgumentPrefix(): String = ARGUMENT_PREFIX + this
         private fun String.removeArgumentPrefix(): String = removePrefix(ARGUMENT_PREFIX)
 
-        fun fromArguments(map: Map<String, String>, warn: (String) -> Unit, error: (String) -> Nothing): CoreOptions {
-            val scopedArguments = map.filterKeys { it.hasArgumentPrefix() }
-            val descriptorElements = serialDescriptor<CoreOptions>().elements
-            val existingKeys = descriptorElements.map { it.name.withArgumentPrefix() }.toSet()
+        val specs = serialDescriptor<CoreOptions>().elements.map {
+            OptionSpec(
+                name = it.name.withArgumentPrefix(),
+                isRequired = !it.isOptional,
+            )
+        }
+
+        fun fromArguments(
+            rawArguments: Map<String, String>,
+            onWarn: (message: String) -> Unit,
+            onError: (message: String) -> Nothing,
+        ): CoreOptions {
+            val scopedArguments = rawArguments.filterKeys { it.hasArgumentPrefix() }
+            val existingKeys = specs.map { it.name }.toSet()
             val unknownKeys = scopedArguments.keys - existingKeys
             if (unknownKeys.isNotEmpty()) {
-                warn("Unknown arguments: ${unknownKeys.joinToString { "'$it'" }}.")
+                onWarn("Unknown arguments: ${unknownKeys.joinToString { "'$it'" }}.")
             }
-            val requiredKeys = descriptorElements.filter { !it.isOptional }.map { it.name.withArgumentPrefix() }.toSet()
+            val requiredKeys = specs.filter { it.isRequired }.map { it.name }.toSet()
             val missingRequiredKeys = requiredKeys - scopedArguments.keys
             if (missingRequiredKeys.isNotEmpty()) {
-                error("Missing required arguments: ${missingRequiredKeys.joinToString { "'$it'" }}.")
+                onError("Missing required arguments: ${missingRequiredKeys.joinToString { "'$it'" }}.")
             }
             val options = runCatching {
                 optionsJson.decodeFromJsonElement<CoreOptions>(buildJsonObject {
@@ -140,7 +156,7 @@ data class CoreOptions(
             }
             val validationErrors = options.validate()
             if (validationErrors.isNotEmpty()) {
-                error("Invalid CoreOptions configuration:\n${validationErrors.joinToString("\n")}")
+                onError("Invalid CoreOptions configuration:\n${validationErrors.joinToString("\n")}")
             }
             return options
         }

@@ -1,4 +1,4 @@
-package io.github.diskria.lapis.ksp.phases.generator
+package io.github.diskria.lapis.ksp.generator
 
 import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.Dependencies
@@ -7,7 +7,7 @@ import io.github.diskria.lapis.annotations.InitStrategy
 import io.github.diskria.lapis.core.CoreOptions
 import io.github.diskria.lapis.core.extensions.qualifiedNameOf
 import io.github.diskria.lapis.core.lowering.models.*
-import io.github.diskria.lapis.ksp.phases.generator.models.GeneratedMixinsJson
+import io.github.diskria.lapis.ksp.generator.models.GeneratedMixinsJson
 import io.github.diskria.poetesse.Poetesse
 import io.github.diskria.poetesse.PoetesseFile
 import io.github.diskria.poetesse.interop.*
