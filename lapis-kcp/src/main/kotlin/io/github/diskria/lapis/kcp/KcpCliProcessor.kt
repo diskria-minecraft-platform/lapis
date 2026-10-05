@@ -26,7 +26,7 @@ class KcpCliProcessor : CommandLineProcessor {
         }
 
     override fun processOption(option: AbstractCliOption, value: String, configuration: CompilerConfiguration) {
-        configuration.appendMap(KcpKeys.RAW_ARGUMENTS_KEY, option.optionName, value)
+        configuration.appendMap(KcpKeys.RAW_ARGUMENTS, option.optionName, value)
     }
 }
 

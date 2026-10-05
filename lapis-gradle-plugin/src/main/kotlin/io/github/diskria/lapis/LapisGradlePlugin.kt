@@ -23,7 +23,14 @@ class LapisGradlePlugin : KspSupportPlugin() {
     override fun apply(target: Project) {
         super.apply(target)
         val ext = target.extensions.create<LapisExtension>("lapis")
-        configureKsp(target, ext)
+        ext.sourceSetSpecs.all { spec ->
+            val sourceSets = target.extensions.getByType<SourceSetContainer>()
+            sourceSets.matching { it.name == spec.name }.configureEach { ss ->
+                target.addLapisDependencyTo(ss.compileClasspathConfigurationName, "lapis-annotations")
+                target.setupKsp(ss, spec.effective(ext))
+            }
+        }
+        target.afterEvaluate { ext.validateMixinConfigsSetup() }
     }
 }
 
@@ -34,23 +41,12 @@ open class KspSupportPlugin : KcpSupportPlugin() {
         target.pluginManager.apply("com.google.devtools.ksp")
     }
 
-    fun configureKsp(target: Project, ext: LapisExtension) {
-        ext.sourceSetSpecs.all { spec ->
-            val sourceSets = target.extensions.getByType<SourceSetContainer>()
-            sourceSets.matching { it.name == spec.name }.configureEach { ss ->
-                configureSourceSet(target, ss, spec.effective(ext))
-            }
-        }
-        target.afterEvaluate { ext.validateMixinConfigsSetup() }
-    }
-
-    private fun configureSourceSet(project: Project, ss: SourceSet, effective: LapisSourceSetSpec.Effective) {
-        addLapisDependency(project, ss.kspConfigurationName, "lapis-ksp")
-        addLapisDependency(project, ss.compileClasspathConfigurationName, "lapis-annotations")
+    protected fun Project.setupKsp(ss: SourceSet, effective: LapisSourceSetSpec.Effective) {
+        project.addLapisDependencyTo(ss.kspConfigurationName, "lapis-ksp")
 
         val kspTaskName = ss.getTaskName("ksp", "kotlin")
         project.tasks.withType<KspAATask>().matching { it.name == kspTaskName }.configureEach { kspTask ->
-            kspTask.commandLineArgumentProviders.add(createArgumentProvider(project, effective))
+            kspTask.commandLineArgumentProviders.add(createCliArgumentProvider(project, effective))
         }
 
         val mixinConfig = effective.mixinConfig
@@ -96,21 +92,10 @@ open class KspSupportPlugin : KcpSupportPlugin() {
         }
     }
 
-    private fun addLapisDependency(project: Project, targetConfigName: String, artifactId: String) {
-        val superConfig = project.configurations.maybeCreate("lapis${targetConfigName.capitalized()}").apply {
-            dependencies.add(project.dependencies.create("$GROUP_ID:$artifactId:$VERSION"))
-        }
-        project.configurations.matching { it.name == targetConfigName }.configureEach { it.extendsFrom(superConfig) }
-    }
-
     private val SourceSet.kspConfigurationName: String get() = getTaskName("ksp", "")
 }
 
 open class KcpSupportPlugin : KotlinCompilerPluginSupportPlugin {
-
-    override fun apply(target: Project) {
-        super.apply(target)
-    }
 
     override fun getCompilerPluginId() = "io.github.diskria.lapis.kcp"
     override fun getPluginArtifact() = SubpluginArtifact(GROUP_ID, "lapis-kcp", VERSION)
@@ -126,8 +111,15 @@ open class KcpSupportPlugin : KotlinCompilerPluginSupportPlugin {
         val ext = project.extensions.getByType<LapisExtension>()
         return project.provider {
             val spec = ext.sourceSetSpecs.getByName(kotlinCompilation.compilationName)
-            createArgumentProvider(project, spec.effective(ext)).asKcpArguments()
+            createCliArgumentProvider(project, spec.effective(ext)).asKcpArguments()
         }
+    }
+
+    protected fun Project.addLapisDependencyTo(targetConfigName: String, artifactId: String) {
+        val superConfig = project.configurations.maybeCreate("lapis${targetConfigName.capitalized()}").apply {
+            dependencies.add(project.dependencies.create("$GROUP_ID:$artifactId:$VERSION"))
+        }
+        project.configurations.matching { it.name == targetConfigName }.configureEach { it.extendsFrom(superConfig) }
     }
 
     protected companion object {
@@ -136,8 +128,8 @@ open class KcpSupportPlugin : KotlinCompilerPluginSupportPlugin {
     }
 }
 
-private fun createArgumentProvider(project: Project, effective: LapisSourceSetSpec.Effective): ArgumentProvider =
-    project.objects.newInstance<ArgumentProvider>().apply {
+private fun createCliArgumentProvider(project: Project, effective: LapisSourceSetSpec.Effective): CliArgumentProvider =
+    project.objects.newInstance<CliArgumentProvider>().apply {
         uniqueModPrefix.set(effective.uniqueModPrefix)
         mixinGeneratedSubpackage.set(effective.mixinGeneratedSubpackage)
         disableLCP.set(effective.disableLCP)

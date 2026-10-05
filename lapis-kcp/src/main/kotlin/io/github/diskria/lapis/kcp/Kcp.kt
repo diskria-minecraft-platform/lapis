@@ -24,7 +24,7 @@ class Kcp : CompilerPluginRegistrar() {
     override fun ExtensionStorage.registerExtensions(configuration: CompilerConfiguration) {
         val reporter = configuration[CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY, MessageCollector.NONE]
         val options = CoreOptions.fromArguments(
-            rawArguments = configuration.getMap(KcpKeys.RAW_ARGUMENTS_KEY),
+            rawArguments = configuration.getMap(KcpKeys.RAW_ARGUMENTS),
             onWarn = { message -> reporter.report(CompilerMessageSeverity.WARNING, message) },
             onError = { message ->
                 reporter.report(CompilerMessageSeverity.ERROR, message)

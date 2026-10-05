@@ -16,7 +16,7 @@ import org.gradle.process.CommandLineArgumentProvider
 import org.jetbrains.kotlin.gradle.plugin.SubpluginOption
 import javax.inject.Inject
 
-abstract class ArgumentProvider @Inject constructor(layout: ProjectLayout) : CommandLineArgumentProvider {
+abstract class CliArgumentProvider @Inject constructor(layout: ProjectLayout) : CommandLineArgumentProvider {
 
     @get:Optional
     @get:Input
