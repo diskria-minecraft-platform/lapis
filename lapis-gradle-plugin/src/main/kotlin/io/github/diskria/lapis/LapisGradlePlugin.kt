@@ -46,7 +46,7 @@ open class KspSupportPlugin : KcpSupportPlugin() {
 
         val kspTaskName = ss.getTaskName("ksp", "kotlin")
         project.tasks.withType<KspAATask>().matching { it.name == kspTaskName }.configureEach { kspTask ->
-            kspTask.commandLineArgumentProviders.add(createCliArgumentProvider(project, effective))
+            kspTask.commandLineArgumentProviders.add(project.createCliArgumentProvider(effective))
         }
 
         val mixinConfig = effective.mixinConfig
@@ -110,8 +110,8 @@ open class KcpSupportPlugin : KotlinCompilerPluginSupportPlugin {
         val project = kotlinCompilation.target.project
         val ext = project.extensions.getByType<LapisExtension>()
         return project.provider {
-            val spec = ext.sourceSetSpecs.getByName(kotlinCompilation.compilationName)
-            createCliArgumentProvider(project, spec.effective(ext)).asKcpArguments()
+            val effective = ext.sourceSetSpecs.getByName(kotlinCompilation.compilationName).effective(ext)
+            project.createCliArgumentProvider(effective).asKcpArguments()
         }
     }
 
@@ -128,8 +128,8 @@ open class KcpSupportPlugin : KotlinCompilerPluginSupportPlugin {
     }
 }
 
-private fun createCliArgumentProvider(project: Project, effective: LapisSourceSetSpec.Effective): CliArgumentProvider =
-    project.objects.newInstance<CliArgumentProvider>().apply {
+private fun Project.createCliArgumentProvider(effective: LapisSourceSetSpec.Effective): CliArgumentProvider =
+    objects.newInstance<CliArgumentProvider>().apply {
         uniqueModPrefix.set(effective.uniqueModPrefix)
         mixinGeneratedSubpackage.set(effective.mixinGeneratedSubpackage)
         disableLCP.set(effective.disableLCP)
