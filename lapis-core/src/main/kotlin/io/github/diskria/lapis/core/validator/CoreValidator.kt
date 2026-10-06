@@ -197,8 +197,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
                 """.trimIndent()
             }
         }
-        val validTypeNode = type.validate()
-        val classTypeModel = nodeRequireNotNull(validTypeNode.toModel() as? ClassTypeModel) { "" }
+        val classTypeModel = nodeRequireNotNull(type.validate().toModel() as? ClassTypeModel) { "" }
         return KMixinModel(
             origin = origin,
             type = classTypeModel,
@@ -217,7 +216,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
     }
 
     private fun KMixinNode.Constructor.Parameter.toModel(
-        targetType: ValidTypeNode,
+        targetType: ParsedValidType,
         enclosingTypeParameters: List<TypeParameterModel>,
     ) = when {
         annotations.hasApiAnnotation<Origin>() -> {
@@ -225,7 +224,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
             KMixinModel.Class.ConstructorParameter.Origin(
                 name = name,
                 type = type.validate()
-                    .requireSubtypeOf(targetType, "@Origin parameter")
+                    .requireSubtypeOf(target = targetType, node = this, nodeDesc = "@Origin parameter")
                     .toModel(enclosingTypeParameters),
             )
         }
@@ -267,9 +266,8 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         val localTypeParameters = typeParameters.validate(enclosingTypeParameters)
         val scopeTypeParameters = localTypeParameters + enclosingTypeParameters
         val parameters = parameters.map { parameter ->
-            parameter.nodeRequireNotNull(parameter.name) { "" }
             FunctionParameterModel(
-                name = parameter.name,
+                name = parameter.nodeRequireNotNull(parameter.name) { "" },
                 type = parameter.type.validate().toModel(scopeTypeParameters),
             )
         }
@@ -354,7 +352,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
 
     private fun KMixinNode.Function.validateAsInjection(
         isInCompanionObject: Boolean,
-        targetType: ValidTypeNode,
+        targetType: ParsedValidType,
         mixinAnnotations: List<MixinAnnotationModel>,
         enclosingTypeParameters: List<TypeParameterModel>,
     ): KMixinModel.Injection {
@@ -367,7 +365,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         val scopeTypeParameters = typeParameters.validate(enclosingTypeParameters) + enclosingTypeParameters
         val extensionReceiverType = extensionReceiverType
             ?.validate()
-            ?.requireSubtypeOf(target = targetType, roleDesc = "Injection extension receiver")
+            ?.requireSubtypeOf(target = targetType, node = this, nodeDesc = "Injection extension receiver")
             ?.toModel(scopeTypeParameters)
         return KMixinModel.Injection(
             jvmName = jvmName,
@@ -516,34 +514,28 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
     }
 
     private fun AnnotationNode.isMixinAnnotation(): Boolean {
-        val type = (this as? ValidAnnotationNode)?.type as? ClassTypeNode ?: return true
+        val type = type.validate() as? ParsedClassType ?: return true
         return options.mixinAnnotationPackages.any { type.packageName.isSubpackageOf(it) }
     }
 
-    private fun AnnotationsContainer.filterMixinAnnotations(): List<ValidAnnotationNode> =
-        externalAnnotations.filter { it.isMixinAnnotation() }.validateAll { it.validate() }
+    private fun AnnotationsContainer.filterMixinAnnotations(): List<AnnotationNode> =
+        externalAnnotations.filter { it.isMixinAnnotation() }
 
-    private fun AnnotationNode.validate(): ValidAnnotationNode =
-        nodeRequireNotNull(this as? ValidAnnotationNode) {
+    private fun AnnotationNode.toModel(): MixinAnnotationModel {
+        nodeRequire(type is ParsedClassType) {
             """
             Annotations must be valid here.
             Why: Package name is required to determine whether the annotation should be copied into Java Mixin.
             How to fix: Ensure the annotation is correctly imported and has no compilation errors.
             """.trimIndent()
         }
-
-    private fun ValidAnnotationNode.toModel(): MixinAnnotationModel {
-        val validType = type.validate()
-        nodeRequire(validType is ClassTypeNode) { "" }
         return MixinAnnotationModel(
-            type = validType.toModel(),
-            arguments = arguments.validate(),
+            type = type.toModel(),
+            arguments = arguments
+                .filter { it !is AnnotationNode.ValidArgument || it.isExplicit }
+                .validateAll { it.validate() },
         )
     }
-
-    @JvmName("validateAnnotationArguments")
-    private fun List<AnnotationNode.Argument>.validate(): List<MixinAnnotationModel.Argument> =
-        filter { it !is AnnotationNode.ValidArgument || it.isExplicit }.validateAll { it.validate() }
 
     private fun AnnotationNode.Argument.validate(): MixinAnnotationModel.Argument {
         nodeRequire(this is AnnotationNode.ValidArgument) {
@@ -556,21 +548,22 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         return when (this) {
             is AnnotationNode.ScalarArgument -> {
                 nodeRequireNotNull(name) { "" }
-                MixinAnnotationModel.ScalarArgument(name, value.toModel())
+                MixinAnnotationModel.ScalarArgument(name, value.validate().toModel())
             }
 
             is AnnotationNode.ArrayArgument -> {
                 nodeRequireNotNull(name) { "" }
-                MixinAnnotationModel.ArrayArgument(name, elements.validate())
+                MixinAnnotationModel.ArrayArgument(name, elements.mapValid { it.validate().toModel() })
             }
         }
     }
 
-    @JvmName("validateAnnotationArgumentValues")
-    private fun List<AnnotationNode.Argument.Value>.validate(): List<MixinAnnotationModel.Argument.Value> =
-        mapValid { it.toModel() }
+    context(nodeHolder: NodeHolder)
+    private fun AnnotationNode.Argument.Value.validate(): AnnotationNode.Argument.ValidValue =
+        nodeHolder.nodeRequireNotNull(this as? AnnotationNode.Argument.ValidValue) { "" }
 
-    private fun AnnotationNode.Argument.Value.toModel(): MixinAnnotationModel.Argument.Value = when (this) {
+    context(nodeHolder: NodeHolder)
+    private fun AnnotationNode.Argument.ValidValue.toModel() = when (this) {
         is AnnotationNode.Argument.BooleanValue -> MixinAnnotationModel.Argument.BooleanValue(boolean)
         is AnnotationNode.Argument.ByteValue -> MixinAnnotationModel.Argument.ByteValue(byte)
         is AnnotationNode.Argument.ShortValue -> MixinAnnotationModel.Argument.ShortValue(short)
@@ -581,15 +574,15 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         is AnnotationNode.Argument.DoubleValue -> MixinAnnotationModel.Argument.DoubleValue(double)
         is AnnotationNode.Argument.StringValue -> MixinAnnotationModel.Argument.StringValue(string)
         is AnnotationNode.Argument.TypeValue -> {
-            val validTypeModel = type.validate().toModel()
-            val classTypeModel = type.nodeRequireNotNull(validTypeModel as? ClassTypeModel) {
+            val typeModel = type.validate().toModel()
+            val classTypeModel = nodeHolder.nodeRequireNotNull(typeModel as? ClassTypeModel) {
                 """
                 Class reference argument must resolve to a valid class declaration.
                 Why: The specified type could not be resolved.
                 How to fix: Ensure the class argument has no compilation errors.
                 """.trimIndent()
             }
-            type.nodeRequire(validTypeModel.arguments.all { it is ClassTypeModel.StarProjectionArgument }) {
+            nodeHolder.nodeRequire(typeModel.arguments.all { it is ClassTypeModel.StarProjectionArgument }) {
                 """
                 Generic type arguments in class reference are not supported.
                 Why: Generic type arguments cannot be mapped to Java Mixin annotations.
@@ -600,27 +593,31 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         }
 
         is AnnotationNode.Argument.EnumValue -> {
-            val validTypeModel = type.validate().toModel()
-            val classTypeModel = type.nodeRequireNotNull(validTypeModel as? ClassTypeModel) { "" }
+            val typeModel = type.validate().toModel()
+            val classTypeModel = nodeHolder.nodeRequireNotNull(typeModel as? ClassTypeModel) { "" }
             MixinAnnotationModel.Argument.EnumValue(classTypeModel, name)
         }
 
         is AnnotationNode.Argument.AnnotationValue -> {
-            MixinAnnotationModel.Argument.AnnotationValue(annotation.validate().toModel())
+            MixinAnnotationModel.Argument.AnnotationValue(annotation.toModel())
         }
     }
 
-    private fun ValidTypeNode.requireSubtypeOf(target: ValidTypeNode, roleDesc: String): ValidTypeNode {
-        nodeRequire(!isNullable) {
+    private fun ParsedValidType.requireSubtypeOf(
+        target: ParsedValidType,
+        node: NodeHolder,
+        nodeDesc: String,
+    ): ParsedValidType {
+        node.nodeRequire(!type.isNullable) {
             """
-            $roleDesc type cannot be nullable.
+            $nodeDesc type cannot be nullable.
             Why: In Java Mixin, an instance of the target type is always initialized and is guaranteed to be non-null.
             How to fix: Remove the nullable mark ('?') from type.
             """.trimIndent()
         }
-        nodeRequire(type.isSubtypeOf(target.type)) {
+        node.nodeRequire(type.isSubtypeOf(target.type)) {
             """
-            $roleDesc type must be a subtype of target type.
+            $nodeDesc type must be a subtype of target type.
             Why: In Java Mixin, 'this' is the target type, so an unsafe cast requires a subtype relationship.
             How to fix: Ensure type is a subtype of target type.
             """.trimIndent()
@@ -628,8 +625,9 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         return this
     }
 
-    private fun TypeNode.validate(): ValidTypeNode =
-        nodeRequireNotNull(this as? ValidTypeNode) {
+    context(nodeHolder: NodeHolder)
+    private fun ParsedType.validate(): ParsedValidType =
+        nodeHolder.nodeRequireNotNull(this as? ParsedValidType) {
             """
             Ensure the type has no compilation errors.
             """.trimIndent()
@@ -654,32 +652,34 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         )
     }
 
-    private fun ValidTypeNode.toModel(scopeTypeParameters: List<TypeParameterModel> = emptyList()): TypeModel =
+    context(nodeHolder: NodeHolder)
+    private fun ParsedValidType.toModel(scopeTypeParameters: List<TypeParameterModel> = emptyList()): TypeModel =
         when (this) {
-            is ClassTypeNode -> toModel(scopeTypeParameters)
-            is TypeArgumentNode -> {
+            is ParsedClassType -> toModel(scopeTypeParameters)
+            is ParsedTypeArgument -> {
                 val typeParameter = findParameter(name, scopeTypeParameters)
-                val canonicalType = resolveCanonicalType(typeParameter, scopeTypeParameters)
-                TypeArgumentModel(name = name, canonicalType = canonicalType, isNullable = isNullable)
+                val canonicalType = unwrapFirstBound(typeParameter, scopeTypeParameters)
+                TypeArgumentModel(name = name, canonicalType = canonicalType, isNullable = type.isNullable)
             }
         }
 
-    private fun ClassTypeNode.toModel(scopeTypeParameters: List<TypeParameterModel> = emptyList()): ClassTypeModel {
+    context(nodeHolder: NodeHolder)
+    private fun ParsedClassType.toModel(scopeTypeParameters: List<TypeParameterModel> = emptyList()): ClassTypeModel {
         val functionalType = functionalType?.let { type ->
-            nodeRequire(!type.isSuspending) { "Suspending functional types are not supported yet." }
+            nodeHolder.nodeRequire(!type.isSuspending) { "Suspending functional types are not supported yet." }
             ClassTypeModel.FunctionalType(
-                contextTypes = type.contextTypes.map { it.validate().toModel(scopeTypeParameters) },
-                receiverType = type.receiverType?.validate()?.toModel(scopeTypeParameters),
+                contextTypes = type.contextTypes.map { it.toModel(scopeTypeParameters) },
+                receiverType = type.receiverType?.toModel(scopeTypeParameters),
                 parameters = type.parameters.map {
                     ClassTypeModel.FunctionalType.Parameter(
                         name = it.name,
-                        type = it.type.validate().toModel(scopeTypeParameters),
+                        type = it.type.toModel(scopeTypeParameters),
                     )
                 },
-                returnType = type.returnType.validate().toModel(scopeTypeParameters),
+                returnType = type.returnType.toModel(scopeTypeParameters),
             )
         }
-        nodeRequire(packageName.isNotEmpty()) {
+        nodeHolder.nodeRequire(packageName.isNotEmpty()) {
             """
             Class declarations must belong to a package.
             Why: Java Mixin in a named package cannot access declarations in the default package.
@@ -688,7 +688,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         }
         return ClassTypeModel(
             packageName = packageName,
-            qualifiedName = nodeRequireNotNull(qualifiedName) {
+            qualifiedName = nodeHolder.nodeRequireNotNull(qualifiedName) {
                 """
                 Class declarations must have a fully qualified name; local classes are not supported.
                 Why: Java Mixin cannot access local class declarations.
@@ -696,44 +696,43 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
                 """.trimIndent()
             },
             arguments = arguments.map { it.validate(scopeTypeParameters) },
-            canonicalType = canonicalType?.toModel(scopeTypeParameters),
+            canonicalType = actualType?.toModel(scopeTypeParameters),
             functionalType = functionalType,
-            isNullable = isNullable,
+            isNullable = type.isNullable,
         )
     }
 
-    private fun ClassTypeNode.TypeArgument.validate(
-        scopeTypeParameters: List<TypeParameterModel>
-    ): ClassTypeModel.TypeArgument = when (this) {
-        is ClassTypeNode.StarProjectionArgument -> ClassTypeModel.StarProjectionArgument
-        is ClassTypeNode.GenericTypeArgument -> ClassTypeModel.GenericTypeArgument(
-            type = type.validate().toModel(scopeTypeParameters),
+    context(nodeHolder: NodeHolder)
+    private fun ParsedClassType.TypeArgument.validate(scopeTypeParameters: List<TypeParameterModel>) = when (this) {
+        is ParsedClassType.StarProjectionArgument -> ClassTypeModel.StarProjectionArgument
+        is ParsedClassType.GenericTypeArgument -> ClassTypeModel.GenericTypeArgument(
+            type = type.toModel(scopeTypeParameters),
             variance = variance,
         )
     }
 
-    private fun TypeArgumentNode.findParameter(
-        name: String,
-        scopeTypeParameters: List<TypeParameterModel>,
-    ): TypeParameterModel = nodeRequireNotNull(scopeTypeParameters.find { it.name == name }) {
-        "Type parameter '$name' not found in scope"
-    }
+    context(nodeHolder: NodeHolder)
+    private fun findParameter(name: String, scopeTypeParameters: List<TypeParameterModel>): TypeParameterModel =
+        nodeHolder.nodeRequireNotNull(scopeTypeParameters.find { it.name == name }) {
+            "Type parameter '$name' not found in scope"
+        }
 
-    private tailrec fun TypeArgumentNode.resolveCanonicalType(
+    context(nodeHolder: NodeHolder)
+    private tailrec fun ParsedTypeArgument.unwrapFirstBound(
         typeParameter: TypeParameterModel,
         scopeTypeParameters: List<TypeParameterModel>,
         visited: Set<String> = emptySet(),
     ): ClassTypeModel {
-        nodeRequire(typeParameter.name !in visited) {
+        nodeHolder.nodeRequire(typeParameter.name !in visited) {
             "Cyclic type parameter boundary detected for ${typeParameter.name}"
         }
-        val firstBound = typeParameter.bounds.firstOrNull() ?: ClassTypeModel.NULLABLE_ANY
-        return when (firstBound) {
+        return when (val firstBound = typeParameter.bounds.firstOrNull() ?: ClassTypeModel.NULLABLE_ANY) {
             is ClassTypeModel -> firstBound
-            is TypeArgumentModel -> {
-                val nextTypeParameter = findParameter(firstBound.name, scopeTypeParameters)
-                resolveCanonicalType(nextTypeParameter, scopeTypeParameters, visited + typeParameter.name)
-            }
+            is TypeArgumentModel -> unwrapFirstBound(
+                findParameter(name = firstBound.name, scopeTypeParameters = scopeTypeParameters),
+                scopeTypeParameters,
+                visited + typeParameter.name
+            )
         }
     }
 

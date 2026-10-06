@@ -7,23 +7,30 @@ import kotlin.enums.enumEntries
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 
-sealed interface AnnotationNode : NodeHolder {
+class AnnotationNode(
+    val type: ParsedType,
+    val arguments: List<Argument>,
+    override val node: Node,
+) : NodeHolder {
 
     sealed interface Argument : NodeHolder {
 
         sealed interface Value
-        class BooleanValue(val boolean: Boolean) : Value
-        class ByteValue(val byte: Byte) : Value
-        class ShortValue(val short: Short) : Value
-        class IntValue(val int: Int) : Value
-        class LongValue(val long: Long) : Value
-        class CharValue(val char: Char) : Value
-        class FloatValue(val float: Float) : Value
-        class DoubleValue(val double: Double) : Value
-        class StringValue(val string: String) : Value
-        class TypeValue(val type: TypeNode, override val node: Node) : Value, NodeHolder
-        class EnumValue(val type: TypeNode, val name: String, override val node: Node) : Value, NodeHolder
-        class AnnotationValue(val annotation: AnnotationNode) : Value
+        sealed interface ValidValue : Value
+        object InvalidValue : Value
+
+        class BooleanValue(val boolean: Boolean) : ValidValue
+        class ByteValue(val byte: Byte) : ValidValue
+        class ShortValue(val short: Short) : ValidValue
+        class IntValue(val int: Int) : ValidValue
+        class LongValue(val long: Long) : ValidValue
+        class CharValue(val char: Char) : ValidValue
+        class FloatValue(val float: Float) : ValidValue
+        class DoubleValue(val double: Double) : ValidValue
+        class StringValue(val string: String) : ValidValue
+        class TypeValue(val type: ParsedType) : ValidValue
+        class EnumValue(val type: ParsedType, val name: String) : ValidValue
+        class AnnotationValue(val annotation: AnnotationNode) : ValidValue
     }
 
     sealed interface ValidArgument : Argument {
@@ -48,16 +55,8 @@ sealed interface AnnotationNode : NodeHolder {
     class InvalidArgument(override val node: Node) : Argument
 }
 
-class ValidAnnotationNode(
-    val type: ValidTypeNode,
-    val arguments: List<Argument>,
-    override val node: Node,
-) : AnnotationNode
-
-class InvalidAnnotationNode(override val node: Node) : AnnotationNode
-
 class AnnotationsContainer(
-    val apiAnnotations: List<ValidAnnotationNode>,
+    val apiAnnotations: List<AnnotationNode>,
     val externalAnnotations: List<AnnotationNode>,
 ) {
     inline fun <reified A : Annotation> hasApiAnnotation(): Boolean = findApiAnnotation<A>() != null
@@ -108,15 +107,13 @@ class AnnotationsContainer(
         }
 
     inline fun <reified E : Enum<E>> Argument.EnumValue.getTypedOrNull(): E? =
-        if (type is ClassTypeNode && type.qualifiedName == qualifiedNameOf<E>()) {
+        if (type is ParsedClassType && type.qualifiedName == qualifiedNameOf<E>()) {
             enumEntries<E>().find { it.name == name }
         } else null
 
-    inline fun <reified A : Annotation> findApiAnnotation(): ValidAnnotationNode? =
+    inline fun <reified A : Annotation> findApiAnnotation(): AnnotationNode? =
         apiAnnotations.firstNotNullOfOrNull { annotation ->
-            if (annotation.type is ClassTypeNode &&
-                annotation.type.qualifiedName == qualifiedNameOf<A>()
-            ) annotation
+            if (annotation.type is ParsedClassType && annotation.type.qualifiedName == qualifiedNameOf<A>()) annotation
             else null
         }
 
@@ -127,11 +124,10 @@ class AnnotationsContainer(
         private const val API_ANNOTATIONS_PACKAGE = "io.github.diskria.lapis.annotations"
 
         fun of(annotations: List<AnnotationNode>): AnnotationsContainer {
-            val apiAnnotations = mutableListOf<ValidAnnotationNode>()
+            val apiAnnotations = mutableListOf<AnnotationNode>()
             val externalAnnotations = mutableListOf<AnnotationNode>()
             annotations.forEach { annotation ->
-                if (annotation is ValidAnnotationNode &&
-                    annotation.type is ClassTypeNode &&
+                if (annotation.type is ParsedClassType &&
                     annotation.type.packageName.isSubpackageOf(API_ANNOTATIONS_PACKAGE)
                 ) {
                     apiAnnotations += annotation

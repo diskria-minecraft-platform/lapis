@@ -5,7 +5,7 @@ import io.github.diskria.lapis.core.utils.Variance
 class KMixinNode<O>(
     val origin: O?,
     val name: String,
-    val type: TypeNode,
+    val type: ParsedType,
     val isClass: Boolean,
     val isInterface: Boolean,
     val isOpen: Boolean,
@@ -30,7 +30,7 @@ class KMixinNode<O>(
 
         class Parameter(
             val name: String?,
-            val type: TypeNode,
+            val type: ParsedType,
             val annotations: AnnotationsContainer,
             override val node: Node,
         ) : NodeHolder
@@ -38,7 +38,7 @@ class KMixinNode<O>(
 
     class Property(
         val name: String,
-        val type: TypeNode,
+        val type: ParsedType,
         val isPublic: Boolean,
         val isOpen: Boolean,
         val isAbstract: Boolean,
@@ -66,11 +66,11 @@ class KMixinNode<O>(
         val jvmName: String?,
         val parameters: List<Parameter>,
         val contextParameters: List<ContextParameterNode>,
-        val returnType: TypeNode?,
+        val returnType: ParsedType?,
         val isPublic: Boolean,
         val isOpen: Boolean,
         val isAbstract: Boolean,
-        val extensionReceiverType: TypeNode?,
+        val extensionReceiverType: ParsedType?,
         val annotations: AnnotationsContainer,
         val typeParameters: List<TypeParameterNode>,
         val isSuspending: Boolean,
@@ -79,7 +79,7 @@ class KMixinNode<O>(
 
         class Parameter(
             val name: String?,
-            val type: TypeNode,
+            val type: ParsedType,
             val annotations: AnnotationsContainer,
             override val node: Node,
         ) : NodeHolder
@@ -95,55 +95,53 @@ class KMixinNode<O>(
 
 class ContextParameterNode(
     val name: String?,
-    val type: TypeNode,
+    val type: ParsedType,
     val annotations: AnnotationsContainer,
     override val node: Node,
 ) : NodeHolder
 
-sealed interface TypeNode : NodeHolder
+sealed interface ParsedType
 
-sealed interface ValidTypeNode : TypeNode {
+sealed interface ParsedValidType : ParsedType {
     val type: Type
-    val isNullable: Boolean
 }
 
-class ClassTypeNode(
+object ParsedInvalidType : ParsedType
+
+class ParsedClassType(
     val packageName: String,
     val qualifiedName: String?,
     val arguments: List<TypeArgument>,
-    val canonicalType: ClassTypeNode?,
+    val actualType: ParsedClassType?,
     val functionalType: FunctionalType?,
     override val type: Type,
-    override val isNullable: Boolean,
-    override val node: Node,
-) : ValidTypeNode {
-    sealed interface TypeArgument : NodeHolder
-    class StarProjectionArgument(override val node: Node) : TypeArgument
-    class GenericTypeArgument(val type: TypeNode, val variance: Variance, override val node: Node) : TypeArgument
+) : ParsedValidType {
+
+    val actualOrSelf: ParsedClassType get() = actualType ?: this
+
+    sealed interface TypeArgument
+    object StarProjectionArgument : TypeArgument
+    class GenericTypeArgument(val type: ParsedValidType, val variance: Variance) : TypeArgument
 
     class FunctionalType(
-        val contextTypes: List<TypeNode>,
-        val receiverType: TypeNode?,
+        val contextTypes: List<ParsedValidType>,
+        val receiverType: ParsedValidType?,
         val parameters: List<Parameter>,
-        val returnType: TypeNode,
+        val returnType: ParsedValidType,
         val isSuspending: Boolean,
     ) {
-        class Parameter(val name: String?, val type: TypeNode)
+        class Parameter(val name: String?, val type: ParsedValidType)
     }
 }
 
-class TypeArgumentNode(
+class ParsedTypeArgument(
     val name: String,
     override val type: Type,
-    override val isNullable: Boolean,
-    override val node: Node,
-) : ValidTypeNode
-
-class InvalidTypeNode(override val node: Node) : TypeNode
+) : ParsedValidType
 
 class TypeParameterNode(
     val name: String,
-    val bounds: List<TypeNode>,
+    val bounds: List<ParsedType>,
     val isReified: Boolean,
     override val node: Node,
 ) : NodeHolder
