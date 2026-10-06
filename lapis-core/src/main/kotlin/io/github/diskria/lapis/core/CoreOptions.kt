@@ -135,20 +135,20 @@ data class CoreOptions(
             onWarn: (message: String) -> Unit,
             onError: (message: String) -> Nothing,
         ): CoreOptions {
-            val scopedArguments = rawArguments.filterKeys { it.hasArgumentPrefix() }
+            val scopeArguments = rawArguments.filterKeys { it.hasArgumentPrefix() }
             val existingKeys = specs.map { it.name }.toSet()
-            val unknownKeys = scopedArguments.keys - existingKeys
+            val unknownKeys = scopeArguments.keys - existingKeys
             if (unknownKeys.isNotEmpty()) {
                 onWarn("Unknown arguments: ${unknownKeys.joinToString { "'$it'" }}.")
             }
             val requiredKeys = specs.filter { it.isRequired }.map { it.name }.toSet()
-            val missingRequiredKeys = requiredKeys - scopedArguments.keys
+            val missingRequiredKeys = requiredKeys - scopeArguments.keys
             if (missingRequiredKeys.isNotEmpty()) {
                 onError("Missing required arguments: ${missingRequiredKeys.joinToString { "'$it'" }}.")
             }
             val options = runCatching {
                 optionsJson.decodeFromJsonElement<CoreOptions>(buildJsonObject {
-                    scopedArguments.forEach { (key, value) ->
+                    scopeArguments.forEach { (key, value) ->
                         put(key.removeArgumentPrefix(), JsonPrimitive(value))
                     }
                 })

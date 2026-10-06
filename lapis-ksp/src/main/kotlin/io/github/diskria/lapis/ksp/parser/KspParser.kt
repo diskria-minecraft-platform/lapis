@@ -6,7 +6,6 @@ import com.google.devtools.ksp.symbol.*
 import io.github.diskria.lapis.annotations.ContextParams
 import io.github.diskria.lapis.annotations.KMixin
 import io.github.diskria.lapis.core.extensions.internalError
-import io.github.diskria.lapis.core.extensions.isSubpackageOf
 import io.github.diskria.lapis.core.extensions.qualifiedNameOf
 import io.github.diskria.lapis.core.extensions.simpleNameOf
 import io.github.diskria.lapis.core.parser.models.*
@@ -26,17 +25,14 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
         val allFunctionDeclarations = getDeclaredFunctions()
         val constructorDeclarations = allFunctionDeclarations.filter { it.isConstructor() }
         val primaryConstructorPropertyNames = constructorDeclarations.flatMap { constructor ->
-            constructor.parameters.mapNotNull {
-                if (it.isVal || it.isVar) (it.name.parse(it) as? ValidNameNode)?.name
-                else null
-            }
+            constructor.parameters.mapNotNull { parameter -> parameter.takeIf { it.isVal || it.isVar }?.name?.toName() }
         }.toSet()
         val propertyDeclarations = getDeclaredProperties().filter {
             it.simpleName.asString() !in primaryConstructorPropertyNames
         }
         val functionDeclarations = allFunctionDeclarations.filter { !it.isConstructor() }
         return KMixinNode(
-            name = simpleName.parse(this),
+            name = simpleName.toName(),
             type = asStarProjectedType().parse(this),
             isClass = classKind == ClassKind.CLASS,
             isInterface = classKind == ClassKind.INTERFACE,
@@ -64,7 +60,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
     )
 
     private fun KSValueParameter.parseAsConstructorParameter() = KMixinNode.Constructor.Parameter(
-        name = name.parse(this),
+        name = name?.toName(),
         type = type.parse(),
         annotations = parseAnnotations(),
         node = toNode(),
@@ -86,7 +82,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
             } else {
                 List(contextParamsCount) { index ->
                     ContextParameterNode(
-                        name = ValidNameNode("ctx$index", toNode()),
+                        name = "ctx$index",
                         type = type.parse(),
                         annotations = type.parseAnnotations(),
                         node = toNode(),
@@ -95,7 +91,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
             }
         }
         return KMixinNode.Property(
-            name = simpleName.parse(type),
+            name = simpleName.toName(),
             type = type.parse(),
             isPublic = isPublic(),
             isOpen = Modifier.OPEN in modifiers,
@@ -135,7 +131,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
             } else if (contextParamsCount > 0) {
                 val syntheticContexts = parameters.take(contextParamsCount).map { parameter ->
                     ContextParameterNode(
-                        name = parameter.name.parse(parameter),
+                        name = parameter.name?.toName(),
                         type = parameter.type.parse(),
                         annotations = parameter.parseAnnotations(),
                         node = parameter.toNode(),
@@ -148,7 +144,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
             }
         }
         return KMixinNode.Function(
-            name = simpleName.parse(this),
+            name = simpleName.toName(),
             jvmName = resolver.getJvmName(this),
             parameters = parameters,
             contextParameters = contextParameters,
@@ -165,47 +161,28 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
     }
 
     private fun KSValueParameter.parseAsFunctionParameter() = KMixinNode.Function.Parameter(
-        name = name.parse(this),
+        name = name?.toName(),
         type = type.parse(),
         annotations = parseAnnotations(),
         node = toNode(),
     )
 
     private fun KSContextParameter.parse() = ContextParameterNode(
-        name = name.parse(this),
+        name = name?.toName(),
         type = type.parse(),
         annotations = parseAnnotations(),
         node = toNode(),
     )
 
     private fun KSClassDeclaration.parseAsCompanionObject() = KMixinNode.CompanionObject(
-        name = simpleName.parse(this),
+        name = simpleName.toName(),
         isPublic = isPublic(),
         functions = getDeclaredFunctions().filter { !it.isConstructor() }.map { it.parseAsFunction() }.toList(),
         node = toNode(),
     )
 
-    private fun KSAnnotated.parseAnnotations(): AnnotationNodeContainer {
-        val api = mutableListOf<ValidAnnotationNode>()
-        val external = mutableListOf<AnnotationNode>()
-        annotations.forEach {
-            val annotation = it.parse()
-            val apiAnnotation = annotation.asApiAnnotationOrNull()
-            if (apiAnnotation != null) {
-                api += apiAnnotation
-            } else {
-                external += annotation
-            }
-        }
-        return AnnotationNodeContainer(api, external)
-    }
-
-    private fun AnnotationNode.asApiAnnotationOrNull(): ValidAnnotationNode? {
-        if (this !is ValidAnnotationNode) return null
-        val type = type as? ClassTypeNode ?: return null
-        val packageName = type.packageName as? ValidNameNode ?: return null
-        return if (packageName.name.isSubpackageOf(API_ANNOTATIONS_PACKAGE)) this else null
-    }
+    private fun KSAnnotated.parseAnnotations(): AnnotationsContainer =
+        AnnotationsContainer.of(annotations.map { it.parse() }.toList())
 
     private fun KSAnnotation.parse(): AnnotationNode {
         val type = annotationType.parse() as? ValidTypeNode ?: return InvalidAnnotationNode(toNode())
@@ -217,7 +194,6 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
     }
 
     private fun KSValueArgument.parse(): AnnotationNode.Argument {
-        val name = name?.parse(this) ?: return AnnotationNode.InvalidArgument(toNode())
         val rawValues = when (val value = value) {
             is Collection<*> -> value.toList()
             is Array<*> -> value.toList()
@@ -229,7 +205,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
                 parseValue(rawValue)
             }
             return AnnotationNode.ArrayArgument(
-                name = name,
+                name = name?.toName(),
                 isExplicit = origin != Origin.SYNTHETIC,
                 elements = elements,
                 node = toNode(),
@@ -237,7 +213,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
         }
         val rawValue = value ?: return AnnotationNode.InvalidArgument(toNode())
         return AnnotationNode.ScalarArgument(
-            name = name,
+            name = name?.toName(),
             isExplicit = origin != Origin.SYNTHETIC,
             value = parseValue(rawValue),
             node = toNode(),
@@ -256,13 +232,11 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
         is String -> AnnotationNode.Argument.StringValue(raw)
         is KSType -> AnnotationNode.Argument.TypeValue(type = raw.parse(this), node = toNode())
         is KSClassDeclaration -> {
-            val classDeclaration = raw.parentDeclaration as? KSClassDeclaration ?: run {
-                val expectedEntryName = raw.qualifiedName?.parse(this) as? ValidNameNode
-                internalError("Failed to resolve enclosing enum class of entry: '${expectedEntryName?.name}'.")
-            }
+            val parentClassDeclaration = raw.parentDeclaration as? KSClassDeclaration
+                ?: internalError("Failed to resolve enclosing enum class of entry: '${raw.qualifiedName}'.")
             AnnotationNode.Argument.EnumValue(
-                type = classDeclaration.asStarProjectedType().parse(this),
-                name = raw.simpleName.parse(this),
+                type = parentClassDeclaration.asStarProjectedType().parse(this),
+                name = raw.simpleName.toName(),
                 node = toNode(),
             )
         }
@@ -279,8 +253,8 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
                 InvalidTypeNode(node = siteNode.toNode())
             } else {
                 TypeArgumentNode(
-                    name = declaration.name.parse(siteNode),
-                    type = KspType(this),
+                    name = declaration.name.toName(),
+                    type = toType(),
                     isNullable = isMarkedNullable,
                     node = siteNode.toNode(),
                 )
@@ -326,8 +300,8 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
             )
         } else null
         return ClassTypeNode(
-            packageName = declaration.packageName.parse(siteNode),
-            qualifiedName = declaration.qualifiedName.parse(siteNode),
+            packageName = declaration.packageName.toName(),
+            qualifiedName = declaration.qualifiedName?.toName(),
             arguments = arguments.map { argument ->
                 val kspVariance = argument.variance
                 if (kspVariance == KspVariance.STAR) {
@@ -344,20 +318,17 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
             },
             canonicalType = canonicalReference,
             functionalType = functionalType,
-            type = KspType(this),
+            type = toType(),
             isNullable = isMarkedNullable,
             node = siteNode.toNode(),
         )
     }
 
-    private fun KSType.expandTypealias(visitedAliases: Set<KSTypeAlias> = emptySet()): KSType? {
+    private fun KSType.expandTypealias(visited: Set<KSTypeAlias> = emptySet()): KSType? {
         val alias = declaration as? KSTypeAlias ?: return this
-        if (alias in visitedAliases) return null
-        val expandedType = alias.type.resolve()
-        val substitutions = alias.typeParameters.map {
-            (it.name.parse(it) as? ValidNameNode)?.name ?: return null
-        }.zip(arguments).toMap()
-        return expandedType.substituteTypeParameters(substitutions, visitedAliases + alias)
+        if (alias in visited) return null
+        val substitutions = alias.typeParameters.map { it.name.toName() }.zip(arguments).toMap()
+        return alias.type.resolve().substituteTypeParameters(substitutions, visited + alias)
     }
 
     private fun KSType.substituteTypeParameters(
@@ -365,8 +336,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
         visitedAliases: Set<KSTypeAlias>
     ): KSType? {
         if (declaration is KSTypeParameter) {
-            val name = (declaration.simpleName.parse(declaration) as? ValidNameNode)?.name ?: return null
-            val argument = substitutions[name] ?: return this
+            val argument = substitutions[declaration.simpleName.toName()] ?: return this
             val argumentType = argument.type?.resolve() ?: return this
             val resolvedType = if (isMarkedNullable) argumentType.makeNullable() else argumentType
             return resolvedType.expandTypealias(visitedAliases)
@@ -390,24 +360,16 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
     @JvmName("parseTypeParameters")
     private fun List<KSTypeParameter>.parse() = map { typeParameter ->
         TypeParameterNode(
-            name = typeParameter.name.parse(typeParameter),
+            name = typeParameter.name.toName(),
             bounds = typeParameter.bounds.map { it.parse() }.toList(),
             isReified = typeParameter.isReified,
             node = typeParameter.toNode(),
         )
     }
 
-    private fun KSName?.parse(viewNode: KSNode): NameNode {
-        val name = this?.asString()?.ifBlank { null }
-        if (name == null) return InvalidNameNode(viewNode.toNode())
-        return ValidNameNode(name, viewNode.toNode())
-    }
-
     private fun KSNode.toNode(): KspNode = KspNode(this, logger)
-
-    companion object {
-        private const val API_ANNOTATIONS_PACKAGE = "io.github.diskria.lapis.annotations"
-    }
+    private fun KSType.toType(): KspType = KspType(this)
+    private fun KSName.toName(): String = asString()
 }
 
 private inline fun <reified A : Annotation> Sequence<KSAnnotation>.findAnnotation(): KSAnnotation? {

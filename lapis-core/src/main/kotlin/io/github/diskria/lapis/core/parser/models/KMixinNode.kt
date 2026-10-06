@@ -4,7 +4,7 @@ import io.github.diskria.lapis.core.utils.Variance
 
 class KMixinNode<O>(
     val origin: O?,
-    val name: NameNode,
+    val name: String,
     val type: TypeNode,
     val isClass: Boolean,
     val isInterface: Boolean,
@@ -18,7 +18,7 @@ class KMixinNode<O>(
     val constructors: List<Constructor>,
     val properties: List<Property>,
     val functions: List<Function>,
-    val annotations: AnnotationNodeContainer,
+    val annotations: AnnotationsContainer,
     override val node: Node,
 ) : NodeHolder {
 
@@ -29,15 +29,15 @@ class KMixinNode<O>(
     ) : NodeHolder {
 
         class Parameter(
-            val name: NameNode,
+            val name: String?,
             val type: TypeNode,
-            val annotations: AnnotationNodeContainer,
+            val annotations: AnnotationsContainer,
             override val node: Node,
         ) : NodeHolder
     }
 
     class Property(
-        val name: NameNode,
+        val name: String,
         val type: TypeNode,
         val isPublic: Boolean,
         val isOpen: Boolean,
@@ -45,7 +45,7 @@ class KMixinNode<O>(
         val hasExtensionReceiver: Boolean,
         val contextParameters: List<ContextParameterNode>,
         val typeParameters: List<TypeParameterNode>,
-        val annotations: AnnotationNodeContainer,
+        val annotations: AnnotationsContainer,
         val getter: Getter?,
         val setter: Setter?,
         override val node: Node,
@@ -53,7 +53,7 @@ class KMixinNode<O>(
 
         class Getter(
             val jvmName: String?,
-            val annotations: AnnotationNodeContainer,
+            val annotations: AnnotationsContainer,
         )
 
         class Setter(
@@ -62,7 +62,7 @@ class KMixinNode<O>(
     }
 
     class Function(
-        val name: NameNode,
+        val name: String,
         val jvmName: String?,
         val parameters: List<Parameter>,
         val contextParameters: List<ContextParameterNode>,
@@ -71,22 +71,22 @@ class KMixinNode<O>(
         val isOpen: Boolean,
         val isAbstract: Boolean,
         val extensionReceiverType: TypeNode?,
-        val annotations: AnnotationNodeContainer,
+        val annotations: AnnotationsContainer,
         val typeParameters: List<TypeParameterNode>,
         val isSuspending: Boolean,
         override val node: Node,
     ) : NodeHolder {
 
         class Parameter(
-            val name: NameNode,
+            val name: String?,
             val type: TypeNode,
-            val annotations: AnnotationNodeContainer,
+            val annotations: AnnotationsContainer,
             override val node: Node,
         ) : NodeHolder
     }
 
     class CompanionObject(
-        val name: NameNode,
+        val name: String,
         val isPublic: Boolean,
         val functions: List<Function>,
         override val node: Node,
@@ -94,9 +94,9 @@ class KMixinNode<O>(
 }
 
 class ContextParameterNode(
-    val name: NameNode,
+    val name: String?,
     val type: TypeNode,
-    val annotations: AnnotationNodeContainer,
+    val annotations: AnnotationsContainer,
     override val node: Node,
 ) : NodeHolder
 
@@ -108,8 +108,8 @@ sealed interface ValidTypeNode : TypeNode {
 }
 
 class ClassTypeNode(
-    val packageName: NameNode,
-    val qualifiedName: NameNode,
+    val packageName: String,
+    val qualifiedName: String?,
     val arguments: List<TypeArgument>,
     val canonicalType: ClassTypeNode?,
     val functionalType: FunctionalType?,
@@ -133,7 +133,7 @@ class ClassTypeNode(
 }
 
 class TypeArgumentNode(
-    val name: NameNode,
+    val name: String,
     override val type: Type,
     override val isNullable: Boolean,
     override val node: Node,
@@ -142,12 +142,8 @@ class TypeArgumentNode(
 class InvalidTypeNode(override val node: Node) : TypeNode
 
 class TypeParameterNode(
-    val name: NameNode,
+    val name: String,
     val bounds: List<TypeNode>,
     val isReified: Boolean,
     override val node: Node,
 ) : NodeHolder
-
-sealed interface NameNode : NodeHolder
-class ValidNameNode(val name: String, override val node: Node) : NameNode
-class InvalidNameNode(override val node: Node) : NameNode

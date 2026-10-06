@@ -1,5 +1,6 @@
 package io.github.diskria.lapis.core.parser.models
 
+import io.github.diskria.lapis.core.extensions.isSubpackageOf
 import io.github.diskria.lapis.core.extensions.qualifiedNameOf
 import io.github.diskria.lapis.core.parser.models.AnnotationNode.Argument
 import kotlin.enums.enumEntries
@@ -21,24 +22,24 @@ sealed interface AnnotationNode : NodeHolder {
         class DoubleValue(val double: Double) : Value
         class StringValue(val string: String) : Value
         class TypeValue(val type: TypeNode, override val node: Node) : Value, NodeHolder
-        class EnumValue(val type: TypeNode, val name: NameNode, override val node: Node) : Value, NodeHolder
+        class EnumValue(val type: TypeNode, val name: String, override val node: Node) : Value, NodeHolder
         class AnnotationValue(val annotation: AnnotationNode) : Value
     }
 
     sealed interface ValidArgument : Argument {
-        val name: NameNode
+        val name: String?
         val isExplicit: Boolean
     }
 
     class ScalarArgument(
-        override val name: NameNode,
+        override val name: String?,
         override val isExplicit: Boolean,
         val value: Argument.Value,
         override val node: Node,
     ) : ValidArgument
 
     class ArrayArgument(
-        override val name: NameNode,
+        override val name: String?,
         override val isExplicit: Boolean,
         val elements: List<Argument.Value>,
         override val node: Node,
@@ -55,16 +56,17 @@ class ValidAnnotationNode(
 
 class InvalidAnnotationNode(override val node: Node) : AnnotationNode
 
-class AnnotationNodeContainer(val api: List<ValidAnnotationNode>, val external: List<AnnotationNode>) {
-
+class AnnotationsContainer(
+    val apiAnnotations: List<ValidAnnotationNode>,
+    val externalAnnotations: List<AnnotationNode>,
+) {
     inline fun <reified A : Annotation> hasApiAnnotation(): Boolean = findApiAnnotation<A>() != null
 
     @JvmName("findApiStringTypeScalarArgument")
     inline fun <reified A : Annotation> findApiArgument(property: KProperty1<out A, String>) =
         findApiAnnotation<A>()?.arguments?.firstNotNullOfOrNull { argument ->
             if (argument is AnnotationNode.ScalarArgument &&
-                argument.name is ValidNameNode &&
-                argument.name.name == property.name &&
+                argument.name == property.name &&
                 argument.value is Argument.StringValue
             ) {
                 ApiScalarArgument(argument.value.string, argument)
@@ -75,8 +77,7 @@ class AnnotationNodeContainer(val api: List<ValidAnnotationNode>, val external: 
     inline fun <reified A : Annotation> findApiArgument(property: KProperty1<out A, KClass<*>>) =
         findApiAnnotation<A>()?.arguments?.firstNotNullOfOrNull { argument ->
             if (argument is AnnotationNode.ScalarArgument &&
-                argument.name is ValidNameNode &&
-                argument.name.name == property.name &&
+                argument.name == property.name &&
                 argument.value is Argument.TypeValue
             ) {
                 ApiScalarArgument(argument.value.type, argument)
@@ -87,8 +88,7 @@ class AnnotationNodeContainer(val api: List<ValidAnnotationNode>, val external: 
     inline fun <reified A : Annotation, reified E : Enum<E>> findApiArgument(property: KProperty1<out A, E>) =
         findApiAnnotation<A>()?.arguments?.firstNotNullOfOrNull { argument ->
             if (argument is AnnotationNode.ScalarArgument &&
-                argument.name is ValidNameNode &&
-                argument.name.name == property.name &&
+                argument.name == property.name &&
                 argument.value is Argument.EnumValue
             ) {
                 argument.value.getTypedOrNull<E>()?.let { ApiScalarArgument(it, argument) }
@@ -98,10 +98,7 @@ class AnnotationNodeContainer(val api: List<ValidAnnotationNode>, val external: 
     @JvmName("findApiEnumTypeArrayArgument")
     inline fun <reified A : Annotation, reified E : Enum<E>> findApiArgument(property: KProperty1<A, Array<out E>>) =
         findApiAnnotation<A>()?.arguments?.firstNotNullOfOrNull { argument ->
-            if (argument is AnnotationNode.ArrayArgument &&
-                argument.name is ValidNameNode &&
-                argument.name.name == property.name
-            ) {
+            if (argument is AnnotationNode.ArrayArgument && argument.name == property.name) {
                 val elements = argument.elements.map { element ->
                     val enumValue = element as? Argument.EnumValue
                     enumValue?.getTypedOrNull<E>() ?: return@firstNotNullOfOrNull null
@@ -111,30 +108,38 @@ class AnnotationNodeContainer(val api: List<ValidAnnotationNode>, val external: 
         }
 
     inline fun <reified E : Enum<E>> Argument.EnumValue.getTypedOrNull(): E? =
-        if (name is ValidNameNode &&
-            type is ClassTypeNode &&
-            type.qualifiedName is ValidNameNode &&
-            type.qualifiedName.name == qualifiedNameOf<E>()
-        ) {
-            enumEntries<E>().find { it.name == name.name }
+        if (type is ClassTypeNode && type.qualifiedName == qualifiedNameOf<E>()) {
+            enumEntries<E>().find { it.name == name }
         } else null
 
     inline fun <reified A : Annotation> findApiAnnotation(): ValidAnnotationNode? =
-        api.firstNotNullOfOrNull { annotation ->
+        apiAnnotations.firstNotNullOfOrNull { annotation ->
             if (annotation.type is ClassTypeNode &&
-                annotation.type.qualifiedName is ValidNameNode &&
-                annotation.type.qualifiedName.name == qualifiedNameOf<A>()
+                annotation.type.qualifiedName == qualifiedNameOf<A>()
             ) annotation
             else null
         }
 
-    data class ApiScalarArgument<T>(
-        val value: T,
-        val node: NodeHolder,
-    )
+    data class ApiScalarArgument<T>(val value: T, val node: NodeHolder)
+    data class ApiArrayArgument<T>(val elements: List<T>, val node: NodeHolder)
 
-    data class ApiArrayArgument<T>(
-        val elements: List<T>,
-        val node: NodeHolder,
-    )
+    companion object {
+        private const val API_ANNOTATIONS_PACKAGE = "io.github.diskria.lapis.annotations"
+
+        fun of(annotations: List<AnnotationNode>): AnnotationsContainer {
+            val apiAnnotations = mutableListOf<ValidAnnotationNode>()
+            val externalAnnotations = mutableListOf<AnnotationNode>()
+            annotations.forEach { annotation ->
+                if (annotation is ValidAnnotationNode &&
+                    annotation.type is ClassTypeNode &&
+                    annotation.type.packageName.isSubpackageOf(API_ANNOTATIONS_PACKAGE)
+                ) {
+                    apiAnnotations += annotation
+                } else {
+                    externalAnnotations += annotation
+                }
+            }
+            return AnnotationsContainer(apiAnnotations, externalAnnotations)
+        }
+    }
 }

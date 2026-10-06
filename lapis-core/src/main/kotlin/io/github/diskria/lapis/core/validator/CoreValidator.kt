@@ -163,7 +163,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
                     """.trimIndent()
                 }
             }
-            KMixinModel.CompanionObject(name = companionObject.name.validate().toModel(), injections = injections)
+            KMixinModel.CompanionObject(name = companionObject.name, injections = injections)
         }
         val classKind = if (isClass) {
             val constructor = nodeRequireNotNull(constructors.singleOrNull()) {
@@ -202,7 +202,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         return KMixinModel(
             origin = origin,
             type = classTypeModel,
-            name = name.validate().toModel(),
+            name = name,
             side = side,
             initStrategy = initStrategy,
             classKind = classKind,
@@ -220,10 +220,15 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         targetType: ValidTypeNode,
         enclosingTypeParameters: List<TypeParameterModel>,
     ) = when {
-        annotations.hasApiAnnotation<Origin>() -> KMixinModel.Class.ConstructorParameter.Origin(
-            name = name.validate().toModel(),
-            type = type.validate().requireSubtypeOf(targetType, "@Origin parameter").toModel(enclosingTypeParameters),
-        )
+        annotations.hasApiAnnotation<Origin>() -> {
+            nodeRequireNotNull(name) { "" }
+            KMixinModel.Class.ConstructorParameter.Origin(
+                name = name,
+                type = type.validate()
+                    .requireSubtypeOf(targetType, "@Origin parameter")
+                    .toModel(enclosingTypeParameters),
+            )
+        }
 
         else -> nodeError { "" }
     }
@@ -231,10 +236,10 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
     private fun KMixinNode.Property.toExtensionModel(
         enclosingTypeParameters: List<TypeParameterModel>,
     ): KMixinModel.Extension.Property {
-        val getter = nodeRequireNotNull(getter) { "" }
+        nodeRequireNotNull(getter) { "" }
         val getterJvmName = nodeRequireNotNull(getter.jvmName) { "" }
         val setterJvmName = setter?.let {
-            nodeRequireNotNull(it.jvmName) { "" }
+            nodeRequireNotNull(setter.jvmName) { "" }
         }
         nodeRequire(isPublic) { "" }
         nodeRequire(!hasExtensionReceiver) { "" }
@@ -242,7 +247,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         val localTypeParameters = typeParameters.validate(enclosingTypeParameters)
         val scopeTypeParameters = localTypeParameters + enclosingTypeParameters
         return KMixinModel.Extension.Property(
-            declaredName = name.validate().toModel(),
+            declaredName = name,
             getterJvmName = getterJvmName,
             setterJvmName = setterJvmName,
             type = type.validate().toModel(scopeTypeParameters),
@@ -255,20 +260,21 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         enclosingTypeParameters: List<TypeParameterModel>,
     ): KMixinModel.Extension.Function {
         nodeRequire(isPublic) { "" }
-        val jvmName = nodeRequireNotNull(jvmName) { "" }
+        nodeRequireNotNull(jvmName) { "" }
         nodeRequire(extensionReceiverType == null) { "" }
         nodeRequire(!isOpen && !isAbstract) { "" }
         nodeRequire(!isSuspending) { "Suspend extensions are not supported yet." }
         val localTypeParameters = typeParameters.validate(enclosingTypeParameters)
         val scopeTypeParameters = localTypeParameters + enclosingTypeParameters
-        val parameters = parameters.map {
+        val parameters = parameters.map { parameter ->
+            parameter.nodeRequireNotNull(parameter.name) { "" }
             FunctionParameterModel(
-                name = it.name.validate().toModel(),
-                type = it.type.validate().toModel(scopeTypeParameters),
+                name = parameter.name,
+                type = parameter.type.validate().toModel(scopeTypeParameters),
             )
         }
         return KMixinModel.Extension.Function(
-            declaredName = name.validate().toModel(),
+            declaredName = name,
             jvmName = jvmName,
             parameters = parameters,
             returnType = returnType?.validate()?.toModel(scopeTypeParameters),
@@ -285,22 +291,21 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         nodeRequire(isPublic) { "" }
         nodeRequire(isAbstract) { "" }
         nodeRequire(!hasExtensionReceiver) { "" }
-        val getter = nodeRequireNotNull(getter) { "" }
+        nodeRequireNotNull(getter) { "" }
         val getterJvmName = nodeRequireNotNull(getter.jvmName) { "" }
         val setterJvmName = setter?.let {
             nodeRequireNotNull(it.jvmName) { "" }
         }
         nodeRequire(contextParameters.isEmpty()) { "" }
-        val declaredName = name.validate().toModel()
         val mappingNameArgument = annotations.findApiArgument(MappingName::name)
-        validateJavaIdentifierName(declaredName, "@KShadow property name", mappingNameArgument == null)
+        validateJavaIdentifierName(name, "@KShadow property name", mappingNameArgument == null)
         val mappingName = mappingNameArgument?.let { (value, node) ->
             node.validateJavaIdentifierName(value, "@KShadow property's @MappingName value", sources = true)
-        } ?: declaredName
+        } ?: name
         val modifiersArgument = annotations.findApiArgument(KShadow::modifiers)
         nodeRequire(typeParameters.isEmpty()) { "" }
         return KMixinModel.Shadow.Property(
-            declaredName = name.validate().toModel(),
+            declaredName = name,
             getterJvmName = getterJvmName,
             setterJvmName = setterJvmName,
             mappingName = mappingName,
@@ -316,28 +321,28 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         enclosingTypeParameters: List<TypeParameterModel>,
     ): KMixinModel.Shadow.Function {
         nodeRequire(isPublic) { "" }
-        val jvmName = nodeRequireNotNull(jvmName) { "" }
+        nodeRequireNotNull(jvmName) { "" }
         nodeRequire(isAbstract) { "" }
         nodeRequire(extensionReceiverType == null) { "" }
         nodeRequire(contextParameters.isEmpty()) { "" }
         nodeRequire(!isSuspending) { "Suspending is not allowed in @KShadow." }
-        val declaredName = name.validate().toModel()
         val mappingNameArgument = annotations.findApiArgument(MappingName::name)
-        validateJavaIdentifierName(declaredName, "@KShadow function name", mappingNameArgument == null)
+        validateJavaIdentifierName(name, "@KShadow function name", mappingNameArgument == null)
         val mappingName = mappingNameArgument?.let { (value, node) ->
             node.validateJavaIdentifierName(value, "@KShadow function's @MappingName value", sources = true)
-        } ?: declaredName
+        } ?: name
         val modifiersArgument = annotations.findApiArgument(KShadow::modifiers)
         val localTypeParameters = typeParameters.validate(enclosingTypeParameters)
         val scopeTypeParameters = localTypeParameters + enclosingTypeParameters
         return KMixinModel.Shadow.Function(
-            declaredName = declaredName,
+            declaredName = name,
             jvmName = jvmName,
             mappingName = mappingName,
-            parameters = parameters.map {
+            parameters = parameters.map { parameter ->
+                parameter.nodeRequireNotNull(parameter.name) { "" }
                 FunctionParameterModel(
-                    name = it.name.validate().toModel(),
-                    type = it.type.validate().toModel(scopeTypeParameters),
+                    name = parameter.name,
+                    type = parameter.type.validate().toModel(scopeTypeParameters),
                 )
             },
             returnType = returnType?.validate()?.toModel(scopeTypeParameters),
@@ -353,7 +358,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         mixinAnnotations: List<MixinAnnotationModel>,
         enclosingTypeParameters: List<TypeParameterModel>,
     ): KMixinModel.Injection {
-        val jvmName = nodeRequireNotNull(jvmName) { "" }
+        nodeRequireNotNull(jvmName) { "" }
         nodeRequire(!isOpen) { "" }
         nodeRequire(!isSuspending) { "Suspending is not allowed in injections." }
         if (isInCompanionObject) {
@@ -376,26 +381,35 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
 
     private fun KMixinNode.Function.Parameter.validateAsInjectionParameter(
         enclosingTypeParameters: List<TypeParameterModel>,
-    ) = KMixinModel.Injection.Parameter(
-        name = name.validate().toModel(),
-        type = type.validate().toModel(enclosingTypeParameters),
-        mixinAnnotations = annotations.filterMixinAnnotations().map { it.toModel() },
-    )
+    ): KMixinModel.Injection.Parameter {
+        nodeRequireNotNull(name) { "" }
+        return KMixinModel.Injection.Parameter(
+            name = name,
+            type = type.validate().toModel(enclosingTypeParameters),
+            mixinAnnotations = annotations.filterMixinAnnotations().map { it.toModel() },
+        )
+    }
 
     private fun ContextParameterNode.validateAsInjectionParameter(
         enclosingTypeParameters: List<TypeParameterModel>,
-    ) = KMixinModel.Injection.Parameter(
-        name = name.validate().toModel(),
-        type = type.validate().toModel(enclosingTypeParameters),
-        mixinAnnotations = annotations.filterMixinAnnotations().map { it.toModel() },
-    )
+    ): KMixinModel.Injection.Parameter {
+        nodeRequireNotNull(name) { "" }
+        return KMixinModel.Injection.Parameter(
+            name = name,
+            type = type.validate().toModel(enclosingTypeParameters),
+            mixinAnnotations = annotations.filterMixinAnnotations().map { it.toModel() },
+        )
+    }
 
     private fun ContextParameterNode.validate(
         enclosingTypeParameters: List<TypeParameterModel>,
-    ) = ContextParameterModel(
-        name = name.validate().toModel(),
-        type = type.validate().toModel(enclosingTypeParameters),
-    )
+    ): ContextParameterModel {
+        nodeRequireNotNull(name) { "" }
+        return ContextParameterModel(
+            name = name,
+            type = type.validate().toModel(enclosingTypeParameters),
+        )
+    }
 
     private fun NodeHolder.validateShadowModifiers(
         rawModifiers: List<Modifier>,
@@ -503,12 +517,11 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
 
     private fun AnnotationNode.isMixinAnnotation(): Boolean {
         val type = (this as? ValidAnnotationNode)?.type as? ClassTypeNode ?: return true
-        val packageName = (type.packageName as? ValidNameNode)?.name ?: return true
-        return options.mixinAnnotationPackages.any { packageName.isSubpackageOf(it) }
+        return options.mixinAnnotationPackages.any { type.packageName.isSubpackageOf(it) }
     }
 
-    private fun AnnotationNodeContainer.filterMixinAnnotations(): List<ValidAnnotationNode> =
-        external.filter { it.isMixinAnnotation() }.validateAll { it.validate() }
+    private fun AnnotationsContainer.filterMixinAnnotations(): List<ValidAnnotationNode> =
+        externalAnnotations.filter { it.isMixinAnnotation() }.validateAll { it.validate() }
 
     private fun AnnotationNode.validate(): ValidAnnotationNode =
         nodeRequireNotNull(this as? ValidAnnotationNode) {
@@ -541,15 +554,15 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
             """.trimIndent()
         }
         return when (this) {
-            is AnnotationNode.ScalarArgument -> MixinAnnotationModel.ScalarArgument(
-                name.validate().toModel(),
-                value.toModel(),
-            )
+            is AnnotationNode.ScalarArgument -> {
+                nodeRequireNotNull(name) { "" }
+                MixinAnnotationModel.ScalarArgument(name, value.toModel())
+            }
 
-            is AnnotationNode.ArrayArgument -> MixinAnnotationModel.ArrayArgument(
-                name.validate().toModel(),
-                elements.validate(),
-            )
+            is AnnotationNode.ArrayArgument -> {
+                nodeRequireNotNull(name) { "" }
+                MixinAnnotationModel.ArrayArgument(name, elements.validate())
+            }
         }
     }
 
@@ -589,7 +602,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         is AnnotationNode.Argument.EnumValue -> {
             val validTypeModel = type.validate().toModel()
             val classTypeModel = type.nodeRequireNotNull(validTypeModel as? ClassTypeModel) { "" }
-            MixinAnnotationModel.Argument.EnumValue(classTypeModel, name.validate().toModel())
+            MixinAnnotationModel.Argument.EnumValue(classTypeModel, name)
         }
 
         is AnnotationNode.Argument.AnnotationValue -> {
@@ -623,12 +636,11 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         }
 
     private fun List<TypeParameterNode>.validate(enclosing: List<TypeParameterModel>): List<TypeParameterModel> {
-        val stubs = map { TypeParameterModel(name = it.name.validate().toModel(), bounds = emptyList()) }
+        val stubs = map { TypeParameterModel(name = it.name, bounds = emptyList()) }
         return validateAll { it.toModel(enclosing + stubs) }
     }
 
     private fun TypeParameterNode.toModel(enclosing: List<TypeParameterModel>): TypeParameterModel {
-        val name = name.validate().toModel()
         nodeRequire(!isReified) {
             """
             Reified type parameter '$name' is not supported in @KMixin.
@@ -646,7 +658,6 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         when (this) {
             is ClassTypeNode -> toModel(scopeTypeParameters)
             is TypeArgumentNode -> {
-                val name = name.validate().toModel()
                 val typeParameter = findParameter(name, scopeTypeParameters)
                 val canonicalType = resolveCanonicalType(typeParameter, scopeTypeParameters)
                 TypeArgumentModel(name = name, canonicalType = canonicalType, isNullable = isNullable)
@@ -668,15 +679,16 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
                 returnType = type.returnType.validate().toModel(scopeTypeParameters),
             )
         }
+        nodeRequire(packageName.isNotEmpty()) {
+            """
+            Class declarations must belong to a package.
+            Why: Java Mixin in a named package cannot access declarations in the default package.
+            How to fix: Move the class declaration into a named package.
+            """.trimIndent()
+        }
         return ClassTypeModel(
-            packageName = nodeRequireNotNull((packageName as? ValidNameNode)?.name) {
-                """
-                Class declarations must belong to a package.
-                Why: Java Mixin in a named package cannot access declarations in the default package.
-                How to fix: Move the class declaration into a named package.
-                """.trimIndent()
-            },
-            qualifiedName = nodeRequireNotNull((qualifiedName as? ValidNameNode)?.name) {
+            packageName = packageName,
+            qualifiedName = nodeRequireNotNull(qualifiedName) {
                 """
                 Class declarations must have a fully qualified name; local classes are not supported.
                 Why: Java Mixin cannot access local class declarations.
@@ -724,15 +736,6 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
             }
         }
     }
-
-    private fun NameNode.validate(): ValidNameNode =
-        nodeRequireNotNull(this as? ValidNameNode) {
-            """
-            Ensure the name has no compilation errors.
-            """.trimIndent()
-        }
-
-    private fun ValidNameNode.toModel(): String = name
 
     private inline fun NodeHolder.nodeError(crossinline message: () -> String): Nothing {
         node.report(message())
