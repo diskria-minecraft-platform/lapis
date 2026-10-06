@@ -120,12 +120,12 @@ class ClassTypeModel(
     val packageName: String,
     val qualifiedName: String,
     val arguments: List<TypeArgument> = emptyList(),
-    val canonicalType: ClassTypeModel? = null,
+    val actualType: ClassTypeModel? = null,
     val functionalType: FunctionalType? = null,
     override val isNullable: Boolean = false,
 ) : TypeModel {
 
-    val canonicalOrSelf: ClassTypeModel get() = canonicalType ?: this
+    val actualOrSelf: ClassTypeModel get() = actualType ?: this
 
     sealed interface TypeArgument
     object StarProjectionArgument : TypeArgument
@@ -147,7 +147,7 @@ class ClassTypeModel(
 
 class TypeArgumentModel(
     val name: String,
-    val canonicalType: ClassTypeModel = ClassTypeModel.NULLABLE_ANY,
+    val boundType: ClassTypeModel = ClassTypeModel.NULLABLE_ANY,
     override val isNullable: Boolean = false,
 ) : TypeModel
 

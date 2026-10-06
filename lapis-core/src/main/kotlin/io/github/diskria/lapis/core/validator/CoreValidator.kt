@@ -658,8 +658,8 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
             is ParsedClassType -> toModel(scopeTypeParameters)
             is ParsedTypeArgument -> {
                 val typeParameter = findParameter(name, scopeTypeParameters)
-                val canonicalType = unwrapFirstBound(typeParameter, scopeTypeParameters)
-                TypeArgumentModel(name = name, canonicalType = canonicalType, isNullable = type.isNullable)
+                val boundType = unwrapUpperBound(typeParameter, scopeTypeParameters)
+                TypeArgumentModel(name = name, boundType = boundType, isNullable = type.isNullable)
             }
         }
 
@@ -696,7 +696,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
                 """.trimIndent()
             },
             arguments = arguments.map { it.validate(scopeTypeParameters) },
-            canonicalType = actualType?.toModel(scopeTypeParameters),
+            actualType = actualType?.toModel(scopeTypeParameters),
             functionalType = functionalType,
             isNullable = type.isNullable,
         )
@@ -718,18 +718,18 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         }
 
     context(nodeHolder: NodeHolder)
-    private tailrec fun ParsedTypeArgument.unwrapFirstBound(
+    private tailrec fun ParsedTypeArgument.unwrapUpperBound(
         typeParameter: TypeParameterModel,
         scopeTypeParameters: List<TypeParameterModel>,
         visited: Set<String> = emptySet(),
     ): ClassTypeModel {
         nodeHolder.nodeRequire(typeParameter.name !in visited) {
-            "Cyclic type parameter boundary detected for ${typeParameter.name}"
+            "Cyclic type parameter bound detected for ${typeParameter.name}"
         }
-        return when (val firstBound = typeParameter.bounds.firstOrNull() ?: ClassTypeModel.NULLABLE_ANY) {
-            is ClassTypeModel -> firstBound
-            is TypeArgumentModel -> unwrapFirstBound(
-                findParameter(name = firstBound.name, scopeTypeParameters = scopeTypeParameters),
+        return when (val upperBound = typeParameter.bounds.firstOrNull() ?: ClassTypeModel.NULLABLE_ANY) {
+            is ClassTypeModel -> upperBound
+            is TypeArgumentModel -> unwrapUpperBound(
+                findParameter(name = upperBound.name, scopeTypeParameters = scopeTypeParameters),
                 scopeTypeParameters,
                 visited + typeParameter.name
             )
