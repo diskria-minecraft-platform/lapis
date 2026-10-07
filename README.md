@@ -8,7 +8,7 @@ Idiomatic, zero-boilerplate Kotlin Mixins for Minecraft modding.
 
 > [!WARNING]
 > **Work in Progress (WIP):** Lapis is currently under active development. The API is unstable and subject to breaking
-changes prior to the `1.0.0` release. Full documentation and stable artifacts will be published alongside `1.0.0`.
+changes prior to the `1.0.0` release. Full documentation and stable artifacts will be published alongside `1.0.0`. *If you want to follow detailed progress updates, see more code examples, or share your feedback, check out this [Fabric Discord thread](https://discord.com/channels/507304429255393322/1530380180168773672).*
 
 Lapis is a next-generation Kotlin compiler plugin and KSP framework designed to eliminate the friction, boilerplate, and
 JVM quirks of writing Sponge Mixins in Kotlin. Write clean, OOP-driven code with instant IDE auto-completion and let
