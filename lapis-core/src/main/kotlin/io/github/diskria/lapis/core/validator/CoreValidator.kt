@@ -295,11 +295,8 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
             nodeRequireNotNull(it.jvmName) { "" }
         }
         nodeRequire(contextParameters.isEmpty()) { "" }
-        val mappingNameArgument = annotations.findApiArgument(MappingName::name)
-        validateJavaIdentifierName(name, "@KShadow property name", mappingNameArgument == null)
-        val mappingName = mappingNameArgument?.let { (value, node) ->
-            node.validateJavaIdentifierName(value, "@KShadow property's @MappingName value", sources = true)
-        } ?: name
+        val mappingName = annotations.getEffectiveMappingName(name)
+        validateJavaIdentifierName(name, "@KShadow property name", mappingName == name)
         val modifiersArgument = annotations.findApiArgument(KShadow::modifiers)
         nodeRequire(typeParameters.isEmpty()) { "" }
         return KMixinModel.Shadow.Property(
@@ -324,11 +321,8 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         nodeRequire(extensionReceiverType == null) { "" }
         nodeRequire(contextParameters.isEmpty()) { "" }
         nodeRequire(!isSuspending) { "Suspending is not allowed in @KShadow." }
-        val mappingNameArgument = annotations.findApiArgument(MappingName::name)
-        validateJavaIdentifierName(name, "@KShadow function name", mappingNameArgument == null)
-        val mappingName = mappingNameArgument?.let { (value, node) ->
-            node.validateJavaIdentifierName(value, "@KShadow function's @MappingName value", sources = true)
-        } ?: name
+        val mappingName = annotations.getEffectiveMappingName(name)
+        validateJavaIdentifierName(name, "@KShadow function name", mappingName == name)
         val modifiersArgument = annotations.findApiArgument(KShadow::modifiers)
         val localTypeParameters = typeParameters.validate(enclosingTypeParameters)
         val scopeTypeParameters = localTypeParameters + enclosingTypeParameters
@@ -336,17 +330,24 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
             declaredName = name,
             jvmName = jvmName,
             mappingName = mappingName,
-            parameters = parameters.map { parameter ->
-                parameter.nodeRequireNotNull(parameter.name) { "" }
-                FunctionParameterModel(
-                    name = parameter.name,
-                    type = parameter.type.validate().toModel(scopeTypeParameters),
-                )
-            },
+            parameters = parameters.map { it.validateAsShadowFunctionParameter(scopeTypeParameters) },
             returnType = returnType?.validate()?.toModel(scopeTypeParameters),
             mixinAnnotations = mixinAnnotations,
             modifiers = validateShadowModifiers(modifiersArgument?.elements.orEmpty(), isInterface, isProperty = false),
             typeParameters = localTypeParameters,
+        )
+    }
+
+    private fun KMixinNode.Function.Parameter.validateAsShadowFunctionParameter(
+        scopeTypeParameters: List<TypeParameterModel>,
+    ): KMixinModel.Shadow.Function.Parameter {
+        nodeRequireNotNull(name) { "" }
+        val mappingName = annotations.getEffectiveMappingName(name)
+        validateJavaIdentifierName(name, "@KShadow function parameter name", mappingName == name)
+        return KMixinModel.Shadow.Function.Parameter(
+            name = name,
+            mappingName = mappingName,
+            type = type.validate().toModel(scopeTypeParameters),
         )
     }
 
@@ -506,7 +507,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
             }
             """
             $roleDesc '$name' must be a valid Java identifier.
-            Why: This name is used to generate method signatures in Java Mixin.
+            Why: This name is used in Java Mixin.
             How to fix: Ensure the name $ensureDesc.
             """.trimIndent()
         }
@@ -657,9 +658,9 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         when (this) {
             is ParsedClassType -> toModel(scopeTypeParameters)
             is ParsedTypeArgument -> {
-                val typeParameter = findParameter(name, scopeTypeParameters)
-                val boundType = unwrapUpperBound(typeParameter, scopeTypeParameters)
-                TypeArgumentModel(name = name, boundType = boundType, isNullable = type.isNullable)
+                val typeParameter = findTypeParameter(name, scopeTypeParameters)
+                val upperBoundType = unwrapUpperBoundType(typeParameter, scopeTypeParameters)
+                TypeArgumentModel(name = name, upperBoundType = upperBoundType, isNullable = type.isNullable)
             }
         }
 
@@ -712,13 +713,13 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
     }
 
     context(nodeHolder: NodeHolder)
-    private fun findParameter(name: String, scopeTypeParameters: List<TypeParameterModel>): TypeParameterModel =
+    private fun findTypeParameter(name: String, scopeTypeParameters: List<TypeParameterModel>): TypeParameterModel =
         nodeHolder.nodeRequireNotNull(scopeTypeParameters.find { it.name == name }) {
             "Type parameter '$name' not found in scope"
         }
 
     context(nodeHolder: NodeHolder)
-    private tailrec fun ParsedTypeArgument.unwrapUpperBound(
+    private tailrec fun ParsedTypeArgument.unwrapUpperBoundType(
         typeParameter: TypeParameterModel,
         scopeTypeParameters: List<TypeParameterModel>,
         visited: Set<String> = emptySet(),
@@ -728,13 +729,19 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         }
         return when (val upperBound = typeParameter.bounds.firstOrNull() ?: ClassTypeModel.NULLABLE_ANY) {
             is ClassTypeModel -> upperBound
-            is TypeArgumentModel -> unwrapUpperBound(
-                findParameter(name = upperBound.name, scopeTypeParameters = scopeTypeParameters),
-                scopeTypeParameters,
-                visited + typeParameter.name
+            is TypeArgumentModel -> unwrapUpperBoundType(
+                typeParameter = findTypeParameter(name = upperBound.name, scopeTypeParameters = scopeTypeParameters),
+                scopeTypeParameters = scopeTypeParameters,
+                visited = visited + typeParameter.name,
             )
         }
     }
+
+    context(nodeHolder: NodeHolder)
+    private fun AnnotationsContainer.getEffectiveMappingName(fallbackName: String): String =
+        findApiArgument(MappingName::value)
+            ?.let { (value, node) -> node.validateJavaIdentifierName(value, "@MappingName value", sources = true) }
+            ?: fallbackName
 
     private inline fun NodeHolder.nodeError(crossinline message: () -> String): Nothing {
         node.report(message())

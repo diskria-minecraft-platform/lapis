@@ -211,7 +211,7 @@ class KspGenerator(
                 }
                 kMixin.mixin.duck?.shadows?.forEach { shadow ->
                     when (shadow) {
-                        is IrMixinDuck.Property -> property(shadow.declaredName, shadow.type.inKotlin) {
+                        is IrMixinDuck.Shadow.Property -> property(shadow.declaredName, shadow.type.inKotlin) {
                             public()
                             override()
                             getter {
@@ -233,7 +233,7 @@ class KspGenerator(
                             }
                         }
 
-                        is IrMixinDuck.Function -> function(shadow.declaredName) {
+                        is IrMixinDuck.Shadow.Function -> function(shadow.declaredName) {
                             public()
                             override()
                             shadow.typeVariables.forEach { +it }
@@ -310,7 +310,7 @@ class KspGenerator(
                                 annotations(shadow.annotations)
                                 shadow.modifiers.forEach { +it }
                                 returnsIfNeeded(shadow.returnType)
-                                shadow.parameters.forEach { parameter(it.name, it.type.inJava) }
+                                shadow.parameters.forEach { parameter(it.mappingName, it.type.inJava) }
                                 if (JPModifier.STATIC in shadow.modifiers) {
                                     body { line { "throw new ${T<AssertionError>()}(${S("Stub!")})" } }
                                 }

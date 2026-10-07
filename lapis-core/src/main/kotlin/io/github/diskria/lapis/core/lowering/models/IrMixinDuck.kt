@@ -126,13 +126,15 @@ class IrMixinDuck<O>(
             override val declaredName: String,
             override val name: String,
             override val sourceJvmName: String,
-            override val parameters: List<IrFunctionParameter>,
+            override val parameters: List<Parameter>,
             override val returnType: IrType?,
             override val modifiers: List<JPModifier>,
             override val mappingName: String,
             override val annotations: List<IrAnnotation>,
             override val typeVariables: List<XTypeVariableName>,
-        ) : IrMixinDuck.Function,
-            Shadow
+        ) : IrMixinDuck.Function, Shadow {
+
+            class Parameter(name: String, val mappingName: String, type: IrType) : IrFunctionParameter(name, type)
+        }
     }
 }

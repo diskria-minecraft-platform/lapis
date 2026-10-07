@@ -79,14 +79,16 @@ class KMixinModel<O>(
         class Function(
             override val declaredName: String,
             override val jvmName: String,
-            override val parameters: List<FunctionParameterModel>,
+            override val parameters: List<Parameter>,
             override val returnType: TypeModel?,
             override val modifiers: EnumSet<Modifier>,
             override val mappingName: String,
             override val mixinAnnotations: List<MixinAnnotationModel>,
             override val typeParameters: List<TypeParameterModel>,
-        ) : DuckSourceModel.Function,
-            Shadow
+        ) : DuckSourceModel.Function, Shadow {
+
+            class Parameter(name: String, val mappingName: String, type: TypeModel) : FunctionParameterModel(name, type)
+        }
     }
 
     class Injection(
@@ -147,7 +149,7 @@ class ClassTypeModel(
 
 class TypeArgumentModel(
     val name: String,
-    val boundType: ClassTypeModel = ClassTypeModel.NULLABLE_ANY,
+    val upperBoundType: ClassTypeModel = ClassTypeModel.NULLABLE_ANY,
     override val isNullable: Boolean = false,
 ) : TypeModel
 

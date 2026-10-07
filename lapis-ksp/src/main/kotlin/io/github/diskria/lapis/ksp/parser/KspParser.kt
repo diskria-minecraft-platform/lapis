@@ -46,7 +46,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
             companionObject = declarations.filterIsInstance<KSClassDeclaration>().find { it.isCompanionObject }
                 ?.parseAsCompanionObject(),
             annotations = parseAnnotations(),
-            typeParameters = typeParameters.parse(),
+            typeParameters = typeParameters.map { it.parse() },
             origin = containingFile,
             node = toNode(),
         )
@@ -85,7 +85,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
             )
         },
         contextParameters = contextParameters.map { it.parse() },
-        typeParameters = typeParameters.parse(),
+        typeParameters = typeParameters.map { it.parse() },
         annotations = parseAnnotations(),
         node = toNode(),
     )
@@ -102,7 +102,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
         isSuspending = Modifier.SUSPEND in modifiers,
         isAbstract = isAbstract,
         extensionReceiverType = extensionReceiver?.parse(),
-        typeParameters = typeParameters.parse(),
+        typeParameters = typeParameters.map { it.parse() },
         annotations = parseAnnotations(),
         node = toNode(),
     )
@@ -139,19 +139,19 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
 
     private fun KSValueArgument.parseAsAnnotationArgument(): AnnotationNode.Argument {
         val value = value
-        val rawValues = when (value) {
+        val name = name?.toName()
+        val isExplicit = origin != KspOrigin.SYNTHETIC
+        val node = toNode()
+        val arrayValues = when (value) {
             is Collection<*> -> value.toList()
             is Array<*> -> value.toList()
             else -> null
         }
-        val name = name?.toName()
-        val isExplicit = origin != KspOrigin.SYNTHETIC
-        val node = toNode()
-        if (rawValues != null) {
+        if (arrayValues != null) {
             return AnnotationNode.ArrayArgument(
                 name = name,
                 isExplicit = isExplicit,
-                elements = rawValues.map { it.parseAsAnnotationArgumentValue() },
+                elements = arrayValues.map { it.parseAsAnnotationArgumentValue() },
                 node = node,
             )
         }
@@ -163,29 +163,29 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
         )
     }
 
-    private fun Any?.parseAsAnnotationArgumentValue(): AnnotationNode.Argument.Value = when (val rawValue = this) {
+    private fun Any?.parseAsAnnotationArgumentValue(): AnnotationNode.Argument.Value = when (val value = this) {
         null -> AnnotationNode.Argument.InvalidValue
-        is Boolean -> AnnotationNode.Argument.BooleanValue(rawValue)
-        is Byte -> AnnotationNode.Argument.ByteValue(rawValue)
-        is Short -> AnnotationNode.Argument.ShortValue(rawValue)
-        is Int -> AnnotationNode.Argument.IntValue(rawValue)
-        is Long -> AnnotationNode.Argument.LongValue(rawValue)
-        is Char -> AnnotationNode.Argument.CharValue(rawValue)
-        is Float -> AnnotationNode.Argument.FloatValue(rawValue)
-        is Double -> AnnotationNode.Argument.DoubleValue(rawValue)
-        is String -> AnnotationNode.Argument.StringValue(rawValue)
-        is KSType -> AnnotationNode.Argument.TypeValue(rawValue.parse())
+        is Boolean -> AnnotationNode.Argument.BooleanValue(value)
+        is Byte -> AnnotationNode.Argument.ByteValue(value)
+        is Short -> AnnotationNode.Argument.ShortValue(value)
+        is Int -> AnnotationNode.Argument.IntValue(value)
+        is Long -> AnnotationNode.Argument.LongValue(value)
+        is Char -> AnnotationNode.Argument.CharValue(value)
+        is Float -> AnnotationNode.Argument.FloatValue(value)
+        is Double -> AnnotationNode.Argument.DoubleValue(value)
+        is String -> AnnotationNode.Argument.StringValue(value)
+        is KSType -> AnnotationNode.Argument.TypeValue(value.parse())
         is KSClassDeclaration -> {
-            val parentClassDeclaration = rawValue.parentDeclaration as? KSClassDeclaration
-                ?: internalError("Failed to resolve enclosing enum class of entry: '${rawValue.qualifiedName}'.")
+            val parentClassDeclaration = value.parentDeclaration as? KSClassDeclaration
+                ?: internalError("Failed to resolve enclosing enum class of entry: '${value.qualifiedName}'.")
             AnnotationNode.Argument.EnumValue(
                 type = parentClassDeclaration.asStarProjectedType().parse(),
-                name = rawValue.simpleName.toName(),
+                name = value.simpleName.toName(),
             )
         }
 
-        is KSAnnotation -> AnnotationNode.Argument.AnnotationValue(rawValue.parse())
-        else -> internalError("Unexpected type of annotation argument value: '${rawValue::class.qualifiedName}'.")
+        is KSAnnotation -> AnnotationNode.Argument.AnnotationValue(value.parse())
+        else -> internalError("Unexpected type of annotation argument value: '${value::class.qualifiedName}'.")
     }
 
     private fun KSType.parse(): ParsedType {
@@ -231,7 +231,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
         val args = alias.typeParameters.zip(arguments) { parameter, argument ->
             parameter.name.toName() to argument
         }.toMap()
-        return alias.type.resolve().substituteTypeAlias(args, visited + alias)
+        return alias.type.resolve().substituteTypeAlias(args = args, visited = visited + alias)
     }
 
     private fun KSType.substituteTypeAlias(args: Map<String, KSTypeArgument>, visited: Set<KSTypeAlias>): KSType? {
@@ -255,8 +255,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
     private fun KSType.parseAsFunctionalType(): ParsedClassType.FunctionalType? {
         val parameters = arguments.toMutableList()
         val returnType = parameters.removeLastOrNull()?.type?.parse() as? ParsedValidType ?: return null
-        val contextParametersCount = annotations.findArgument(ContextFunctionTypeParams::count) ?: 0
-        val contextTypes = List(contextParametersCount) {
+        val contextTypes = List(annotations.findArgument(ContextFunctionTypeParams::count) ?: 0) {
             parameters.removeFirstOrNull()?.type?.parse() as? ParsedValidType ?: return null
         }
         val receiverType = if (annotations.hasAnnotation<ExtensionFunctionType>()) {
@@ -270,7 +269,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
                 val type = typeReference?.parse() as? ParsedValidType ?: return null
                 ParsedClassType.FunctionalType.Parameter(
                     name = typeReference.annotations.findArgument(ParameterName::name),
-                    type = type
+                    type = type,
                 )
             },
             returnType = returnType,
@@ -280,15 +279,12 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
 
     private fun KSTypeReference.parse(): ParsedType = resolve().parse()
 
-    @JvmName("parseTypeParameters")
-    private fun List<KSTypeParameter>.parse() = map { typeParameter ->
-        TypeParameterNode(
-            name = typeParameter.name.toName(),
-            bounds = typeParameter.bounds.map { it.parse() }.toList(),
-            isReified = typeParameter.isReified,
-            node = typeParameter.toNode(),
-        )
-    }
+    private fun KSTypeParameter.parse() = TypeParameterNode(
+        name = name.toName(),
+        bounds = bounds.map { it.parse() }.toList(),
+        isReified = isReified,
+        node = toNode(),
+    )
 
     private inline fun <reified A : Annotation> Sequence<KSAnnotation>.findAnnotation(): KSAnnotation? {
         val expectedShortName = simpleNameOf<A>()

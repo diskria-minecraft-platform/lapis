@@ -244,10 +244,11 @@ class CoreLowering<O>(
             declaredName = declaredName,
             sourceJvmName = jvmName,
             name = jvmName.withUniqueModPrefix(),
-            parameters = parameters.map {
-                IrFunctionParameter(
-                    name = it.name,
-                    type = it.type.lower().irType,
+            parameters = parameters.map { parameter ->
+                IrMixinDuck.Shadow.Function.Parameter(
+                    name = parameter.name,
+                    mappingName = parameter.mappingName,
+                    type = parameter.type.lower().irType,
                 )
             },
             returnType = returnType?.lower()?.irType,
@@ -412,7 +413,7 @@ class CoreLowering<O>(
         is ClassTypeModel -> toTypeName(forJava)
         is TypeArgumentModel -> {
             if (forJava) {
-                val javaResult = boundType.toTypeName(forJava = true)
+                val javaResult = upperBoundType.toTypeName(forJava = true)
                 TypeNameResult(typeName = javaResult.typeName, isErased = true)
             } else {
                 TypeNameResult(
