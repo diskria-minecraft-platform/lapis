@@ -30,17 +30,11 @@ class Ksp(
     private val loweredKMixins: MutableList<IrKMixin<KSFile>> = mutableListOf()
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
-        logger.setPhase(KspLogger.Phase.PARSING)
         val nodes = KspParser(resolver, logger).parseNodes()
-
-        logger.setPhase(KspLogger.Phase.VALIDATION)
         val models = CoreValidator(nodes, options).validate().toList()
-
         if (models.isNotEmpty()) {
-            logger.setPhase(KspLogger.Phase.LOWERING)
             loweredKMixins += CoreLowering(models, options, poetesse).lower()
         }
-
         return emptyList()
     }
 
@@ -54,7 +48,6 @@ class Ksp(
 
     private fun generate() {
         if (loweredKMixins.isEmpty()) return
-        logger.setPhase(KspLogger.Phase.GENERATION)
         KspGenerator(loweredKMixins, options, poetesse, codeGenerator).generate()
     }
 }

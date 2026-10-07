@@ -23,8 +23,7 @@ class CoreLowering<O>(
             models.map { it.type.packageName }.reduceOrNull { current, next ->
                 val currentSegments = current.split('.')
                 val nextSegments = next.split('.')
-                currentSegments
-                    .zip(nextSegments)
+                currentSegments.zip(nextSegments)
                     .takeWhile { (current, next) -> current == next }
                     .joinToString(".") { it.first }
             }

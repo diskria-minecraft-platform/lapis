@@ -217,7 +217,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
 
     private fun KMixinNode.Constructor.Parameter.toModel(
         targetType: ParsedValidType,
-        enclosingTypeParameters: List<TypeParameterModel>,
+        scopeTypeParameters: List<TypeParameterModel>,
     ) = when {
         annotations.hasApiAnnotation<Origin>() -> {
             nodeRequireNotNull(name) { "" }
@@ -225,7 +225,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
                 name = name,
                 type = type.validate()
                     .requireSubtypeOf(target = targetType, node = this, nodeDesc = "@Origin parameter")
-                    .toModel(enclosingTypeParameters),
+                    .toModel(scopeTypeParameters),
             )
         }
 
@@ -284,7 +284,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
     private fun KMixinNode.Property.toShadowModel(
         isInterface: Boolean,
         mixinAnnotations: List<MixinAnnotationModel>,
-        enclosingTypeParameters: List<TypeParameterModel>,
+        scopeTypeParameters: List<TypeParameterModel>,
     ): KMixinModel.Shadow.Property {
         nodeRequire(isPublic) { "" }
         nodeRequire(isAbstract) { "" }
@@ -305,7 +305,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
             setterJvmName = setterJvmName,
             mappingName = mappingName,
             modifiers = validateShadowModifiers(modifiersArgument?.elements.orEmpty(), isInterface, isProperty = true),
-            type = type.validate().toModel(enclosingTypeParameters),
+            type = type.validate().toModel(scopeTypeParameters),
             mixinAnnotations = mixinAnnotations,
         )
     }
@@ -379,34 +379,32 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
     }
 
     private fun KMixinNode.Function.Parameter.validateAsInjectionParameter(
-        enclosingTypeParameters: List<TypeParameterModel>,
+        scopeParameters: List<TypeParameterModel>,
     ): KMixinModel.Injection.Parameter {
         nodeRequireNotNull(name) { "" }
         return KMixinModel.Injection.Parameter(
             name = name,
-            type = type.validate().toModel(enclosingTypeParameters),
+            type = type.validate().toModel(scopeParameters),
             mixinAnnotations = annotations.filterMixinAnnotations().map { it.toModel() },
         )
     }
 
     private fun ContextParameterNode.validateAsInjectionParameter(
-        enclosingTypeParameters: List<TypeParameterModel>,
+        scopeTypeParameters: List<TypeParameterModel>,
     ): KMixinModel.Injection.Parameter {
         nodeRequireNotNull(name) { "" }
         return KMixinModel.Injection.Parameter(
             name = name,
-            type = type.validate().toModel(enclosingTypeParameters),
+            type = type.validate().toModel(scopeTypeParameters),
             mixinAnnotations = annotations.filterMixinAnnotations().map { it.toModel() },
         )
     }
 
-    private fun ContextParameterNode.validate(
-        enclosingTypeParameters: List<TypeParameterModel>,
-    ): ContextParameterModel {
+    private fun ContextParameterNode.validate(scopeTypeParameters: List<TypeParameterModel>): ContextParameterModel {
         nodeRequireNotNull(name) { "" }
         return ContextParameterModel(
             name = name,
-            type = type.validate().toModel(enclosingTypeParameters),
+            type = type.validate().toModel(scopeTypeParameters),
         )
     }
 

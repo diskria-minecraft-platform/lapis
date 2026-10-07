@@ -7,6 +7,8 @@ import io.github.diskria.lapis.ksp.KspLogger
 class KspNode(val ksNode: KSNode, private val logger: KspLogger) : Node {
 
     override fun report(message: String) {
-        logger.error(message, node = ksNode)
+        logger.error(message, this)
     }
+
+    override fun toString(): String = ksNode.toString()
 }
