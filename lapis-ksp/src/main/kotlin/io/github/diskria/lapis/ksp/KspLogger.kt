@@ -17,8 +17,7 @@ class KspLogger(private val logger: KSPLogger) : LapisLogger<KspNode> {
     }
 
     private fun buildFullMessage(message: String, node: KspNode?): String = buildString {
-        appendLine("[Lapis]")
-        appendLine(message.trimEnd())
+        appendLine("Lapis: ${message.trimEnd()}")
         node?.let {
             val locationText = when (val location = it.ksNode.location) {
                 is FileLocation -> location.ideaLink
