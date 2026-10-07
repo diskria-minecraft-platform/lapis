@@ -1,6 +1,4 @@
-package io.github.diskria.lapis.core
-
-import io.github.diskria.lapis.core.exceptions.LapisException
+package io.github.diskria.lapis.core.logging
 
 interface LapisLogger<N> {
     fun warn(message: String, node: N? = null)

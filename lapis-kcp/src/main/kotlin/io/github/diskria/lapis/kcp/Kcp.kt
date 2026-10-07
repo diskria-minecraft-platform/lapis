@@ -1,9 +1,10 @@
 package io.github.diskria.lapis.kcp
 
 import com.google.auto.service.AutoService
-import io.github.diskria.lapis.core.CoreOptions
+import io.github.diskria.lapis.kcp.cli.KcpCliProcessor
 import io.github.diskria.lapis.kcp.fir.FirPlugin
 import io.github.diskria.lapis.kcp.ir.IrPlugin
+import io.github.diskria.lapis.kcp.logging.KcpLogger
 import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
 import org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar
 import org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi
@@ -21,11 +22,7 @@ class Kcp : CompilerPluginRegistrar() {
 
     override fun ExtensionStorage.registerExtensions(configuration: CompilerConfiguration) {
         val logger = KcpLogger(configuration.messageCollector)
-        val options = CoreOptions.fromArguments(
-            rawArguments = configuration.getMap(KcpKeys.RAW_ARGUMENTS),
-            onWarn = { message -> logger.warn(message) },
-            onError = { message -> logger.fatal(message) },
-        )
+        val options = KcpCliProcessor.getOptions(configuration, logger)
         FirExtensionRegistrar.registerExtension(FirPlugin(logger, options))
         IrGenerationExtension.registerExtension(IrPlugin(options))
     }

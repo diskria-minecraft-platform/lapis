@@ -1,4 +1,4 @@
-package io.github.diskria.lapis
+package io.github.diskria.lapis.cli
 
 import io.github.diskria.lapis.extensions.doubleQuoted
 import io.github.diskria.lapis.extensions.getRootRelativePath

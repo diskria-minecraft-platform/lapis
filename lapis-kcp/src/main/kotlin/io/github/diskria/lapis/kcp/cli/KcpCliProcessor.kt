@@ -1,7 +1,8 @@
-package io.github.diskria.lapis.kcp
+package io.github.diskria.lapis.kcp.cli
 
 import com.google.auto.service.AutoService
-import io.github.diskria.lapis.core.CoreOptions
+import io.github.diskria.lapis.core.cli.CliOptions
+import io.github.diskria.lapis.kcp.logging.KcpLogger
 import org.jetbrains.kotlin.compiler.plugin.AbstractCliOption
 import org.jetbrains.kotlin.compiler.plugin.CliOption
 import org.jetbrains.kotlin.compiler.plugin.CommandLineProcessor
@@ -16,7 +17,7 @@ class KcpCliProcessor : CommandLineProcessor {
     override val pluginId: String = "io.github.diskria.lapis.kcp"
 
     override val pluginOptions: List<CliOption> =
-        CoreOptions.specs.map { spec ->
+        CliOptions.specs.map { spec ->
             CliOption(
                 optionName = spec.name,
                 valueDescription = "<value>",
@@ -26,7 +27,17 @@ class KcpCliProcessor : CommandLineProcessor {
         }
 
     override fun processOption(option: AbstractCliOption, value: String, configuration: CompilerConfiguration) {
-        configuration.appendMap(KcpKeys.RAW_ARGUMENTS, option.optionName, value)
+        configuration.appendMap(CLI_ARGUMENTS, option.optionName, value)
+    }
+
+    companion object {
+        private val CLI_ARGUMENTS = CompilerConfigurationKey.create<Map<String, String>>("lapis.cliArguments")
+
+        fun getOptions(configuration: CompilerConfiguration, logger: KcpLogger) = CliOptions.fromArguments(
+            rawArguments = configuration.getMap(CLI_ARGUMENTS),
+            onWarn = { message -> logger.warn(message) },
+            onError = { message -> logger.fatal(message) },
+        )
     }
 }
 

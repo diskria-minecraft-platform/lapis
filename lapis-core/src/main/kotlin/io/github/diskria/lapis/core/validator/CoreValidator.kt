@@ -1,7 +1,7 @@
 package io.github.diskria.lapis.core.validator
 
 import io.github.diskria.lapis.annotations.*
-import io.github.diskria.lapis.core.CoreOptions
+import io.github.diskria.lapis.core.cli.CliOptions
 import io.github.diskria.lapis.core.extensions.isSubpackageOf
 import io.github.diskria.lapis.core.parser.models.*
 import io.github.diskria.lapis.core.utils.JavaModifiers
@@ -13,7 +13,7 @@ import javax.lang.model.element.Modifier.*
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.contract
 
-class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val options: CoreOptions) {
+class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val options: CliOptions) {
 
     fun validate(): Sequence<KMixinModel<O>> =
         nodes.mapValid { it.validate() }

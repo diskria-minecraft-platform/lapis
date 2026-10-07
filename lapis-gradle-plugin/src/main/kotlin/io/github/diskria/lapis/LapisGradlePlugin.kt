@@ -3,6 +3,7 @@ package io.github.diskria.lapis
 import com.google.devtools.ksp.gradle.KspAATask
 import io.github.diskria.lapis.api.LapisExtension
 import io.github.diskria.lapis.api.LapisSourceSetSpec
+import io.github.diskria.lapis.cli.CliArgumentProvider
 import io.github.diskria.lapis.extensions.capitalized
 import io.github.diskria.lapis.extensions.register
 import io.github.diskria.lapis.tasks.MergeMixinConfigsTask

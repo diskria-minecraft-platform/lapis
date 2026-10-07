@@ -1,6 +1,6 @@
 package io.github.diskria.lapis.core.lowering
 
-import io.github.diskria.lapis.core.CoreOptions
+import io.github.diskria.lapis.core.cli.CliOptions
 import io.github.diskria.lapis.core.lowering.models.*
 import io.github.diskria.lapis.core.utils.JavaModifiers
 import io.github.diskria.lapis.core.utils.Variance
@@ -14,7 +14,7 @@ import javax.lang.model.element.Modifier.*
 
 class CoreLowering<O>(
     private val models: List<KMixinModel<O>>,
-    private val options: CoreOptions,
+    private val options: CliOptions,
     private val poetesse: Poetesse,
 ) {
     private val mixinSourcePackageLCP by lazy {

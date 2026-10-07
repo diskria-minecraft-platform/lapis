@@ -1,6 +1,6 @@
-package io.github.diskria.lapis.kcp
+package io.github.diskria.lapis.kcp.logging
 
-import io.github.diskria.lapis.core.LapisLogger
+import io.github.diskria.lapis.core.logging.LapisLogger
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSourceLocation
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector

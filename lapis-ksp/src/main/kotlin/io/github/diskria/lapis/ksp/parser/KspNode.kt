@@ -2,7 +2,7 @@ package io.github.diskria.lapis.ksp.parser
 
 import com.google.devtools.ksp.symbol.KSNode
 import io.github.diskria.lapis.core.parser.models.Node
-import io.github.diskria.lapis.ksp.KspLogger
+import io.github.diskria.lapis.ksp.logging.KspLogger
 
 class KspNode(val ksNode: KSNode, private val logger: KspLogger) : Node {
 

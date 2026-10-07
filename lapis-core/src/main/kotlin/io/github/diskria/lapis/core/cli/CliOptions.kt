@@ -1,4 +1,4 @@
-package io.github.diskria.lapis.core
+package io.github.diskria.lapis.core.cli
 
 import io.github.diskria.lapis.core.extensions.internalError
 import io.github.diskria.lapis.core.extensions.quoted
@@ -18,7 +18,7 @@ import javax.lang.model.SourceVersion
 import kotlin.reflect.KProperty0
 
 @Serializable
-data class CoreOptions(
+data class CliOptions(
     val uniqueModPrefix: String,
     val mixinPackage: String,
     val mixinGeneratedSubpackage: String? = null,
@@ -121,7 +121,7 @@ data class CoreOptions(
         private fun String.removeArgumentPrefix(): String = removePrefix(ARGUMENT_PREFIX)
 
         val specs by lazy {
-            val descriptor = serialDescriptor<CoreOptions>()
+            val descriptor = serialDescriptor<CliOptions>()
             (0..<descriptor.elementsCount).map { index ->
                 OptionSpec(
                     name = descriptor.getElementName(index).withArgumentPrefix(),
@@ -134,7 +134,7 @@ data class CoreOptions(
             rawArguments: Map<String, String>,
             onWarn: (message: String) -> Unit,
             onError: (message: String) -> Nothing,
-        ): CoreOptions {
+        ): CliOptions {
             val scopeArguments = rawArguments.filterKeys { it.hasArgumentPrefix() }
             val existingKeys = specs.map { it.name }.toSet()
             val unknownKeys = scopeArguments.keys - existingKeys
@@ -147,18 +147,18 @@ data class CoreOptions(
                 onError("Missing required arguments: ${missingRequiredKeys.joinToString { "'$it'" }}.")
             }
             val options = runCatching {
-                optionsJson.decodeFromJsonElement<CoreOptions>(buildJsonObject {
+                optionsJson.decodeFromJsonElement<CliOptions>(buildJsonObject {
                     scopeArguments.forEach { (key, value) ->
                         put(key.removeArgumentPrefix(), JsonPrimitive(value))
                     }
                 })
             }.getOrElse { error ->
-                val message = error.message?.let { "\n$it" } ?: " failed to deserialize CoreOptions."
+                val message = error.message?.let { "\n$it" } ?: " failed to deserialize CliOptions."
                 internalError("Failed to parse Gradle arguments:$message")
             }
             val validationErrors = options.validate()
             if (validationErrors.isNotEmpty()) {
-                onError("Invalid CoreOptions configuration:\n${validationErrors.joinToString("\n")}")
+                onError("Invalid CliOptions configuration:\n${validationErrors.joinToString("\n")}")
             }
             return options
         }
@@ -177,5 +177,5 @@ object DelimitedStringListSerializer : KSerializer<List<String>> {
     override fun deserialize(decoder: Decoder): List<String> = decoder.decodeString().split(DELIMITERS_REGEX)
 
     override fun serialize(encoder: Encoder, value: List<String>) =
-        throw UnsupportedOperationException("Serialization is not supported for CoreOptions")
+        throw UnsupportedOperationException("Serialization is not supported for CliOptions")
 }

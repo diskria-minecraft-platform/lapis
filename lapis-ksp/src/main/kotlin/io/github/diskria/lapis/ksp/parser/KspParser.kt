@@ -9,7 +9,7 @@ import io.github.diskria.lapis.core.extensions.qualifiedNameOf
 import io.github.diskria.lapis.core.extensions.simpleNameOf
 import io.github.diskria.lapis.core.parser.models.*
 import io.github.diskria.lapis.core.utils.Variance
-import io.github.diskria.lapis.ksp.KspLogger
+import io.github.diskria.lapis.ksp.logging.KspLogger
 import kotlin.reflect.KProperty1
 
 class KspParser(private val resolver: Resolver, private val logger: KspLogger) {

@@ -4,7 +4,7 @@ import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.Dependencies
 import com.google.devtools.ksp.symbol.KSFile
 import io.github.diskria.lapis.annotations.InitStrategy
-import io.github.diskria.lapis.core.CoreOptions
+import io.github.diskria.lapis.core.cli.CliOptions
 import io.github.diskria.lapis.core.extensions.qualifiedNameOf
 import io.github.diskria.lapis.core.lowering.models.*
 import io.github.diskria.lapis.ksp.generator.models.GeneratedMixinsJson
@@ -18,7 +18,7 @@ import javax.annotation.processing.Generated
 
 class KspGenerator(
     private val kMixins: List<IrKMixin<KSFile>>,
-    private val options: CoreOptions,
+    private val options: CliOptions,
     private val poetesse: Poetesse,
     private val codeGenerator: CodeGenerator,
 ) {

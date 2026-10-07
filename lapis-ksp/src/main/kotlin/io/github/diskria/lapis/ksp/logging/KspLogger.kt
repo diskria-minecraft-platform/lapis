@@ -1,9 +1,9 @@
-package io.github.diskria.lapis.ksp
+package io.github.diskria.lapis.ksp.logging
 
 import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.symbol.FileLocation
 import com.google.devtools.ksp.symbol.NonExistLocation
-import io.github.diskria.lapis.core.LapisLogger
+import io.github.diskria.lapis.core.logging.LapisLogger
 import io.github.diskria.lapis.ksp.parser.KspNode
 
 class KspLogger(private val logger: KSPLogger) : LapisLogger<KspNode> {
