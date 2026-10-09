@@ -114,10 +114,11 @@ class ParsedClassType(
     val arguments: List<TypeArgument>,
     val actualType: ParsedClassType?,
     val functionalType: FunctionalType?,
+    val typeParameters: List<TypeParameterNode>,
     override val type: Type,
 ) : ParsedValidType {
 
-    val actualOrSelf: ParsedClassType get() = actualType ?: this
+    val actualOrThis: ParsedClassType get() = actualType ?: this
 
     sealed interface TypeArgument
     object StarProjectionArgument : TypeArgument
@@ -143,5 +144,6 @@ class TypeParameterNode(
     val name: String,
     val bounds: List<ParsedType>,
     val isReified: Boolean,
+    val annotations: AnnotationsContainer,
     override val node: Node,
 ) : NodeHolder

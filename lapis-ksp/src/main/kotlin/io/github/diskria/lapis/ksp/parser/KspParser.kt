@@ -196,7 +196,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
         }
         val actualType = if (declaration is KSTypeAlias) {
             val unwrapped = unwrapActualType(declaration)?.parse() as? ParsedClassType ?: return ParsedInvalidType
-            unwrapped.actualOrSelf
+            unwrapped.actualOrThis
         } else null
         val functionalType = if (isFunctionType || isSuspendFunctionType) {
             parseAsFunctionalType() ?: return ParsedInvalidType
@@ -221,6 +221,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
             arguments = arguments,
             actualType = actualType,
             functionalType = functionalType,
+            typeParameters = declaration.typeParameters.map { it.parse() },
             type = toType(),
         )
     }
@@ -283,6 +284,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
         name = name.toName(),
         bounds = bounds.map { it.parse() }.toList(),
         isReified = isReified,
+        annotations = parseAnnotations(),
         node = toNode(),
     )
 

@@ -116,104 +116,109 @@ class CoreLowering<O>(
 
     private fun KMixinModel.Extension.lower(
         targetType: ClassTypeModel,
-        enclosingTypeParameters: List<TypeParameterModel>,
-    ) = when (this) {
-        is KMixinModel.Extension.Property -> {
-            val allLoweredTypes = mutableSetOf<LoweredType>()
-            val loweredContextParameters = contextParameters.map { contextParameter ->
-                val loweredTypeResult = contextParameter.type.lower().also { allLoweredTypes += it }
-                IrFunctionParameter(name = contextParameter.name, type = loweredTypeResult.irType)
-            }
-            val loweredTypeResult = type.lower().also { allLoweredTypes += it }
-            val localTypeParameters = typeParameters
-            val usedEnclosingTypeParameterNames = buildSet {
-                allLoweredTypes.forEach { addAll(it.usedTypeParameterNames) }
-                retainAll(enclosingTypeParameters.map { it.name }.toSet())
-                removeAll(localTypeParameters.map { it.name }.toSet())
-            }
-            val requiredEnclosingTypeParameters = mutableListOf<TypeParameterModel>()
-            val enclosingTypeArguments = enclosingTypeParameters.map { typeParameter ->
-                if (typeParameter.name in usedEnclosingTypeParameterNames) {
-                    requiredEnclosingTypeParameters.add(typeParameter)
-                    ClassTypeModel.GenericTypeArgument(TypeArgumentModel(typeParameter.name))
-                } else {
-                    ClassTypeModel.StarProjectionArgument
-                }
-            }
-            val receiverTypeModel = if (requiredEnclosingTypeParameters.isNotEmpty()) {
-                ClassTypeModel(
-                    packageName = targetType.packageName,
-                    qualifiedName = targetType.qualifiedName,
-                    arguments = enclosingTypeArguments,
-                    actualType = targetType.actualType,
-                    isNullable = targetType.isNullable,
-                )
-            } else {
-                targetType
-            }
-            val requiredTypeParameters = requiredEnclosingTypeParameters + localTypeParameters
-            IrMixinDuck.Extension.Property(
-                type = loweredTypeResult.irType,
-                declaredName = declaredName,
-                declaredGetterJvmName = getterJvmName,
-                declaredSetterJvmName = setterJvmName,
-                getterName = getterJvmName.withUniqueModPrefix(),
-                setterName = setterJvmName?.withUniqueModPrefix(),
-                receiverType = receiverTypeModel.lower().irType,
-                contextParameters = loweredContextParameters,
-                typeVariables = requiredTypeParameters.lower(),
-            )
+        enclosingTypeParameters: List<KMixinModel.TargetTypeParameterModel>,
+    ): IrMixinDuck.Extension {
+        val allUsedTypeParameterNames = mutableSetOf<String>()
+        fun LoweredTypeResult.collectUsedTypeParameterNames() = allUsedTypeParameterNames.addAll(usedTypeParameterNames)
+        val enclosingParameters = enclosingTypeParameters.associate { parameter ->
+            val usedNames = parameter.bounds.flatMapTo(HashSet()) { it.lower().usedTypeParameterNames }
+            parameter.name to LoweredTargetTypeParameter(model = parameter, usedTypeParameterNames = usedNames)
         }
+        return when (this) {
+            is KMixinModel.Extension.Property -> {
+                val contextParameters = contextParameters.map { contextParameter ->
+                    val typeResult = contextParameter.type.lower().also { it.collectUsedTypeParameterNames() }
+                    IrFunctionParameter(name = contextParameter.name, type = typeResult.irType)
+                }
+                val typeResult = type.lower().also { it.collectUsedTypeParameterNames() }
+                val (receiverType, typeVariables) = lowerTypeParameters(
+                    usedNames = allUsedTypeParameterNames,
+                    targetType = targetType,
+                    enclosingParameters = enclosingParameters,
+                )
+                IrMixinDuck.Extension.Property(
+                    type = typeResult.irType,
+                    declaredName = declaredName,
+                    declaredGetterJvmName = getterJvmName,
+                    declaredSetterJvmName = setterJvmName,
+                    getterName = getterJvmName.withUniqueModPrefix(),
+                    setterName = setterJvmName?.withUniqueModPrefix(),
+                    receiverType = receiverType,
+                    contextParameters = contextParameters,
+                    typeVariables = typeVariables,
+                )
+            }
 
-        is KMixinModel.Extension.Function -> {
-            val allLoweredTypes = mutableSetOf<LoweredType>()
-            val loweredContextParameters = contextParameters.map { contextParameter ->
-                val loweredTypeResult = contextParameter.type.lower().also { allLoweredTypes += it }
-                IrFunctionParameter(name = contextParameter.name, type = loweredTypeResult.irType)
+            is KMixinModel.Extension.Function -> {
+                val contextParameters = contextParameters.map { contextParameter ->
+                    val typeResult = contextParameter.type.lower().also { it.collectUsedTypeParameterNames() }
+                    IrFunctionParameter(name = contextParameter.name, type = typeResult.irType)
+                }
+                val parameters = parameters.map { parameter ->
+                    val typeResult = parameter.type.lower().also { it.collectUsedTypeParameterNames() }
+                    IrFunctionParameter(name = parameter.name, type = typeResult.irType)
+                }
+                val returnTypeResult = returnType?.lower()?.also { it.collectUsedTypeParameterNames() }
+                val (receiverType, typeVariables) = lowerTypeParameters(
+                    usedNames = allUsedTypeParameterNames,
+                    targetType = targetType,
+                    enclosingParameters = enclosingParameters,
+                )
+                IrMixinDuck.Extension.Function(
+                    declaredName = declaredName,
+                    sourceJvmName = jvmName,
+                    name = jvmName.withUniqueModPrefix(),
+                    parameters = parameters,
+                    contextParameters = contextParameters,
+                    returnType = returnTypeResult?.irType,
+                    receiverType = receiverType,
+                    typeVariables = typeVariables,
+                )
             }
-            val loweredParameters = parameters.map { parameter ->
-                val loweredTypeResult = parameter.type.lower().also { allLoweredTypes += it }
-                IrFunctionParameter(name = parameter.name, type = loweredTypeResult.irType)
-            }
-            val loweredReturnTypeResult = returnType?.lower()?.also { allLoweredTypes += it }
-            val localTypeParameters = typeParameters
-            val usedEnclosingTypeParameterNames = buildSet {
-                allLoweredTypes.forEach { addAll(it.usedTypeParameterNames) }
-                retainAll(enclosingTypeParameters.map { it.name }.toSet())
-                removeAll(localTypeParameters.map { it.name }.toSet())
-            }
-            val requiredEnclosingTypeParameters = mutableListOf<TypeParameterModel>()
-            val enclosingTypeArguments = enclosingTypeParameters.map { typeParameter ->
-                if (typeParameter.name in usedEnclosingTypeParameterNames) {
-                    requiredEnclosingTypeParameters.add(typeParameter)
-                    ClassTypeModel.GenericTypeArgument(TypeArgumentModel(typeParameter.name))
-                } else {
-                    ClassTypeModel.StarProjectionArgument
+        }
+    }
+
+    private fun KMixinModel.Extension.lowerTypeParameters(
+        usedNames: Set<String>,
+        targetType: ClassTypeModel,
+        enclosingParameters: Map<String, LoweredTargetTypeParameter>,
+    ): LoweredExtensionTypeParametersResult {
+        val localParameters = typeParameters
+        val localNames = localParameters.mapTo(HashSet(localParameters.size)) { it.name }
+        val transitiveUsedNames = HashSet(usedNames)
+        val transitiveQueue = ArrayDeque(usedNames)
+        while (transitiveQueue.isNotEmpty()) {
+            val usedName = transitiveQueue.removeFirst()
+            if (usedName in localNames) continue
+            enclosingParameters[usedName]?.usedTypeParameterNames?.forEach { name ->
+                if (transitiveUsedNames.add(name)) {
+                    transitiveQueue.addLast(name)
                 }
             }
-            val receiverTypeModel = if (requiredEnclosingTypeParameters.isNotEmpty()) {
-                ClassTypeModel(
-                    packageName = targetType.packageName,
-                    qualifiedName = targetType.qualifiedName,
-                    arguments = enclosingTypeArguments,
-                    actualType = targetType.actualType,
-                    isNullable = targetType.isNullable,
-                )
-            } else {
-                targetType
-            }
-            val requiredTypeParameters = requiredEnclosingTypeParameters + localTypeParameters
-            IrMixinDuck.Extension.Function(
-                declaredName = declaredName,
-                sourceJvmName = jvmName,
-                name = jvmName.withUniqueModPrefix(),
-                parameters = loweredParameters,
-                contextParameters = loweredContextParameters,
-                returnType = loweredReturnTypeResult?.irType,
-                receiverType = receiverTypeModel.lower().irType,
-                typeVariables = requiredTypeParameters.lower(),
-            )
         }
+        val usedEnclosingParameters = enclosingParameters
+            .filterKeys { it !in localNames && it in transitiveUsedNames }
+            .map { it.value.model }
+        val receiverTypeModel = if (usedEnclosingParameters.isNotEmpty()) {
+            val substitutions = usedEnclosingParameters.associateBy { it.targetIndex }
+            ClassTypeModel(
+                packageName = targetType.packageName,
+                qualifiedName = targetType.qualifiedName,
+                arguments = List(targetType.arguments.size) { index ->
+                    substitutions[index]
+                        ?.let { ClassTypeModel.GenericTypeArgument(TypeArgumentModel(it.name)) }
+                        ?: ClassTypeModel.StarProjectionArgument
+                },
+                actualType = targetType.actualType,
+                isNullable = targetType.isNullable,
+            )
+        } else {
+            targetType
+        }
+        return LoweredExtensionTypeParametersResult(
+            receiverType = receiverTypeModel.lower().irType,
+            typeVariables = (usedEnclosingParameters + localParameters).lower(),
+        )
     }
 
     private fun KMixinModel.Shadow.lower(isInterface: Boolean) = when (this) {
@@ -351,24 +356,13 @@ class CoreLowering<O>(
             )
         }
 
-    private class TypeNameResult(
-        val typeName: XTypeName,
-        val isErased: Boolean = false,
-        val usedTypeParameterNames: Set<String> = emptySet(),
-    )
-
-    private class LoweredType(
-        val irType: IrType,
-        val usedTypeParameterNames: Set<String>,
-    )
-
-    private fun TypeModel.lower(): LoweredType = when (this) {
+    private fun TypeModel.lower(): LoweredTypeResult = when (this) {
         is ClassTypeModel -> {
             val kotlinResult = toTypeName(forJava = false)
             val kotlinTypeName = kotlinResult.typeName
             val javaResult = toTypeName(forJava = true)
             val javaTypeName = javaResult.typeName
-            val irType = if (actualOrSelf.functionalType != null) {
+            val irType = if (actualOrThis.functionalType != null) {
                 val toJavaTypeName = (javaTypeName as? XClassName)
                     ?.takeIf { it.qualifiedName == XFunctionalTypeName.JVM_FUNCTION_N }
                     ?.generic(poetesse.xStar())
@@ -390,7 +384,7 @@ class CoreLowering<O>(
                     isReturnable = !isUnit,
                 )
             }
-            LoweredType(irType, kotlinResult.usedTypeParameterNames)
+            LoweredTypeResult(irType, kotlinResult.usedTypeParameterNames)
         }
 
         is TypeArgumentModel -> {
@@ -404,7 +398,7 @@ class CoreLowering<O>(
                 castContext = IrType.CastContext(toKotlin = kotlinTypeName, toJava = null),
                 isReturnable = !isUnit,
             )
-            LoweredType(irType, kotlinResult.usedTypeParameterNames)
+            LoweredTypeResult(irType, kotlinResult.usedTypeParameterNames)
         }
     }
 
@@ -424,7 +418,7 @@ class CoreLowering<O>(
     }
 
     private fun ClassTypeModel.toTypeName(forJava: Boolean): TypeNameResult {
-        val type = if (forJava) actualOrSelf else this
+        val type = if (forJava) actualOrThis else this
         val typeResult = type.detectTypeName(forJava)
         if (forJava && typeResult.typeName is XParameterizedTypeName) {
             return TypeNameResult(
@@ -511,4 +505,25 @@ class CoreLowering<O>(
         }
         return poetesse.xClass(outPackageName, srcClassName.simpleName).withSuffix("_Generated")
     }
+
+    private data class TypeNameResult(
+        val typeName: XTypeName,
+        val isErased: Boolean = false,
+        val usedTypeParameterNames: Set<String> = emptySet(),
+    )
+
+    private data class LoweredTypeResult(
+        val irType: IrType,
+        val usedTypeParameterNames: Set<String> = emptySet(),
+    )
+
+    private data class LoweredTargetTypeParameter(
+        val model: KMixinModel.TargetTypeParameterModel,
+        val usedTypeParameterNames: Set<String> = emptySet(),
+    )
+
+    private data class LoweredExtensionTypeParametersResult(
+        val receiverType: IrType,
+        val typeVariables: List<XTypeVariableName> = emptyList(),
+    )
 }

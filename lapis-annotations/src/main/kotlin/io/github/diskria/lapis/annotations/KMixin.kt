@@ -28,6 +28,6 @@ annotation class Extension
 @Retention(SOURCE)
 annotation class KShadow(vararg val modifiers: Modifier = [])
 
-@Target(PROPERTY, FUNCTION, VALUE_PARAMETER)
+@Target(PROPERTY, FUNCTION, VALUE_PARAMETER, TYPE_PARAMETER)
 @Retention(SOURCE)
 annotation class MappingName(val value: String)

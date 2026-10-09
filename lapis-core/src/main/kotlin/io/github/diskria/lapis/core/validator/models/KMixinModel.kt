@@ -19,8 +19,15 @@ class KMixinModel<O>(
     val companionObject: CompanionObject?,
     val targetType: ClassTypeModel,
     val mixinAnnotations: List<MixinAnnotationModel>,
-    val typeParameters: List<TypeParameterModel>,
+    val typeParameters: List<TargetTypeParameterModel>,
 ) {
+    class TargetTypeParameterModel(
+        name: String,
+        mappingName: String,
+        bounds: List<TypeModel>,
+        val targetIndex: Int,
+    ) : TypeParameterModel(name, mappingName, bounds)
+
     sealed interface ClassKind
     class Class(
         val isAbstract: Boolean,
@@ -127,7 +134,7 @@ class ClassTypeModel(
     override val isNullable: Boolean = false,
 ) : TypeModel {
 
-    val actualOrSelf: ClassTypeModel get() = actualType ?: this
+    val actualOrThis: ClassTypeModel get() = actualType ?: this
 
     sealed interface TypeArgument
     object StarProjectionArgument : TypeArgument
@@ -153,7 +160,8 @@ class TypeArgumentModel(
     override val isNullable: Boolean = false,
 ) : TypeModel
 
-class TypeParameterModel(
+open class TypeParameterModel(
     val name: String,
-    val bounds: List<TypeModel>,
+    val mappingName: String = name,
+    val bounds: List<TypeModel> = emptyList(),
 )

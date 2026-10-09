@@ -5,6 +5,7 @@ import io.github.diskria.lapis.core.cli.CliOptions
 import io.github.diskria.lapis.core.extensions.isSubpackageOf
 import io.github.diskria.lapis.core.parser.models.*
 import io.github.diskria.lapis.core.utils.JavaModifiers
+import io.github.diskria.lapis.core.utils.Variance
 import io.github.diskria.lapis.core.validator.models.*
 import java.util.*
 import javax.lang.model.SourceVersion
@@ -36,17 +37,6 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         nodeRequire(!isSealed) { "" }
         nodeRequire(!isOpen) { "" }
         val mixinAnnotations = annotations.filterMixinAnnotations()
-        val targetArgument = nodeRequireNotNull(annotations.findApiArgument(KMixin::target)) {
-            val usedDesc = listOfNotNull(
-                if (mixinAnnotations.isEmpty()) "generating the Java @Mixin annotation" else null,
-                "subtype relationship checks",
-            ).joinToString(" and ")
-            """
-            Target argument must be valid.
-            Why: Target type is required for $usedDesc.
-            How to fix: Ensure the target argument in @KMixin has no compilation errors.
-            """.trimIndent()
-        }
         val initStrategy = nodeRequireNotNull(annotations.findApiArgument(KMixin::initStrategy)?.value) {
             """
             Init strategy argument must be valid.
@@ -61,16 +51,25 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
             How to fix: Specify the side argument explicitly in @KMixin and ensure it has no compilation errors.
             """.trimIndent()
         }
-        val validTargetTypeNode = targetArgument.value.validate()
-        val targetTypeModel = nodeRequireNotNull(validTargetTypeNode.toModel() as? ClassTypeModel) {
-            ""
+        val targetArgument = nodeRequireNotNull(annotations.findApiArgument(KMixin::target)) {
+            val usedDesc = listOfNotNull(
+                if (mixinAnnotations.isEmpty()) "generating the Java @Mixin annotation" else null,
+                "subtype relationship checks",
+            ).joinToString(" and ")
+            """
+            Target argument must be valid.
+            Why: Target type is required for $usedDesc.
+            How to fix: Ensure the target argument in @KMixin has no compilation errors.
+            """.trimIndent()
         }
-        val typeParameters = typeParameters.validate(enclosing = emptyList())
+        val targetClassType = nodeRequireNotNull(targetArgument.value.validate() as? ParsedClassType) { "" }
+        val classType = nodeRequireNotNull(type.validate() as? ParsedClassType) { "" }
+        val typeParameters = typeParameters.toModels(targetClassType.typeParameters)
         val shadowProperties = mutableListOf<KMixinModel.Shadow.Property>()
         val extensionProperties = mutableListOf<KMixinModel.Extension.Property>()
         properties.mapValid { property ->
-            val getterMixinAnnotations = property.getter?.annotations?.filterMixinAnnotations()?.map { it.toModel() }
-                .orEmpty()
+            val getterMixinAnnotations = property.getter?.annotations?.filterMixinAnnotations().orEmpty()
+                .map { it.toModel() }
             val hasShadowAnnotation = property.annotations.hasApiAnnotation<KShadow>()
             val hasExtensionAnnotation = property.annotations.hasApiAnnotation<Extension>()
             if (hasShadowAnnotation && hasExtensionAnnotation) {
@@ -125,7 +124,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
             } else if (mixinAnnotations.isNotEmpty()) {
                 injections += function.validateAsInjection(
                     isInCompanionObject = false,
-                    validTargetTypeNode,
+                    targetClassType,
                     mixinAnnotations,
                     typeParameters,
                 )
@@ -148,7 +147,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
                 if (mixinAnnotations.isNotEmpty()) {
                     injections += function.validateAsInjection(
                         isInCompanionObject = true,
-                        validTargetTypeNode,
+                        targetClassType,
                         mixinAnnotations,
                         typeParameters,
                     )
@@ -183,7 +182,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
             KMixinModel.Class(
                 isAbstract = isAbstract,
                 constructorParameters = constructor.parameters.mapValid {
-                    it.toModel(validTargetTypeNode, typeParameters)
+                    it.toModel(targetClassType, typeParameters)
                 },
             )
         } else if (isInterface) {
@@ -197,15 +196,14 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
                 """.trimIndent()
             }
         }
-        val classTypeModel = nodeRequireNotNull(type.validate().toModel() as? ClassTypeModel) { "" }
         return KMixinModel(
             origin = origin,
-            type = classTypeModel,
+            type = classType.toModel(),
             name = name,
             side = side,
             initStrategy = initStrategy,
             classKind = classKind,
-            targetType = targetTypeModel,
+            targetType = targetClassType.toModel(),
             shadowSources = if (isAbstract || isInterface) shadowProperties + shadowFunctions else emptyList(),
             extensionSources = extensionProperties + extensionFunctions,
             injections = injections,
@@ -216,7 +214,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
     }
 
     private fun KMixinNode.Constructor.Parameter.toModel(
-        targetType: ParsedValidType,
+        targetType: ParsedClassType,
         scopeTypeParameters: List<TypeParameterModel>,
     ) = when {
         annotations.hasApiAnnotation<Origin>() -> {
@@ -353,7 +351,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
 
     private fun KMixinNode.Function.validateAsInjection(
         isInCompanionObject: Boolean,
-        targetType: ParsedValidType,
+        targetType: ParsedClassType,
         mixinAnnotations: List<MixinAnnotationModel>,
         enclosingTypeParameters: List<TypeParameterModel>,
     ): KMixinModel.Injection {
@@ -603,7 +601,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
     }
 
     private fun ParsedValidType.requireSubtypeOf(
-        target: ParsedValidType,
+        target: ParsedClassType,
         node: NodeHolder,
         nodeDesc: String,
     ): ParsedValidType {
@@ -633,7 +631,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         }
 
     private fun List<TypeParameterNode>.validate(enclosing: List<TypeParameterModel>): List<TypeParameterModel> {
-        val stubs = map { TypeParameterModel(name = it.name, bounds = emptyList()) }
+        val stubs = map { TypeParameterModel(name = it.name) }
         return validateAll { it.toModel(enclosing + stubs) }
     }
 
@@ -647,6 +645,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         }
         return TypeParameterModel(
             name = name,
+            mappingName = annotations.getEffectiveMappingName(name),
             bounds = bounds.mapValid { it.validate().toModel(enclosing) },
         )
     }
@@ -740,6 +739,76 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         findApiArgument(MappingName::value)
             ?.let { (value, node) -> node.validateJavaIdentifierName(value, "@MappingName value", sources = true) }
             ?: fallbackName
+
+    private fun List<TypeParameterNode>.toModels(
+        targetNodes: List<TypeParameterNode>,
+    ): List<KMixinModel.TargetTypeParameterModel> {
+        val candidateModels = validate(enclosing = emptyList())
+        val mappingNames = candidateModels.associate { it.name to it.mappingName }
+        val targetIndices = targetNodes.withIndex().associate { it.value.name to it.index }
+        return zip(candidateModels).map { (candidateNode, candidateModel) ->
+            val targetIndex = candidateNode.nodeRequireNotNull(targetIndices[candidateModel.mappingName]) { "" }
+            val targetNode = targetNodes[targetIndex]
+            candidateNode.nodeRequire(candidateModel.bounds.size == targetNode.bounds.size) { "" }
+            candidateModel.bounds.zip(targetNode.bounds).forEach { (candidateBound, targetBound) ->
+                candidateNode.requireBoundEquals(candidateBound, targetBound, mappingNames)
+            }
+            KMixinModel.TargetTypeParameterModel(
+                name = candidateModel.name,
+                mappingName = candidateModel.mappingName,
+                bounds = candidateModel.bounds,
+                targetIndex = targetIndex,
+            )
+        }
+    }
+
+    private fun NodeHolder.requireBoundEquals(
+        candidate: TypeModel,
+        target: ParsedType,
+        mappingNames: Map<String, String>,
+        visited: Set<Pair<String, String>> = emptySet(),
+    ) {
+        fun visitedEntry(candidate: TypeArgumentModel, target: ParsedTypeArgument) = candidate.name to target.name
+        nodeRequire(target is ParsedValidType) { "" }
+        when (target) {
+            is ParsedClassType -> {
+                nodeRequire(candidate is ClassTypeModel) { "" }
+                val candidateActual = candidate.actualOrThis
+                nodeRequire(candidateActual.qualifiedName == target.qualifiedName) { "" }
+                nodeRequire(candidateActual.arguments.size == target.arguments.size) { "" }
+                candidateActual.arguments.zip(target.arguments).forEach { (candidateArgument, targetArgument) ->
+                    when (targetArgument) {
+                        is ParsedClassType.StarProjectionArgument -> {
+                            nodeRequire(candidateArgument is ClassTypeModel.StarProjectionArgument) { "" }
+                        }
+
+                        is ParsedClassType.GenericTypeArgument -> {
+                            nodeRequire(candidateArgument is ClassTypeModel.GenericTypeArgument) { "" }
+                            if (candidateArgument.variance != Variance.INVARIANT) {
+                                nodeRequire(candidateArgument.variance == targetArgument.variance) { "" }
+                            }
+                            val candidate = candidateArgument.type
+                            val target = targetArgument.type
+                            requireBoundEquals(
+                                candidate = candidate,
+                                target = target,
+                                mappingNames = mappingNames,
+                                visited = if (candidate is TypeArgumentModel && target is ParsedTypeArgument) {
+                                    visited + visitedEntry(candidate, target)
+                                } else visited,
+                            )
+                        }
+                    }
+                }
+            }
+
+            is ParsedTypeArgument -> {
+                nodeRequire(candidate is TypeArgumentModel) { "" }
+                if (visitedEntry(candidate, target) in visited) return
+                nodeRequire(mappingNames[candidate.name] == target.name) { "" }
+            }
+        }
+    }
 
     private inline fun NodeHolder.nodeError(crossinline message: () -> String): Nothing {
         node.report(message())
