@@ -111,10 +111,9 @@ object ParsedInvalidType : ParsedType
 class ParsedClassType(
     val packageName: String,
     val qualifiedName: String?,
-    val arguments: List<TypeArgument>,
+    val typeArguments: List<TypeArgument>,
     val actualType: ParsedClassType?,
     val functionalType: FunctionalType?,
-    val typeParameters: List<TypeParameterNode>,
     override val type: Type,
 ) : ParsedValidType {
 
@@ -122,9 +121,9 @@ class ParsedClassType(
 
     sealed interface TypeArgument
     object StarProjectionArgument : TypeArgument
-    class GenericTypeArgument(val type: ParsedValidType, val variance: Variance) : TypeArgument
+    class TypeProjectionArgument(val type: ParsedValidType, val variance: Variance) : TypeArgument
 
-    class FunctionalType(
+    class FunctionalType private constructor(
         val contextTypes: List<ParsedValidType>,
         val receiverType: ParsedValidType?,
         val parameters: List<Parameter>,
@@ -132,10 +131,54 @@ class ParsedClassType(
         val isSuspending: Boolean,
     ) {
         class Parameter(val name: String?, val type: ParsedValidType)
+
+        companion object {
+            fun <A, T> parse(
+                typeArguments: List<A>,
+                nothingType: T,
+                nullableAnyType: T,
+                isSuspending: Boolean,
+                getEffectiveType: (argument: A, fallback: T) -> T,
+                parseType: (type: T) -> ParsedType,
+                getContextParametersCount: () -> Int,
+                isExtension: () -> Boolean,
+                getParameterName: (argument: A, type: T) -> String?,
+            ): FunctionalType? {
+                val deque = ArrayDeque(typeArguments)
+                val contextTypes = List(getContextParametersCount()) {
+                    val rawType = deque.removeFirstOrNull() ?: return null
+                    parseType(getEffectiveType(rawType, nothingType)) as? ParsedValidType ?: return null
+                }
+                val receiverType = if (isExtension()) {
+                    val rawType = deque.removeFirstOrNull() ?: return null
+                    parseType(getEffectiveType(rawType, nothingType)) as? ParsedValidType ?: return null
+                } else {
+                    null
+                }
+                val returnRawType = deque.removeLastOrNull() ?: return null
+                val returnType = parseType(getEffectiveType(returnRawType, nullableAnyType))
+                    as? ParsedValidType ?: return null
+                val parameters = deque.map { argument ->
+                    val effectiveType = getEffectiveType(argument, nothingType)
+                    val type = parseType(effectiveType) as? ParsedValidType ?: return null
+                    ParsedClassType.FunctionalType.Parameter(
+                        name = getParameterName(argument, effectiveType),
+                        type = type,
+                    )
+                }
+                return ParsedClassType.FunctionalType(
+                    contextTypes = contextTypes,
+                    receiverType = receiverType,
+                    parameters = parameters,
+                    returnType = returnType,
+                    isSuspending = isSuspending,
+                )
+            }
+        }
     }
 }
 
-class ParsedTypeArgument(
+class ParsedTypeParameterType(
     val name: String,
     override val type: Type,
 ) : ParsedValidType

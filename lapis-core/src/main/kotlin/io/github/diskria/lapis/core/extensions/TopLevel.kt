@@ -1,6 +1,13 @@
 package io.github.diskria.lapis.core.extensions
 
-fun internalError(message: String): Nothing =
+import java.io.File
+
+// TODO: Replace with an abstraction layer to support Gradle, KSP, Compiler, and IDE environments.
+fun lapisLog(message: String) {
+    File(System.getProperty("user.home"), "lapis.log").appendText("$message\n")
+}
+
+fun lapisError(message: String): Nothing =
     error(buildString {
         appendLine(message)
         appendLine("This is a Lapis internal error. Please report it to the issue tracker:")
@@ -8,7 +15,7 @@ fun internalError(message: String): Nothing =
     })
 
 inline fun <reified T : Any> qualifiedNameOf(): String =
-    T::class.qualifiedName ?: internalError("Failed to resolve qualified name for '${T::class}'.")
+    T::class.qualifiedName ?: lapisError("Failed to resolve qualified name for '${T::class}'.")
 
 inline fun <reified T : Any> simpleNameOf(): String =
-    T::class.simpleName ?: internalError("Failed to resolve simple name for '${T::class}'.")
+    T::class.simpleName ?: lapisError("Failed to resolve simple name for '${T::class}'.")

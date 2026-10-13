@@ -3,8 +3,7 @@ package io.github.diskria.lapis.ksp.parser
 import com.google.devtools.ksp.*
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.symbol.*
-import io.github.diskria.lapis.annotations.KMixin
-import io.github.diskria.lapis.core.extensions.internalError
+import io.github.diskria.lapis.core.extensions.lapisError
 import io.github.diskria.lapis.core.extensions.qualifiedNameOf
 import io.github.diskria.lapis.core.extensions.simpleNameOf
 import io.github.diskria.lapis.core.parser.models.*
@@ -16,7 +15,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
 
     fun parseNodes(): Sequence<KMixinNode<KSFile>> =
         resolver
-            .getSymbolsWithAnnotation(qualifiedNameOf<KMixin>())
+            .getSymbolsWithAnnotation(AnnotationsContainer.ROOT_FQCN)
             .filterIsInstance<KSClassDeclaration>()
             .map { it.parseAsRoot() }
 
@@ -133,15 +132,16 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
 
     private fun KSAnnotation.parse() = AnnotationNode(
         type = annotationType.parse(),
-        arguments = arguments.map { it.parseAsAnnotationArgument() },
+        arguments = arguments.mapNotNull { argument ->
+            if (argument.origin == KspOrigin.SYNTHETIC) return@mapNotNull null
+            val name = argument.name?.toName() ?: return@mapNotNull AnnotationNode.InvalidArgument(argument.toNode())
+            argument.parseAsAnnotationArgument(name)
+        },
         node = toNode(),
     )
 
-    private fun KSValueArgument.parseAsAnnotationArgument(): AnnotationNode.Argument {
+    private fun KSValueArgument.parseAsAnnotationArgument(name: String): AnnotationNode.Argument {
         val value = value
-        val name = name?.toName()
-        val isExplicit = origin != KspOrigin.SYNTHETIC
-        val node = toNode()
         val arrayValues = when (value) {
             is Collection<*> -> value.toList()
             is Array<*> -> value.toList()
@@ -150,145 +150,164 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
         if (arrayValues != null) {
             return AnnotationNode.ArrayArgument(
                 name = name,
-                isExplicit = isExplicit,
                 elements = arrayValues.map { it.parseAsAnnotationArgumentValue() },
-                node = node,
+                node = toNode(),
             )
         }
         return AnnotationNode.ScalarArgument(
             name = name,
-            isExplicit = isExplicit,
             value = value.parseAsAnnotationArgumentValue(),
-            node = node,
+            node = toNode(),
         )
     }
 
-    private fun Any?.parseAsAnnotationArgumentValue(): AnnotationNode.Argument.Value = when (val value = this) {
+    private fun Any?.parseAsAnnotationArgumentValue(): AnnotationNode.Argument.Value = when (val rawValue = this) {
         null -> AnnotationNode.Argument.InvalidValue
-        is Boolean -> AnnotationNode.Argument.BooleanValue(value)
-        is Byte -> AnnotationNode.Argument.ByteValue(value)
-        is Short -> AnnotationNode.Argument.ShortValue(value)
-        is Int -> AnnotationNode.Argument.IntValue(value)
-        is Long -> AnnotationNode.Argument.LongValue(value)
-        is Char -> AnnotationNode.Argument.CharValue(value)
-        is Float -> AnnotationNode.Argument.FloatValue(value)
-        is Double -> AnnotationNode.Argument.DoubleValue(value)
-        is String -> AnnotationNode.Argument.StringValue(value)
-        is KSType -> AnnotationNode.Argument.TypeValue(value.parse())
+        is Boolean -> AnnotationNode.Argument.BooleanValue(rawValue)
+        is Byte -> AnnotationNode.Argument.ByteValue(rawValue)
+        is Short -> AnnotationNode.Argument.ShortValue(rawValue)
+        is Int -> AnnotationNode.Argument.IntValue(rawValue)
+        is Long -> AnnotationNode.Argument.LongValue(rawValue)
+        is Char -> AnnotationNode.Argument.CharValue(rawValue)
+        is Float -> AnnotationNode.Argument.FloatValue(rawValue)
+        is Double -> AnnotationNode.Argument.DoubleValue(rawValue)
+        is String -> AnnotationNode.Argument.StringValue(rawValue)
+        is KSType -> AnnotationNode.Argument.TypeValue(rawValue.parse())
         is KSClassDeclaration -> {
-            val parentClassDeclaration = value.parentDeclaration as? KSClassDeclaration
-                ?: internalError("Failed to resolve enclosing enum class of entry: '${value.qualifiedName}'.")
+            val parentClassDeclaration = rawValue.parentDeclaration as? KSClassDeclaration
+                ?: lapisError("Failed to resolve enclosing enum class of entry: '${rawValue.qualifiedName}'.")
             AnnotationNode.Argument.EnumValue(
                 type = parentClassDeclaration.asStarProjectedType().parse(),
-                name = value.simpleName.toName(),
+                name = rawValue.simpleName.toName(),
             )
         }
 
-        is KSAnnotation -> AnnotationNode.Argument.AnnotationValue(value.parse())
-        else -> internalError("Unexpected type of annotation argument value: '${value::class.qualifiedName}'.")
+        is KSAnnotation -> AnnotationNode.Argument.AnnotationValue(rawValue.parse())
+        else -> lapisError("Unexpected value for annotation argument: '${rawValue::class.qualifiedName}'.")
     }
 
     private fun KSType.parse(): ParsedType {
         if (isError) return ParsedInvalidType
         val ksDeclaration = declaration
         if (ksDeclaration is KSTypeParameter) {
-            return ParsedTypeArgument(name = ksDeclaration.name.toName(), type = toType())
+            return ParsedTypeParameterType(ksDeclaration.name.toName(), toType())
         }
         val actualType = if (ksDeclaration is KSTypeAlias) {
-            val unwrapped = unwrapActualType(ksDeclaration)?.parse() as? ParsedClassType ?: return ParsedInvalidType
-            unwrapped.actualOrThis
+            val expanded = fullyExpandedType(ksDeclaration)
+            if (expanded === this) return ParsedInvalidType
+            val parsedExpanded = expanded.parse() as? ParsedClassType ?: return ParsedInvalidType
+            parsedExpanded.actualOrThis
         } else null
-        val isSuspendFunctionType = isSuspendFunctionType
-        val isFunctional = isFunctionType || isSuspendFunctionType
-        val functionalTypeArguments = mutableListOf<FunctionalTypeArgument>()
-        val parsedArguments = arguments.map { ksArgument ->
-            val kspVariance = ksArgument.variance
-            if (kspVariance == KspVariance.STAR) {
-                if (isFunctional) return ParsedInvalidType
-                ParsedClassType.StarProjectionArgument
-            } else {
-                val type = ksArgument.type?.parse() as? ParsedValidType ?: return ParsedInvalidType
-                val variance = when (kspVariance) {
-                    KspVariance.INVARIANT -> Variance.INVARIANT
-                    KspVariance.COVARIANT -> Variance.COVARIANT
-                    KspVariance.CONTRAVARIANT -> Variance.CONTRAVARIANT
+        val ksTypeArguments = arguments
+        val parsedArguments = ksTypeArguments.map { ksArgument ->
+            when (val kspVariance = ksArgument.variance) {
+                KspVariance.STAR -> ParsedClassType.StarProjectionArgument
+                else -> {
+                    val type = ksArgument.type?.parse() as? ParsedValidType ?: return ParsedInvalidType
+                    val variance = when (kspVariance) {
+                        KspVariance.CONTRAVARIANT -> Variance.CONTRAVARIANT
+                        KspVariance.COVARIANT -> Variance.COVARIANT
+                        KspVariance.INVARIANT -> Variance.INVARIANT
+                    }
+                    ParsedClassType.TypeProjectionArgument(type, variance)
                 }
-                if (isFunctional) {
-                    functionalTypeArguments += FunctionalTypeArgument(type, ksArgument.annotations)
-                }
-                ParsedClassType.GenericTypeArgument(type, variance)
             }
         }
+        val isSuspendFunctionType = isSuspendFunctionType
+        val isFunctional = isFunctionType || isSuspendFunctionType
         val functionalType = if (isFunctional) {
-            parseFunctionalType(annotations, functionalTypeArguments, isSuspendFunctionType) ?: return ParsedInvalidType
+            parseFunctionalType(ksTypeArguments, isSuspendFunctionType) ?: return ParsedInvalidType
         } else null
         return ParsedClassType(
             packageName = ksDeclaration.packageName.toName(),
             qualifiedName = ksDeclaration.qualifiedName?.toName(),
-            arguments = parsedArguments,
+            typeArguments = parsedArguments,
             actualType = actualType,
             functionalType = functionalType,
-            typeParameters = ksDeclaration.typeParameters.map { it.parse() },
             type = toType(),
         )
     }
 
-    private fun KSType.unwrapActualType(alias: KSTypeAlias, visited: Set<KSTypeAlias> = emptySet()): KSType? {
-        if (alias in visited) return null
-        if (alias.typeParameters.size != arguments.size) return null
-        val args = alias.typeParameters.zip(arguments) { parameter, argument ->
-            parameter.name.toName() to argument
+    private fun KSType.fullyExpandedType(alias: KSTypeAlias): KSType =
+        directExpansionType(alias, visited = emptySet()) ?: this
+
+    private fun KSType.directExpansionType(ksTypeAlias: KSTypeAlias, visited: Set<KSTypeAlias>): KSType? {
+        if (ksTypeAlias in visited) return null
+        if (ksTypeAlias.typeParameters.size != arguments.size) return null
+        val ksTypeArguments = ksTypeAlias.typeParameters.zip(arguments) { ksTypeParameter, ksTypeArgument ->
+            ksTypeParameter.name.toName() to ksTypeArgument
         }.toMap()
-        return alias.type.resolve().substituteTypeAlias(args = args, visited = visited + alias)
+        val mapped = ksTypeAlias.type.resolve().mapTypeAliasArguments(ksTypeArguments, visited + ksTypeAlias)
+        return mapped?.applyNullabilityFrom(this)
     }
 
-    private fun KSType.substituteTypeAlias(args: Map<String, KSTypeArgument>, visited: Set<KSTypeAlias>): KSType? {
-        if (arguments.isNotEmpty()) {
-            return replace(arguments.map { argument ->
-                if (argument.variance == KspVariance.STAR) return@map argument
-                val type = argument.type?.resolve() ?: return null
-                val substitutedType = type.substituteTypeAlias(args, visited) ?: return null
-                resolver.getTypeArgument(resolver.createKSTypeReferenceFromKSType(substitutedType), argument.variance)
-            })
-        }
-        val unfoldedType = if (declaration is KSTypeParameter) {
-            args[declaration.simpleName.toName()]?.type?.resolve()?.preserveNullableFrom(this) ?: return this
+    private fun KSType.mapTypeAliasArguments(
+        ksTypeArguments: Map<String, KSTypeArgument>,
+        visited: Set<KSTypeAlias> = emptySet(),
+    ): KSType? {
+        val ksDeclaration = declaration
+        val expanded = if (ksDeclaration is KSTypeParameter) {
+            val ksTypeArgument = ksTypeArguments[ksDeclaration.name.toName()]
+            if (ksTypeArgument != null) {
+                ksTypeArgument.type?.resolve()?.applyNullabilityFrom(this) ?: return null
+            } else {
+                this
+            }
         } else {
             this
         }
-        val alias = unfoldedType.declaration as? KSTypeAlias ?: return unfoldedType
-        return unfoldedType.unwrapActualType(alias, visited)
+        val substituted = if (expanded.arguments.isNotEmpty()) {
+            expanded.replace(expanded.arguments.map { argument ->
+                val kspVariance = argument.variance
+                if (kspVariance == KspVariance.STAR) return@map argument
+                val type = argument.type?.resolve() ?: return null
+                val mapped = type.mapTypeAliasArguments(ksTypeArguments, visited) ?: return null
+                val ksTypeArgument = (type.declaration as? KSTypeParameter)?.let { ksTypeArguments[it.name.toName()] }
+                val variance = if (ksTypeArgument != null) {
+                    combineVariance(ksTypeArgument.variance, kspVariance) ?: return null
+                } else {
+                    kspVariance
+                }
+                resolver.getTypeArgument(resolver.createKSTypeReferenceFromKSType(mapped), variance)
+            })
+        } else {
+            expanded
+        }
+        val ksTypeAlias = substituted.declaration as? KSTypeAlias ?: return substituted
+        return substituted.directExpansionType(ksTypeAlias, visited)
     }
 
-    private data class FunctionalTypeArgument(val type: ParsedValidType, val ksAnnotations: Sequence<KSAnnotation>)
+    private fun combineVariance(callSite: KspVariance, declarationSite: KspVariance): KspVariance? {
+        if (callSite == declarationSite) return callSite
+        if (callSite == KspVariance.STAR || declarationSite == KspVariance.STAR) return KspVariance.STAR
+        if (callSite == KspVariance.INVARIANT) return declarationSite
+        if (declarationSite == KspVariance.INVARIANT) return callSite
+        return null
+    }
 
-    private fun parseFunctionalType(
-        ksAnnotations: Sequence<KSAnnotation>,
-        arguments: List<FunctionalTypeArgument>,
+    private fun KSType.applyNullabilityFrom(abbreviation: KSType): KSType =
+        if (abbreviation.isMarkedNullable && !isMarkedNullable) makeNullable() else this
+
+    private fun KSType.parseFunctionalType(
+        ksTypeArguments: List<KSTypeArgument>,
         isSuspending: Boolean,
-    ): ParsedClassType.FunctionalType? {
-        val rawArguments = arguments.toMutableList()
-        val contextTypes = List(ksAnnotations.findArgument(ContextFunctionTypeParams::count) ?: 0) {
-            rawArguments.removeFirstOrNull()?.type ?: return null
-        }
-        val receiverType = if (ksAnnotations.hasAnnotation<ExtensionFunctionType>()) {
-            rawArguments.removeFirstOrNull()?.type ?: return null
-        } else null
-        val returnType = rawArguments.removeLastOrNull()?.type ?: return null
-        val parameters = rawArguments.map { rawArgument ->
-            ParsedClassType.FunctionalType.Parameter(
-                name = rawArgument.ksAnnotations.findArgument(ParameterName::name),
-                type = rawArgument.type,
-            )
-        }
-        return ParsedClassType.FunctionalType(
-            contextTypes = contextTypes,
-            receiverType = receiverType,
-            parameters = parameters,
-            returnType = returnType,
-            isSuspending = isSuspending,
-        )
-    }
+    ) = ParsedClassType.FunctionalType.parse(
+        typeArguments = ksTypeArguments,
+        isSuspending = isSuspending,
+        nothingType = resolver.builtIns.nothingType,
+        nullableAnyType = resolver.builtIns.anyType.makeNullable(),
+        getEffectiveType = { ksTypeArgument, fallbackKSType ->
+            val ksType = ksTypeArgument.type
+            when {
+                ksTypeArgument.variance == KspVariance.STAR || ksType == null -> fallbackKSType
+                else -> ksType.resolve()
+            }
+        },
+        parseType = { type -> type.parse() },
+        getContextParametersCount = { annotations.findArgument(ContextFunctionTypeParams::count) ?: 0 },
+        isExtension = { annotations.hasAnnotation<ExtensionFunctionType>() },
+        getParameterName = { argument, _ -> argument.annotations.findArgument(ParameterName::name) },
+    )
 
     private fun KSTypeReference.parse(): ParsedType = resolve().parse()
 
@@ -328,6 +347,3 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
     private typealias KspOrigin = com.google.devtools.ksp.symbol.Origin
     private typealias KspVariance = com.google.devtools.ksp.symbol.Variance
 }
-
-private fun KSType.preserveNullableFrom(source: KSType): KSType =
-    if (source.isMarkedNullable && !isMarkedNullable) makeNullable() else this

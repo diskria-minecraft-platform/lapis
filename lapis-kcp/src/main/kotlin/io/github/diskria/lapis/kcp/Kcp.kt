@@ -1,6 +1,7 @@
 package io.github.diskria.lapis.kcp
 
 import com.google.auto.service.AutoService
+import io.github.diskria.lapis.core.extensions.lapisLog
 import io.github.diskria.lapis.kcp.cli.KcpCliProcessor
 import io.github.diskria.lapis.kcp.fir.FirPlugin
 import io.github.diskria.lapis.kcp.ir.IrPlugin
@@ -21,9 +22,16 @@ class Kcp : CompilerPluginRegistrar() {
     override val supportsK2: Boolean = true
 
     override fun ExtensionStorage.registerExtensions(configuration: CompilerConfiguration) {
-        val logger = KcpLogger(configuration.messageCollector)
-        val options = KcpCliProcessor.getOptions(configuration, logger)
-        FirExtensionRegistrar.registerExtension(FirPlugin(logger, options))
-        IrGenerationExtension.registerExtension(IrPlugin(options))
+        lapisLog(configuration.toString())
+        lapisLog(">>> ExtensionStorage.registerExtensions")
+        try {
+            val logger = KcpLogger(configuration.messageCollector)
+            val options = KcpCliProcessor.getOptions(configuration, logger)
+            FirExtensionRegistrar.registerExtension(FirPlugin(options))
+            IrGenerationExtension.registerExtension(IrPlugin(options))
+            lapisLog("    Registration finished, options: $options")
+        } catch (t: Throwable) {
+            lapisLog("    CRASH IN ExtensionStorage.registerExtensions:${t.stackTraceToString()}\n")
+        }
     }
 }

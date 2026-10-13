@@ -1,5 +1,6 @@
 package io.github.diskria.lapis.core.parser.models
 
+import io.github.diskria.lapis.annotations.KMixin
 import io.github.diskria.lapis.core.extensions.isSubpackageOf
 import io.github.diskria.lapis.core.extensions.qualifiedNameOf
 import io.github.diskria.lapis.core.parser.models.AnnotationNode.Argument
@@ -7,7 +8,7 @@ import kotlin.enums.enumEntries
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 
-class AnnotationNode(
+data class AnnotationNode(
     val type: ParsedType,
     val arguments: List<Argument>,
     override val node: Node,
@@ -19,40 +20,37 @@ class AnnotationNode(
         sealed interface ValidValue : Value
         object InvalidValue : Value
 
-        class BooleanValue(val boolean: Boolean) : ValidValue
-        class ByteValue(val byte: Byte) : ValidValue
-        class ShortValue(val short: Short) : ValidValue
-        class IntValue(val int: Int) : ValidValue
-        class LongValue(val long: Long) : ValidValue
-        class CharValue(val char: Char) : ValidValue
-        class FloatValue(val float: Float) : ValidValue
-        class DoubleValue(val double: Double) : ValidValue
-        class StringValue(val string: String) : ValidValue
-        class TypeValue(val type: ParsedType) : ValidValue
-        class EnumValue(val type: ParsedType, val name: String) : ValidValue
-        class AnnotationValue(val annotation: AnnotationNode) : ValidValue
+        data class BooleanValue(val boolean: Boolean) : ValidValue
+        data class ByteValue(val byte: Byte) : ValidValue
+        data class ShortValue(val short: Short) : ValidValue
+        data class IntValue(val int: Int) : ValidValue
+        data class LongValue(val long: Long) : ValidValue
+        data class CharValue(val char: Char) : ValidValue
+        data class FloatValue(val float: Float) : ValidValue
+        data class DoubleValue(val double: Double) : ValidValue
+        data class StringValue(val string: String) : ValidValue
+        data class TypeValue(val type: ParsedType) : ValidValue
+        data class EnumValue(val type: ParsedType, val name: String) : ValidValue
+        data class AnnotationValue(val annotation: AnnotationNode) : ValidValue
     }
 
     sealed interface ValidArgument : Argument {
-        val name: String?
-        val isExplicit: Boolean
+        val name: String
     }
 
-    class ScalarArgument(
-        override val name: String?,
-        override val isExplicit: Boolean,
+    data class ScalarArgument(
+        override val name: String,
         val value: Argument.Value,
         override val node: Node,
     ) : ValidArgument
 
-    class ArrayArgument(
-        override val name: String?,
-        override val isExplicit: Boolean,
+    data class ArrayArgument(
+        override val name: String,
         val elements: List<Argument.Value>,
         override val node: Node,
     ) : ValidArgument
 
-    class InvalidArgument(override val node: Node) : Argument
+    data class InvalidArgument(override val node: Node) : Argument
 }
 
 class AnnotationsContainer(
@@ -121,6 +119,8 @@ class AnnotationsContainer(
     data class ApiArrayArgument<T>(val elements: List<T>, val node: NodeHolder)
 
     companion object {
+        val ROOT_FQCN = qualifiedNameOf<KMixin>()
+
         private const val API_ANNOTATIONS_PACKAGE = "io.github.diskria.lapis.annotations"
 
         fun of(annotations: List<AnnotationNode>): AnnotationsContainer {

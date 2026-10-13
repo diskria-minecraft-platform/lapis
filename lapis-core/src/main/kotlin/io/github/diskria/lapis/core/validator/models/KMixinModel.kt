@@ -128,7 +128,7 @@ sealed interface TypeModel {
 class ClassTypeModel(
     val packageName: String,
     val qualifiedName: String,
-    val arguments: List<TypeArgument> = emptyList(),
+    val typeArguments: List<TypeArgument> = emptyList(),
     val actualType: ClassTypeModel? = null,
     val functionalType: FunctionalType? = null,
     override val isNullable: Boolean = false,
@@ -138,7 +138,7 @@ class ClassTypeModel(
 
     sealed interface TypeArgument
     object StarProjectionArgument : TypeArgument
-    class GenericTypeArgument(val type: TypeModel, val variance: Variance = Variance.INVARIANT) : TypeArgument
+    class TypeProjectionArgument(val type: TypeModel, val variance: Variance = Variance.INVARIANT) : TypeArgument
 
     class FunctionalType(
         val contextTypes: List<TypeModel>,
@@ -154,9 +154,9 @@ class ClassTypeModel(
     }
 }
 
-class TypeArgumentModel(
+class TypeParameterTypeModel(
     val name: String,
-    val upperBoundType: ClassTypeModel = ClassTypeModel.NULLABLE_ANY,
+    val upperBound: ClassTypeModel = ClassTypeModel.NULLABLE_ANY,
     override val isNullable: Boolean = false,
 ) : TypeModel
 

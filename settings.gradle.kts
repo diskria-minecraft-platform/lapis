@@ -1,9 +1,13 @@
 pluginManagement {
     repositories {
+        // TODO: Remove after Projektor 8.0.16 release
         mavenLocal()
+
         mavenCentral()
         gradlePluginPortal()
-        maven("https://central.sonatype.com/repository/maven-snapshots") // TODO: Required for Context Parameters support. Switch to stable once out.
+
+        // TODO: Required for KSP API (KSContextParameter support). Remove after KSP API 2.3.13 release.
+        maven("https://central.sonatype.com/repository/maven-snapshots")
     }
 }
 
@@ -25,7 +29,10 @@ projektor {
 
 dependencyResolutionManagement {
     repositories {
+        // TODO: Remove after Poetesse 0.1.5 release
         mavenLocal()
-        maven("https://central.sonatype.com/repository/maven-snapshots") // TODO: Required for Context Parameters support. Switch to stable once out.
+
+        // TODO: Required for KSP API (KSContextParameter support). Remove after KSP API 2.3.13 release.
+        maven("https://central.sonatype.com/repository/maven-snapshots")
     }
 }

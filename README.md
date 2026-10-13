@@ -2,13 +2,13 @@
 
 Idiomatic, zero-boilerplate Kotlin Mixins for Minecraft modding.
 
-[![Gradle Plugin Portal](https://img.shields.io/gradle-plugin-portal/v/io.github.diskria.lapis.svg?label=Gradle+Plugin+Portal&style=for-the-badge)](https://plugins.gradle.org/plugin/io.github.diskria.lapis) [![Maven Central](https://img.shields.io/maven-central/v/io.github.diskria/lapis-ksp.svg?label=Maven+Central&style=for-the-badge)](https://central.sonatype.com/artifact/io.github.diskria/lapis-ksp) [![Maven Central](https://img.shields.io/maven-central/v/io.github.diskria/lapis-annotations.svg?label=Maven+Central&style=for-the-badge)](https://central.sonatype.com/artifact/io.github.diskria/lapis-annotations) [![License: MIT](https://img.shields.io/static/v1?label=License&message=MIT&color=yellow&style=for-the-badge)](https://spdx.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/static/v1?label=License&message=MIT&color=yellow&style=for-the-badge)](https://spdx.org/licenses/MIT)
 
 ---
 
 > [!WARNING]
 > **Work in Progress (WIP):** Lapis is currently under active development. The API is unstable and subject to breaking
-changes prior to the `1.0.0` release. Full documentation and stable artifacts will be published alongside `1.0.0`. *If you want to follow detailed progress updates, see more code examples, or share your feedback, check out this [Fabric Discord thread](https://discord.com/channels/507304429255393322/1530380180168773672).*
+changes prior to the `1.0.0` release. Full documentation and stable artifacts will be published alongside `1.0.0`.
 
 Lapis is a next-generation Kotlin compiler plugin and KSP framework designed to eliminate the friction, boilerplate, and
 JVM quirks of writing Sponge Mixins in Kotlin. Write clean, OOP-driven code with instant IDE auto-completion and let

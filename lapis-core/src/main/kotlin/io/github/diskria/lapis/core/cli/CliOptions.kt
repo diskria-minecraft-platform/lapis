@@ -1,6 +1,6 @@
 package io.github.diskria.lapis.core.cli
 
-import io.github.diskria.lapis.core.extensions.internalError
+import io.github.diskria.lapis.core.extensions.lapisError
 import io.github.diskria.lapis.core.extensions.quoted
 import io.github.diskria.lapis.core.extensions.simpleNameOf
 import kotlinx.serialization.KSerializer
@@ -144,7 +144,7 @@ data class CliOptions(
             val requiredKeys = specs.filter { it.isRequired }.map { it.name }.toSet()
             val missingRequiredKeys = requiredKeys - scopeArguments.keys
             if (missingRequiredKeys.isNotEmpty()) {
-                onError("Missing required arguments: ${missingRequiredKeys.joinToString { "'$it'" }}.")
+                onError("Missing required arguments: ${missingRequiredKeys.joinToString { "'$it'" }} Passed: $rawArguments.")
             }
             val options = runCatching {
                 optionsJson.decodeFromJsonElement<CliOptions>(buildJsonObject {
@@ -154,7 +154,7 @@ data class CliOptions(
                 })
             }.getOrElse { error ->
                 val message = error.message?.let { "\n$it" } ?: " failed to deserialize CliOptions."
-                internalError("Failed to parse Gradle arguments:$message")
+                lapisError("Failed to parse Gradle arguments:$message")
             }
             val validationErrors = options.validate()
             if (validationErrors.isNotEmpty()) {

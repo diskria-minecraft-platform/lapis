@@ -204,9 +204,9 @@ class CoreLowering<O>(
             ClassTypeModel(
                 packageName = targetType.packageName,
                 qualifiedName = targetType.qualifiedName,
-                arguments = List(targetType.arguments.size) { index ->
+                typeArguments = List(targetType.typeArguments.size) { index ->
                     substitutions[index]
-                        ?.let { ClassTypeModel.GenericTypeArgument(TypeArgumentModel(it.name)) }
+                        ?.let { ClassTypeModel.TypeProjectionArgument(TypeParameterTypeModel(it.name)) }
                         ?: ClassTypeModel.StarProjectionArgument
                 },
                 actualType = targetType.actualType,
@@ -387,7 +387,7 @@ class CoreLowering<O>(
             LoweredTypeResult(irType, kotlinResult.usedTypeParameterNames)
         }
 
-        is TypeArgumentModel -> {
+        is TypeParameterTypeModel -> {
             val kotlinResult = toTypeName(forJava = false)
             val kotlinTypeName = kotlinResult.typeName
             val javaTypeName = toTypeName(forJava = true).typeName
@@ -404,9 +404,9 @@ class CoreLowering<O>(
 
     private fun TypeModel.toTypeName(forJava: Boolean): TypeNameResult = when (this) {
         is ClassTypeModel -> toTypeName(forJava)
-        is TypeArgumentModel -> {
+        is TypeParameterTypeModel -> {
             if (forJava) {
-                val javaResult = upperBoundType.toTypeName(forJava = true)
+                val javaResult = upperBound.toTypeName(forJava = true)
                 TypeNameResult(typeName = javaResult.typeName, isErased = true)
             } else {
                 TypeNameResult(
@@ -432,7 +432,7 @@ class CoreLowering<O>(
 
     private fun ClassTypeModel.TypeArgument.toTypeName(forJava: Boolean): TypeNameResult = when (this) {
         is ClassTypeModel.StarProjectionArgument -> TypeNameResult(poetesse.xStar())
-        is ClassTypeModel.GenericTypeArgument -> {
+        is ClassTypeModel.TypeProjectionArgument -> {
             val typeResult = type.toTypeName(forJava)
             val typeName = when (variance) {
                 Variance.INVARIANT -> typeResult.typeName
@@ -451,7 +451,7 @@ class CoreLowering<O>(
         if (functionalType != null) {
             return functionalType.toTypeName(forJava = forJava, isNullable = isNullable)
         }
-        val argumentTypeResults = arguments.map { it.toTypeName(forJava) }
+        val argumentTypeResults = typeArguments.map { it.toTypeName(forJava) }
         return TypeNameResult(
             typeName = poetesse.xType(
                 packageName = packageName,

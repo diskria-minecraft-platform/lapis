@@ -6,7 +6,7 @@ projekt {
     kotlinLibrary()
     distribute {
         mavenLocal()
-        mavenCentral()
+//        mavenCentral() TODO: Uncomment upon Lapis 1.0.0 release
     }
 }
 
