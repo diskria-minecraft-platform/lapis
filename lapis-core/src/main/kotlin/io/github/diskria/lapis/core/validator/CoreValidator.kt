@@ -2,6 +2,7 @@ package io.github.diskria.lapis.core.validator
 
 import io.github.diskria.lapis.annotations.*
 import io.github.diskria.lapis.core.cli.CliOptions
+import io.github.diskria.lapis.core.extensions.decapitalized
 import io.github.diskria.lapis.core.extensions.isSubpackageOf
 import io.github.diskria.lapis.core.parser.models.*
 import io.github.diskria.lapis.core.utils.JavaModifiers
@@ -628,11 +629,11 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
             How to fix: Remove the nullable mark ('?') from type.
             """.trimIndent()
         }
-        node.nodeRequire(type.isSubtypeOf(target.type)) {
+        node.nodeRequire(type.isSupertypeOf(target.type)) {
             """
-            $nodeDesc type must be a subtype of target type.
-            Why: In Java Mixin, 'this' is the target type, so an unsafe cast requires a subtype relationship.
-            How to fix: Ensure type is a subtype of target type.
+            $nodeDesc type must be a parent class or the exact same class as the target.
+            Why: In Java Mixin, 'this' is the target type, so an unsafe cast requires a compatible class hierarchy.
+            How to fix: Make the ${nodeDesc.decapitalized()} type match the target class or use its parent class/interface.
             """.trimIndent()
         }
         return this

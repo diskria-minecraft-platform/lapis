@@ -7,10 +7,10 @@ class KspType(private val ksType: KSType) : Type {
 
     override val isNullable: Boolean get() = ksType.isMarkedNullable
 
-    override fun isSubtypeOf(type: Type): Boolean {
-        if (type !is KspType) return false
-        val starProjectedCandidate = ksType.starProjection()
-        val starProjectedTarget = type.ksType.starProjection()
-        return starProjectedTarget.isAssignableFrom(starProjectedCandidate)
+    override fun isSupertypeOf(subtype: Type): Boolean {
+        if (subtype !is KspType) return false
+        val subtypeCandidate = subtype.ksType.starProjection()
+        val supertypeCandidate = ksType.starProjection()
+        return supertypeCandidate.isAssignableFrom(subtypeCandidate)
     }
 }

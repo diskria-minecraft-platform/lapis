@@ -1,5 +1,7 @@
 package io.github.diskria.lapis.extensions
 
+import io.github.diskria.lapis.core.extensions.decapitalized
+
 @PublishedApi
 internal inline fun <reified T : Any> defaultNameBySuffix(suffix: String): String {
     val className = requireNotNull(T::class.simpleName) {

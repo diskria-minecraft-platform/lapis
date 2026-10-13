@@ -1,6 +1,6 @@
 package io.github.diskria.lapis.cli
 
-import io.github.diskria.lapis.extensions.doubleQuoted
+import io.github.diskria.lapis.core.extensions.quoted
 import io.github.diskria.lapis.extensions.getRootRelativePath
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
@@ -95,7 +95,7 @@ abstract class CliArgumentProvider @Inject constructor(layout: ProjectLayout) : 
         require(normalizedMixinPackage.isValidArgumentValue()) {
             "Invalid 'package' field in mixin config (${mixinConfigPath.get()}): " +
                 "package cannot be default or contain whitespace characters, " +
-                "but got: ${rawMixinPackage.doubleQuoted()}."
+                "but got: ${rawMixinPackage.quoted()}."
         }
         return listOfNotNull(
             "uniqueModPrefix" to uniqueModPrefix,
@@ -115,7 +115,7 @@ abstract class CliArgumentProvider @Inject constructor(layout: ProjectLayout) : 
             val valueStr = value.toString()
             require(valueStr.isValidArgumentValue()) {
                 "Property '$prefixedKey' cannot be empty or contain whitespace characters, " +
-                    "but got: ${valueStr.doubleQuoted()}."
+                    "but got: ${valueStr.quoted()}."
             }
             SubpluginOption(prefixedKey, valueStr)
         }
