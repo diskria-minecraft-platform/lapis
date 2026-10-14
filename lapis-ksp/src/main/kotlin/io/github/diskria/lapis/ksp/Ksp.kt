@@ -7,15 +7,12 @@ import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSFile
 import io.github.diskria.lapis.core.cli.CliOptions
 import io.github.diskria.lapis.core.lowering.CoreLowering
-import io.github.diskria.lapis.core.lowering.models.IrKMixin
+import io.github.diskria.lapis.core.lowering.models.KMixinBlueprint
 import io.github.diskria.lapis.core.validator.CoreValidator
 import io.github.diskria.lapis.ksp.generator.KspGenerator
 import io.github.diskria.lapis.ksp.logging.KspLogger
+import io.github.diskria.lapis.ksp.parser.KspNode
 import io.github.diskria.lapis.ksp.parser.KspParser
-import io.github.diskria.poetesse.Poetesse
-import io.github.diskria.poetesse.java.JPAnnotation
-import io.github.diskria.poetesse.java.JPClassName
-import io.github.diskria.poetesse.java.JPTypeName
 
 class Ksp(
     private val options: CliOptions,
@@ -23,20 +20,21 @@ class Ksp(
     private val logger: KspLogger,
 ) : SymbolProcessor {
 
-    private val poetesse = Poetesse {
-        javaNullabilityResolver = KspJavaNullabilityResolver(
-            nullableAnnotationClassName = options.nullableAnnotation?.let { JPClassName.bestGuess(it) },
-            nonNullAnnotationClassName = options.nonNullAnnotation?.let { JPClassName.bestGuess(it) },
-        )
-    }
-
-    private val loweredKMixins: MutableList<IrKMixin<KSFile>> = mutableListOf()
+    private val validator = CoreValidator<KSFile>(options)
+    private val blueprints: MutableList<KMixinBlueprint<KSFile>> = mutableListOf()
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
-        val nodes = KspParser(resolver, logger).parseNodes()
-        val models = CoreValidator(nodes, options).validate().toList()
+        val nodes = KspParser(resolver).parseNodes()
+        val models = nodes.mapNotNull { node ->
+            val (model, diagnosticReports) = validator.validate(node)
+            diagnosticReports.forEach { report ->
+                val targetNode = report.target as KspNode
+                targetNode.reportDiagnostic(report.diagnostic, logger)
+            }
+            model
+        }.toList()
         if (models.isNotEmpty()) {
-            loweredKMixins += CoreLowering(models, options, poetesse).lower()
+            blueprints += CoreLowering(models, options).lower()
         }
         return emptyList()
     }
@@ -50,27 +48,7 @@ class Ksp(
     }
 
     private fun generate() {
-        if (loweredKMixins.isEmpty()) return
-        KspGenerator(loweredKMixins, options, poetesse, codeGenerator).generate()
-    }
-}
-
-class KspJavaNullabilityResolver(
-    private val nullableAnnotationClassName: JPClassName?,
-    private val nonNullAnnotationClassName: JPClassName?,
-) : Poetesse.JavaNullabilityResolver {
-
-    override fun setNullable(typeName: JPTypeName, nullable: Boolean): JPTypeName {
-        if (nullableAnnotationClassName == null && nonNullAnnotationClassName == null) return typeName
-        val targetAnnotation = if (nullable) nullableAnnotationClassName else nonNullAnnotationClassName
-        val cleanAnnotations = typeName.annotations().filterNot {
-            it.type() == nullableAnnotationClassName || it.type() == nonNullAnnotationClassName
-        }
-        val finalAnnotations = if (targetAnnotation != null) {
-            cleanAnnotations + JPAnnotation.builder(targetAnnotation).build()
-        } else {
-            cleanAnnotations
-        }
-        return typeName.withoutAnnotations().annotated(finalAnnotations)
+        if (blueprints.isEmpty()) return
+        KspGenerator(blueprints, options, codeGenerator).generate()
     }
 }

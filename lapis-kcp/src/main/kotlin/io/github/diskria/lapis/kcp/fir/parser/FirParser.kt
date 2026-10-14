@@ -1,78 +1,128 @@
 package io.github.diskria.lapis.kcp.fir.parser
 
+import io.github.diskria.lapis.core.extensions.lapisError
 import io.github.diskria.lapis.core.parser.models.*
 import io.github.diskria.lapis.core.utils.Variance
 import org.jetbrains.kotlin.KtSourceElement
 import org.jetbrains.kotlin.builtins.functions.isSuspendOrKSuspendFunction
 import org.jetbrains.kotlin.descriptors.ClassKind
+import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.Visibilities
-import org.jetbrains.kotlin.diagnostics.DiagnosticReporter
 import org.jetbrains.kotlin.fir.FirElement
 import org.jetbrains.kotlin.fir.FirSession
-import org.jetbrains.kotlin.fir.analysis.checkers.context.CheckerContext
-import org.jetbrains.kotlin.fir.analysis.checkers.declaredMemberScope
-import org.jetbrains.kotlin.fir.declarations.FirFile
-import org.jetbrains.kotlin.fir.declarations.FirRegularClass
-import org.jetbrains.kotlin.fir.declarations.hasAnnotation
+import org.jetbrains.kotlin.fir.analysis.checkers.declaration.hasExplicitReturnType
+import org.jetbrains.kotlin.fir.declarations.DirectDeclarationsAccess
+import org.jetbrains.kotlin.fir.declarations.FirResolvePhase
 import org.jetbrains.kotlin.fir.declarations.primaryConstructorIfAny
+import org.jetbrains.kotlin.fir.declarations.toAnnotationClassId
 import org.jetbrains.kotlin.fir.declarations.utils.*
 import org.jetbrains.kotlin.fir.expressions.*
+import org.jetbrains.kotlin.fir.extensions.*
+import org.jetbrains.kotlin.fir.extensions.predicate.DeclarationPredicate
+import org.jetbrains.kotlin.fir.extensions.predicate.LookupPredicate
 import org.jetbrains.kotlin.fir.java.findJvmNameValue
 import org.jetbrains.kotlin.fir.references.FirResolvedNamedReference
 import org.jetbrains.kotlin.fir.resolve.defaultType
 import org.jetbrains.kotlin.fir.resolve.fullyExpandedType
-import org.jetbrains.kotlin.fir.resolve.providers.firProvider
 import org.jetbrains.kotlin.fir.resolve.toRegularClassSymbol
 import org.jetbrains.kotlin.fir.resolve.toSymbol
 import org.jetbrains.kotlin.fir.scopes.collectAllFunctions
 import org.jetbrains.kotlin.fir.scopes.collectAllProperties
 import org.jetbrains.kotlin.fir.scopes.getDeclaredConstructors
+import org.jetbrains.kotlin.fir.scopes.impl.declaredMemberScope
 import org.jetbrains.kotlin.fir.symbols.FirBasedSymbol
 import org.jetbrains.kotlin.fir.symbols.SymbolInternals
 import org.jetbrains.kotlin.fir.symbols.impl.*
 import org.jetbrains.kotlin.fir.types.*
 import org.jetbrains.kotlin.load.java.JvmAbi
+import org.jetbrains.kotlin.name.CallableId
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.types.ConstantValueKind
 
-class FirParser(
-    private val context: CheckerContext,
-    private val reporter: DiagnosticReporter,
-) {
-    private val session: FirSession = context.session
+class FirParser(session: FirSession) : FirExtensionSessionComponent(session) {
 
-    fun parseNode(declaration: FirRegularClass): KMixinNode<FirFile>? = when {
-        declaration.hasAnnotation(ROOT_ANNOTATION_ID, session) -> declaration.parseAsRoot()
-        else -> null
+    private val kMixinClassId = FqName(AnnotationsContainer.KMIXIN_FQCN)
+    private val extensionClassId = FqName(AnnotationsContainer.EXTENSION_FQCN)
+
+    val kMixinLookupPredicate = LookupPredicate.create { annotated(AnnotationFqn(AnnotationsContainer.KMIXIN_FQCN)) }
+    val kMixinPredicate = DeclarationPredicate.create { annotated(AnnotationFqn(AnnotationsContainer.KMIXIN_FQCN)) }
+
+    override fun FirDeclarationPredicateRegistrar.registerPredicates() {
+        register(kMixinLookupPredicate, kMixinPredicate)
     }
 
-    private fun FirRegularClass.parseAsRoot(): KMixinNode<FirFile> {
-        val declaredMemberScope = context(context) { symbol.declaredMemberScope() }
+    private fun FirBasedSymbol<*>.findAnnotation(fqName: FqName): FirAnnotation? =
+        resolvedAnnotationsWithArguments.firstOrNull { annotation ->
+            annotation.toAnnotationClassId(session)?.getTopLevelFqNameOrNull() == fqName
+        }
+
+    private fun annotatedKMixins(): List<AnnotatedKMixin> =
+        session.predicateBasedProvider.getSymbolsByPredicate(kMixinLookupPredicate).mapNotNull { lookupSymbol ->
+            val classSymbol = lookupSymbol as? FirRegularClassSymbol ?: return@mapNotNull null
+            val kMixinAnnotation = classSymbol.findAnnotation(kMixinClassId) ?: return@mapNotNull null
+            AnnotatedKMixin(classSymbol, kMixinAnnotation)
+        }
+
+    data class AnnotatedKMixin(
+        val classSymbol: FirRegularClassSymbol,
+        val annotation: FirAnnotation,
+    )
+
+    @OptIn(UnresolvedExpressionTypeAccess::class, DirectDeclarationsAccess::class)
+    fun getExtensionCallableIds(): Set<CallableId> {
+        val mixins = annotatedKMixins()
+        return mixins.flatMapTo(mutableSetOf()) { (classSymbol, annotation) ->
+            val targetArg = annotation.argumentMapping.mapping[Name.identifier("target")]
+                ?: (annotation as? FirAnnotationCall)?.argumentList?.arguments?.firstOrNull()
+            val targetPackageName = when (targetArg) {
+                is FirGetClassCall -> targetArg.argument.coneTypeOrNull
+                is FirClassReferenceExpression -> targetArg.classTypeRef.coneTypeOrNull
+                else -> null
+            }?.classId?.packageFqName
+            if (targetPackageName == null) return@flatMapTo emptySet()
+            classSymbol.declarationSymbols.mapNotNullTo(mutableSetOf()) { memberSymbol ->
+                val callable = memberSymbol as? FirCallableSymbol<*> ?: return@mapNotNullTo null
+                val isExtension = callable.findAnnotation(extensionClassId) != null
+                if (!isExtension) return@mapNotNullTo null
+                CallableId(targetPackageName, callable.name)
+            }
+        }
+    }
+
+    fun parse(classSymbols: List<FirRegularClassSymbol>): List<KMixinNode<Nothing>> =
+        classSymbols.mapNotNull { symbol ->
+            val kMixinAnnotation = symbol.findAnnotation(kMixinClassId) ?: return@mapNotNull null
+            symbol.parseAsKMixin(kMixinAnnotation)
+        }
+
+    @OptIn(SymbolInternals::class)
+    private fun FirRegularClassSymbol.parseAsKMixin(kMixinAnnotation: FirAnnotation): KMixinNode<Nothing> {
+        val declaredMemberScope = declaredMemberScope(session, memberRequiredPhase = FirResolvePhase.STATUS)
         return KMixinNode(
-            origin = session.firProvider.getFirClassifierContainerFile(symbol),
             name = name.toName(),
             type = defaultType().parse(),
             isClass = classKind == ClassKind.CLASS,
             isInterface = classKind == ClassKind.INTERFACE,
-            isOpen = isOpen,
+            isOpen = modality == Modality.OPEN,
             isAbstract = isAbstract,
             isSealed = isSealed,
-            isTopLevel = true,
+            isTopLevel = classId.outerClassId == null && !isLocal,
             isPublic = visibility == Visibilities.Public,
-            typeParameters = typeParameters.map { it.symbol.parse() },
-            companionObject = null,
+            typeParameters = ownTypeParameterSymbols.map { it.parse() },
+            companionObject = companionObjectSymbol?.parseAsCompanionObject(),
             constructors = declaredMemberScope.getDeclaredConstructors().map { it.parse() },
             properties = declaredMemberScope.collectAllProperties().map { it.parse() },
             functions = declaredMemberScope.collectAllFunctions().map { it.parse() },
             annotations = annotations.parse(),
+            origin = null,
             node = toNode(),
         )
     }
 
     private fun FirConstructorSymbol.parse() = KMixinNode.Constructor(
-        isPublic = true,
+        isPublic = visibility == Visibilities.Public,
         parameters = valueParameterSymbols.map { it.parseAsConstructorParameter() },
         node = toNode(),
     )
@@ -88,7 +138,8 @@ class FirParser(
     @OptIn(SymbolInternals::class)
     private fun FirVariableSymbol<*>.parse() = KMixinNode.Property(
         name = name.toName(),
-        type = resolvedReturnType.parse(),
+        type = resolvedReturnTypeRef.parse(),
+        hasExplicitType = hasExplicitReturnType,
         isPublic = visibility == Visibilities.Public,
         isOpen = isOpen,
         isAbstract = isAbstract,
@@ -96,13 +147,17 @@ class FirParser(
         contextParameters = contextParameterSymbols.map { it.parseAsContextParameter() },
         typeParameters = typeParameterSymbols.map { it.parse() },
         annotations = annotations.parse(),
-        getter = fir.getter?.let {
+        getter = fir.getter?.let { getter ->
             KMixinNode.Property.Getter(
-                jvmName = it.findJvmNameValue() ?: JvmAbi.getterName(name.toName()),
-                annotations = it.annotations.parse(),
+                jvmName = getter.findJvmNameValue() ?: JvmAbi.getterName(name.toName()),
+                annotations = getter.annotations.parse(),
             )
         },
-        setter = null,
+        setter = fir.setter?.takeUnless { it.visibility == Visibilities.Private }?.let { setter ->
+            KMixinNode.Property.Setter(
+                jvmName = setter.findJvmNameValue() ?: JvmAbi.setterName(name.toName())
+            )
+        },
         node = toNode(),
     )
 
@@ -113,6 +168,7 @@ class FirParser(
         parameters = valueParameterSymbols.map { it.parseAsFunctionParameter() },
         contextParameters = contextParameterSymbols.map { it.parseAsContextParameter() },
         returnType = resolvedReturnType.parse(),
+        hasExplicitReturnType = hasExplicitReturnType,
         isPublic = visibility == Visibilities.Public,
         isOpen = isOpen,
         isAbstract = isAbstract,
@@ -138,6 +194,16 @@ class FirParser(
         annotations = annotations.parse(),
         node = toNode(),
     )
+
+    private fun FirRegularClassSymbol.parseAsCompanionObject(): KMixinNode.CompanionObject {
+        val declaredMemberScope = declaredMemberScope(session, memberRequiredPhase = FirResolvePhase.STATUS)
+        return KMixinNode.CompanionObject(
+            name = name.toName(),
+            isPublic = visibility == Visibilities.Public,
+            functions = declaredMemberScope.collectAllFunctions().map { it.parse() },
+            node = toNode(),
+        )
+    }
 
     private fun List<FirAnnotation>.parse(): AnnotationsContainer =
         AnnotationsContainer.of(map { it.parse() })
@@ -192,7 +258,6 @@ class FirParser(
             node = toNode(),
         )
     }
-
 
     private fun FirExpression.parseAsAnnotationArgumentValue(): AnnotationNode.Argument.Value = when (this) {
         is FirLiteralExpression -> {
@@ -312,6 +377,8 @@ class FirParser(
         )
     }
 
+    private fun FirResolvedTypeRef.parse(): ParsedType = coneType.parse()
+
     private fun ConeKotlinType.parseFunctionalType(
         firTypeArguments: List<ConeTypeProjection>,
         isSuspending: Boolean,
@@ -335,13 +402,13 @@ class FirParser(
     @OptIn(SymbolInternals::class)
     private fun FirTypeParameterSymbol.parse() = TypeParameterNode(
         name = name.toName(),
-        bounds = resolvedBounds.map { it.coneType.parse() }.toList(),
+        bounds = resolvedBounds.map { it.parse() }.toList(),
         isReified = isReified,
         annotations = annotations.parse(),
         node = toNode(),
     )
 
-    private fun KtSourceElement?.toNode(): FirNode = FirNode(this, reporter, context)
+    private fun KtSourceElement?.toNode(): FirNode = FirNode(this)
     private fun FirElement?.toNode(): FirNode = this?.source.toNode()
 
     @OptIn(SymbolInternals::class)
@@ -351,9 +418,16 @@ class FirParser(
     private fun Name.toName(): String = asString()
     private fun FqName.toName(): String = asString()
 
-    private typealias FirVariance = org.jetbrains.kotlin.types.Variance
-
     companion object {
-        private val ROOT_ANNOTATION_ID = ClassId.topLevel(FqName(AnnotationsContainer.ROOT_FQCN))
+        val ROOT_ANNOTATION_ID = ClassId.topLevel(FqName(AnnotationsContainer.KMIXIN_FQCN))
     }
 }
+
+typealias FirVariance = org.jetbrains.kotlin.types.Variance
+
+val FirSession.parser: FirParser
+    get() = extensionService.extensionSessionComponents.firstNotNullOfOrNull { it as? FirParser }
+        ?: lapisError("FirParser is not registered in FirPlugin.")
+
+fun ClassId.getTopLevelFqNameOrNull(): FqName? =
+    if (isNestedClass) null else asSingleFqName()

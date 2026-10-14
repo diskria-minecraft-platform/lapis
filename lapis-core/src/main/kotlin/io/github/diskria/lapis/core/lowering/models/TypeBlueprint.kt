@@ -2,7 +2,7 @@ package io.github.diskria.lapis.core.lowering.models
 
 import io.github.diskria.poetesse.interop.XTypeName
 
-class IrType(
+class TypeBlueprint(
     val inKotlin: XTypeName,
     val inJava: XTypeName,
     val castContext: CastContext,

@@ -3,7 +3,6 @@ package io.github.diskria.lapis.core.parser.models
 import io.github.diskria.lapis.core.utils.Variance
 
 class KMixinNode<O>(
-    val origin: O?,
     val name: String,
     val type: ParsedType,
     val isClass: Boolean,
@@ -19,6 +18,7 @@ class KMixinNode<O>(
     val properties: List<Property>,
     val functions: List<Function>,
     val annotations: AnnotationsContainer,
+    val origin: O?,
     override val node: Node,
 ) : NodeHolder {
 
@@ -39,6 +39,7 @@ class KMixinNode<O>(
     class Property(
         val name: String,
         val type: ParsedType,
+        val hasExplicitType: Boolean,
         val isPublic: Boolean,
         val isOpen: Boolean,
         val isAbstract: Boolean,
@@ -66,7 +67,8 @@ class KMixinNode<O>(
         val jvmName: String?,
         val parameters: List<Parameter>,
         val contextParameters: List<ContextParameterNode>,
-        val returnType: ParsedType?,
+        val returnType: ParsedType,
+        val hasExplicitReturnType: Boolean,
         val isPublic: Boolean,
         val isOpen: Boolean,
         val isAbstract: Boolean,

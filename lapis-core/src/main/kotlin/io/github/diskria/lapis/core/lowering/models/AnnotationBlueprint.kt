@@ -2,7 +2,7 @@ package io.github.diskria.lapis.core.lowering.models
 
 import io.github.diskria.poetesse.interop.XClassName
 
-class IrAnnotation(val className: XClassName, val arguments: List<Argument> = emptyList()) {
+class AnnotationBlueprint(val className: XClassName, val arguments: List<Argument> = emptyList()) {
 
     sealed interface Argument {
 
@@ -20,7 +20,7 @@ class IrAnnotation(val className: XClassName, val arguments: List<Argument> = em
         class StringValue(val string: String) : Value
         class ClassValue(val className: XClassName) : Value
         class EnumValue(val className: XClassName, val name: String) : Value
-        class AnnotationValue(val annotation: IrAnnotation) : Value
+        class AnnotationValue(val annotation: AnnotationBlueprint) : Value
     }
 
     class ScalarArgument(override val name: String, val value: Argument.Value) : Argument

@@ -14,7 +14,7 @@ dependencies {
     implementation(project(":lapis-annotations"))
     implementation(project(":lapis-core"))
     compileOnly(kotlin("compiler-embeddable"))
-//    compileOnly(kotlin("compiler"))
+    compileOnly(kotlin("compiler"))
     ksp(libs.auto.service.ksp)
     compileOnly(libs.auto.service.annotations)
     implementation(libs.poetesse)

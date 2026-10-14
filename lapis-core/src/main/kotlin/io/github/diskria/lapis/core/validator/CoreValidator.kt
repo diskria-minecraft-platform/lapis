@@ -2,11 +2,11 @@ package io.github.diskria.lapis.core.validator
 
 import io.github.diskria.lapis.annotations.*
 import io.github.diskria.lapis.core.cli.CliOptions
-import io.github.diskria.lapis.core.extensions.decapitalized
 import io.github.diskria.lapis.core.extensions.isSubpackageOf
 import io.github.diskria.lapis.core.parser.models.*
 import io.github.diskria.lapis.core.utils.JavaModifiers
 import io.github.diskria.lapis.core.utils.Variance
+import io.github.diskria.lapis.core.validator.Diagnostic.*
 import io.github.diskria.lapis.core.validator.models.*
 import io.github.diskria.lapis.core.validator.models.KMixinModel.TargetTypeParameterModel
 import java.util.*
@@ -16,54 +16,35 @@ import javax.lang.model.element.Modifier.*
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.contract
 
-class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val options: CliOptions) {
+class CoreValidator<O>(private val options: CliOptions) {
 
-    fun validate(): Sequence<KMixinModel<O>> =
-        nodes.mapValid { it.validate() }
+    private val diagnosticReports = mutableListOf<DiagnosticReport>()
+
+    fun validate(node: KMixinNode<O>): Pair<KMixinModel<O>?, List<DiagnosticReport>> {
+        val model = node.ifValid { it.validate() }
+        val result = model to diagnosticReports.toList()
+        diagnosticReports.clear()
+        return result
+    }
 
     private fun KMixinNode<O>.validate(): KMixinModel<O> {
-        nodeRequire(isTopLevel) {
-            """
-            KMixin must be top-level.
-            Why: Java Mixin requires a standalone type hierarchy and cannot depend on an enclosing scope.
-            How to fix: Move the KMixin out of the enclosing scope.
-            """.trimIndent()
-        }
-        nodeRequire(isPublic) {
-            """
-            KMixin must be public.
-            Why: Public visibility is required for Java Mixin binding.
-            How to fix: Make the KMixin public.
-            """.trimIndent()
-        }
-        nodeRequire(!isSealed) { "KMixin cannot be sealed" }
-        nodeRequire(!isOpen) { "KMixin cannot be open" }
+        nodeRequire(isTopLevel) { KMixinMustBeTopLevel }
+        nodeRequire(isPublic) { KMixinMustBePublic }
+        nodeRequire(!isSealed) { KMixinCannotBeSealed }
+        nodeRequire(!isOpen) { CannotBeOpen("'@KMixin'") }
         val mixinAnnotations = annotations.filterMixinAnnotations()
         val initStrategy = annotations.findApiArgument(KMixin::initStrategy)?.value ?: InitStrategy.Lazy
-        val side = nodeRequireNotNull(annotations.findApiArgument(KMixin::side)?.value) {
-            """
-            Side argument must be valid and specified explicitly.
-            Why: Implicit side risks loading the Java Mixin in the wrong target environment.
-            How to fix: Specify the side argument explicitly in @KMixin and ensure it has no compilation errors.
-            """.trimIndent()
-        }
+        val side = annotations.findApiArgument(KMixin::side)?.value ?: Side.Common
         val targetArgument = nodeRequireNotNull(annotations.findApiArgument(KMixin::target)) {
-            val usedDesc = listOfNotNull(
-                if (mixinAnnotations.isEmpty()) "generating the Java @Mixin annotation" else null,
-                "subtype relationship checks",
-            ).joinToString(" and ")
-            """
-            Target argument must be valid.
-            Why: Target type is required for $usedDesc.
-            How to fix: Ensure the target argument in @KMixin has no compilation errors.
-            """.trimIndent()
+            KMixinTargetRequired
         }
         val targetClassType = nodeRequireNotNull(targetArgument.value.validate() as? ParsedClassType) {
-            "KMixin target is invalid"
+            InvalidType("'@KMixin' target")
         }
-        val classType = nodeRequireNotNull(type.validate() as? ParsedClassType) { "KMixin type is invalid" }
-//        val typeParameters = typeParameters.toModels(emptyList())
-        nodeRequire(typeParameters.isEmpty()) { TODO("Type parameters are not supported yet :(") }
+        val classType = nodeRequireNotNull(type.validate() as? ParsedClassType) {
+            InvalidType("'@KMixin'")
+        }
+        nodeRequire(typeParameters.isEmpty()) { KMixinTypeParametersNotSupported }
         val typeParameters = emptyList<TargetTypeParameterModel>()
         val shadowProperties = mutableListOf<KMixinModel.Shadow.Property>()
         val extensionProperties = mutableListOf<KMixinModel.Extension.Property>()
@@ -74,22 +55,14 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
             val hasExtensionAnnotation = property.annotations.hasApiAnnotation<Extension>()
             if (hasShadowAnnotation && hasExtensionAnnotation) {
                 property.nodeError {
-                    """
-                    Property cannot be marked as both @KShadow and @Extension.
-                    Why: @KShadow targets existing target members, while @Extension introduces new synthetic members.
-                    How to fix: Remove either @KShadow or @Extension annotation from the property.
-                    """.trimIndent()
+                    ConflictingAnnotations("Property", "'@KShadow'", "'@Extension'")
                 }
             }
             if (hasShadowAnnotation) {
                 shadowProperties += property.toShadowModel(isInterface, getterMixinAnnotations, typeParameters)
             } else if (hasExtensionAnnotation) {
                 property.nodeRequire(getterMixinAnnotations.isEmpty()) {
-                    """
-                    Extension properties cannot have mixin-related annotations on their getter.
-                    Why: Extension members introduce new functionality and cannot be used as injection points.
-                    How to fix: Remove mixin annotations (such as @Inject) from the property getter.
-                    """.trimIndent()
+                    CannotHaveMixinAnnotations("Extension property getter")
                 }
                 extensionProperties += property.toExtensionModel(isClass, typeParameters)
             }
@@ -103,22 +76,14 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
             val hasExtensionAnnotation = function.annotations.hasApiAnnotation<Extension>()
             if (hasShadowAnnotation && hasExtensionAnnotation) {
                 function.nodeError {
-                    """
-                    Function cannot be marked as both @KShadow and @Extension.
-                    Why: @KShadow targets existing target members, while @Extension introduces new synthetic members.
-                    How to fix: Remove either @KShadow or @Extension annotation from the function.
-                    """.trimIndent()
+                    ConflictingAnnotations("Function", "'@KShadow'", "'@Extension'")
                 }
             }
             if (hasShadowAnnotation) {
                 shadowFunctions += function.toShadowModel(isClass, mixinAnnotations, typeParameters)
             } else if (hasExtensionAnnotation) {
                 function.nodeRequire(mixinAnnotations.isEmpty()) {
-                    """
-                    Extension functions cannot have mixin-related annotations.
-                    Why: Extension members introduce new functionality and cannot be used as injection points.
-                    How to fix: Remove mixin annotations (such as @Inject) from the function.
-                    """.trimIndent()
+                    CannotHaveMixinAnnotations("Extension functions")
                 }
                 extensionFunctions += function.toExtensionModel(isClass, typeParameters)
             } else if (mixinAnnotations.isNotEmpty()) {
@@ -135,14 +100,10 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
             val injections = mutableListOf<KMixinModel.Injection>()
             companionObject.functions.mapValid { function ->
                 function.nodeRequire(!function.annotations.hasApiAnnotation<KShadow>()) {
-                    TODO("@KShadow functions in companion objects are not implemented yet.")
+                    CompanionObjectUnsupportedAnnotation("'@KShadow'")
                 }
                 function.nodeRequire(!function.annotations.hasApiAnnotation<Extension>()) {
-                    """
-                    @Extension functions in companion objects are unnecessary and unsupported.
-                    Why: Companion object functions are already globally accessible static members.
-                    How to fix: Remove @Extension annotation and call the companion object function directly.
-                    """.trimIndent()
+                    CompanionObjectUnsupportedAnnotation("'@Extension'")
                 }
                 val mixinAnnotations = function.annotations.filterMixinAnnotations().map { it.toModel() }
                 if (mixinAnnotations.isNotEmpty()) {
@@ -157,29 +118,17 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
             }
             if (injections.isNotEmpty()) {
                 companionObject.nodeRequire(companionObject.isPublic) {
-                    """
-                    Companion object containing mixin injections must be public.
-                    Why: Target mixin injections in companion objects must be accessible by Java Mixin.
-                    How to fix: Make the companion object public.
-                    """.trimIndent()
+                    MustBePublic("Companion object containing mixin injections")
                 }
             }
             KMixinModel.CompanionObject(name = companionObject.name, injections = injections)
         }
         val classKind = if (isClass) {
             val constructor = nodeRequireNotNull(constructors.singleOrNull()) {
-                """
-                KMixin class must have exactly one constructor.
-                Why: Java Mixin requires a single deterministic constructor for instantiation logic.
-                How to fix: Keep exactly one constructor in the KMixin class.
-                """.trimIndent()
+                KMixinMultipleConstructors
             }
             constructor.nodeRequire(constructor.isPublic) {
-                """
-                KMixin constructor must be public.
-                Why: Java Mixin requires public access to instantiate KMixin.
-                How to fix: Make the KMixin constructor public.
-                """.trimIndent()
+                KMixinConstructorMustBePublic
             }
             KMixinModel.Class(
                 isAbstract = isAbstract,
@@ -190,13 +139,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         } else if (isInterface) {
             KMixinModel.Interface
         } else {
-            nodeError {
-                """
-                KMixin must be a class or an interface.
-                Why: Java Mixin can only be represented as a class or an interface.
-                How to fix: Change the KMixin declaration to a class or an interface.
-                """.trimIndent()
-            }
+            nodeError { KMixinMustBeClassOrInterface }
         }
         return KMixinModel(
             origin = origin,
@@ -220,32 +163,44 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         scopeTypeParameters: List<TypeParameterModel>,
     ) = when {
         annotations.hasApiAnnotation<Origin>() -> {
-            nodeRequireNotNull(name) { "Parameter must have name" }
+            val name = nodeRequireNotNull(name) { ParameterMustHaveName }
             KMixinModel.Class.ConstructorParameter.Origin(
                 name = name,
                 type = type.validate()
-                    .requireSubtypeOf(target = targetType, node = this, nodeDesc = "@Origin parameter")
+                    .requireSupertypeOf(
+                        target = targetType,
+                        node = this,
+                        useSiteDesc = "'@Origin' constructor parameter",
+                        targetStrategy = TargetStrategy.RETURN_TYPE,
+                    )
                     .toModel(scopeTypeParameters),
             )
         }
 
-        else -> nodeError { "Unexcepted KMixin constructor parameter" }
+        else -> nodeError { KMixinUnexpectedConstructorParameter }
     }
 
     private fun KMixinNode.Property.toExtensionModel(
         isInClass: Boolean,
         enclosingTypeParameters: List<TypeParameterModel>,
     ): KMixinModel.Extension.Property {
-        nodeRequireNotNull(getter) { "Failed to parse @Extension property getter" }
-        val getterJvmName = nodeRequireNotNull(getter.jvmName) { "Failed to parse @Extension property getter JVM name" }
-        val setterJvmName = setter?.let {
-            nodeRequireNotNull(setter.jvmName) { "Failed to parse @Extension property setter JVM name" }
-        }
-        nodeRequire(isPublic) { "@Extension declarations must be public" }
-        nodeRequire(!hasExtensionReceiver) { "@Extension declarations cannot have receiver" }
-        nodeRequire(!isAbstract) { "@Extension declarations cannot be abstract" }
+        nodeRequire(isPublic) { MustBePublic("'@Extension' declarations") }
+        nodeRequire(!isAbstract) { CannotBeAbstract("'@Extension' declarations") }
         if (isInClass) {
-            nodeRequire(!isOpen) { "@Extension declarations in classes cannot be open. Remove the 'open' modifier." }
+            nodeRequire(!isOpen) { CannotBeOpen("'@Extension' declarations in classes") }
+        }
+        nodeRequire(hasExplicitType) { MustHaveExplicitType("'@Extension' properties", "type") }
+        nodeRequire(!hasExtensionReceiver) { CannotHaveReceiver("'@Extension' declarations") }
+        val getter = nodeRequireNotNull(getter) {
+            FailedToParseGetter("'@Extension' property")
+        }
+        val getterJvmName = nodeRequireNotNull(getter.jvmName) {
+            FailedToParseJvmName("'@Extension' property getter")
+        }
+        val setterJvmName = setter?.let {
+            nodeRequireNotNull(setter.jvmName) {
+                FailedToParseJvmName("'@Extension' property setter")
+            }
         }
         val localTypeParameters = typeParameters.validate(enclosingTypeParameters)
         val scopeTypeParameters = localTypeParameters + enclosingTypeParameters
@@ -255,7 +210,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
             setterJvmName = setterJvmName,
             type = type.validate().toModel(scopeTypeParameters),
             typeParameters = localTypeParameters,
-            contextParameters = contextParameters.mapValid { it.validate(scopeTypeParameters) }
+            contextParameters = contextParameters.mapValid { it.validate(scopeTypeParameters) },
         )
     }
 
@@ -263,19 +218,22 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         isInClass: Boolean,
         enclosingTypeParameters: List<TypeParameterModel>,
     ): KMixinModel.Extension.Function {
-        nodeRequire(isPublic) { "@Extension declarations must be public" }
-        nodeRequireNotNull(jvmName) { "Failed to parse @Extension function JVM name" }
-        nodeRequire(extensionReceiverType == null) { "@Extension declarations cannot have receiver" }
-        nodeRequire(!isAbstract) { "@Extension declarations cannot be abstract" }
-        if (isInClass) {
-            nodeRequire(!isOpen) { "@Extension declarations in classes cannot be open. Remove the 'open' modifier." }
+        nodeRequire(isPublic) { MustBePublic("'@Extension' declarations") }
+        val jvmName = nodeRequireNotNull(jvmName) {
+            FailedToParseJvmName("'@Extension' function")
         }
-        nodeRequire(!isSuspending) { "Kotlin Coroutines are not supported yet." }
+        nodeRequire(!isAbstract) { CannotBeAbstract("'@Extension' declarations") }
+        if (isInClass) {
+            nodeRequire(!isOpen) { CannotBeOpen("'@Extension' declarations in classes") }
+        }
+        nodeRequire(hasExplicitReturnType) { MustHaveExplicitType("'@Extension' functions", "return type") }
+        nodeRequire(extensionReceiverType == null) { CannotHaveReceiver("'@Extension' declarations") }
+        nodeRequire(!isSuspending) { CoroutinesNotSupported() }
         val localTypeParameters = typeParameters.validate(enclosingTypeParameters)
         val scopeTypeParameters = localTypeParameters + enclosingTypeParameters
         val parameters = parameters.map { parameter ->
             FunctionParameterModel(
-                name = parameter.nodeRequireNotNull(parameter.name) { "Parameter must have name" },
+                name = parameter.nodeRequireNotNull(parameter.name) { ParameterMustHaveName },
                 type = parameter.type.validate().toModel(scopeTypeParameters),
             )
         }
@@ -283,9 +241,9 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
             declaredName = name,
             jvmName = jvmName,
             parameters = parameters,
-            returnType = returnType?.validate()?.toModel(scopeTypeParameters),
+            returnType = returnType.validate().toModel(scopeTypeParameters),
             typeParameters = localTypeParameters,
-            contextParameters = contextParameters.mapValid { it.validate(scopeTypeParameters) }
+            contextParameters = contextParameters.mapValid { it.validate(scopeTypeParameters) },
         )
     }
 
@@ -294,25 +252,34 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         mixinAnnotations: List<MixinAnnotationModel>,
         scopeTypeParameters: List<TypeParameterModel>,
     ): KMixinModel.Shadow.Property {
-        nodeRequire(isPublic) { "@KShadow declarations must be public" }
-        nodeRequire(isAbstract) { "@KShadow declarations must be abstract" }
-        nodeRequire(!hasExtensionReceiver) { "@KShadow declarations cannot have receiver" }
-        nodeRequireNotNull(getter) { "Failed to parse @KShadow property getter" }
-        val getterJvmName = nodeRequireNotNull(getter.jvmName) { "Failed to parse @KShadow property getter JVM name" }
-        val setterJvmName = setter?.let {
-            nodeRequireNotNull(it.jvmName) { "Failed to parse @KShadow property setter JVM name" }
+        nodeRequire(isPublic) { MustBePublic("'@KShadow' declarations") }
+        nodeRequire(isAbstract) { MustBeAbstract("'@KShadow' declarations") }
+        nodeRequire(!hasExtensionReceiver) { CannotHaveReceiver("'@KShadow' declarations") }
+        nodeRequire(contextParameters.isEmpty()) { CannotHaveContextParameters("'@KShadow' declarations") }
+        nodeRequire(typeParameters.isEmpty()) { CannotHaveTypeParameters("'@KShadow' properties") }
+        val getter = nodeRequireNotNull(getter) {
+            FailedToParseGetter("'@KShadow' property")
         }
-        nodeRequire(contextParameters.isEmpty()) { "@KShadow declarations cannot have context parameters" }
+        val getterJvmName = nodeRequireNotNull(getter.jvmName) {
+            FailedToParseJvmName("'@KShadow' property getter")
+        }
+        val setterJvmName = setter?.let {
+            nodeRequireNotNull(it.jvmName) {
+                FailedToParseJvmName("'@KShadow' property setter")
+            }
+        }
         val mappingName = annotations.getEffectiveMappingName(name)
-        validateJavaIdentifierName(name, "@KShadow property name", mappingName == name)
+        validateJavaIdentifierName(name, "'@KShadow' property name")
+        val kShadowAnnotation = nodeRequireNotNull(annotations.findApiAnnotation<KShadow>()) {
+            Other("'@KShadow' annotation is not found")
+        }
         val modifiers = annotations.findApiArgument(KShadow::modifiers)?.elements.orEmpty()
-        nodeRequire(typeParameters.isEmpty()) { "@KShadow properties cannot have type parameters" }
         return KMixinModel.Shadow.Property(
             declaredName = name,
             getterJvmName = getterJvmName,
             setterJvmName = setterJvmName,
             mappingName = mappingName,
-            modifiers = validateShadowModifiers(modifiers, isInterface, isProperty = true),
+            modifiers = kShadowAnnotation.validateShadowModifiers(modifiers, isInterface, isProperty = true),
             type = type.validate().toModel(scopeTypeParameters),
             mixinAnnotations = mixinAnnotations,
         )
@@ -323,17 +290,22 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         mixinAnnotations: List<MixinAnnotationModel>,
         enclosingTypeParameters: List<TypeParameterModel>,
     ): KMixinModel.Shadow.Function {
-        nodeRequire(isPublic) { "@KShadow declarations must be public" }
-        nodeRequireNotNull(jvmName) { "Failed to parse @KShadow function JVM name" }
-        nodeRequire(isAbstract) { "@KShadow declarations must be abstract" }
+        nodeRequire(isPublic) { MustBePublic("'@KShadow' declarations") }
+        nodeRequire(isAbstract) { MustBeAbstract("'@KShadow' declarations") }
         if (isInClass) {
-            nodeRequire(!isOpen) { "Injection functions in classes cannot be open. Remove the 'open' modifier." }
+            nodeRequire(!isOpen) { CannotBeOpen("'@KShadow' declarations in classes") }
         }
-        nodeRequire(extensionReceiverType == null) { "@KShadow declarations cannot have receiver" }
-        nodeRequire(contextParameters.isEmpty()) { "@KShadow declarations cannot have context parameters" }
-        nodeRequire(!isSuspending) { "Kotlin Coroutines are not allowed in @KShadow." }
+        nodeRequire(extensionReceiverType == null) { CannotHaveReceiver("'@KShadow' declarations") }
+        nodeRequire(contextParameters.isEmpty()) { CannotHaveContextParameters("'@KShadow' declarations") }
+        nodeRequire(!isSuspending) { CoroutinesNotSupported("'@KShadow'") }
+        val jvmName = nodeRequireNotNull(jvmName) {
+            FailedToParseJvmName("'@KShadow' function")
+        }
         val mappingName = annotations.getEffectiveMappingName(name)
-        validateJavaIdentifierName(name, "@KShadow function name", mappingName == name)
+        validateJavaIdentifierName(name, "'@KShadow' function name")
+        val kShadowAnnotation = nodeRequireNotNull(annotations.findApiAnnotation<KShadow>()) {
+            Other("'@KShadow' annotation is not found")
+        }
         val modifiers = annotations.findApiArgument(KShadow::modifiers)?.elements.orEmpty()
         val localTypeParameters = typeParameters.validate(enclosingTypeParameters)
         val scopeTypeParameters = localTypeParameters + enclosingTypeParameters
@@ -342,9 +314,9 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
             jvmName = jvmName,
             mappingName = mappingName,
             parameters = parameters.map { it.validateAsShadowFunctionParameter(scopeTypeParameters) },
-            returnType = returnType?.validate()?.toModel(scopeTypeParameters),
+            returnType = returnType.validate().toModel(scopeTypeParameters),
             mixinAnnotations = mixinAnnotations,
-            modifiers = validateShadowModifiers(modifiers, !isInClass, isProperty = false),
+            modifiers = kShadowAnnotation.validateShadowModifiers(modifiers, !isInClass, isProperty = false),
             typeParameters = localTypeParameters,
         )
     }
@@ -352,9 +324,9 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
     private fun KMixinNode.Function.Parameter.validateAsShadowFunctionParameter(
         scopeTypeParameters: List<TypeParameterModel>,
     ): KMixinModel.Shadow.Function.Parameter {
-        nodeRequireNotNull(name) { "Parameter must have name" }
+        val name = nodeRequireNotNull(name) { ParameterMustHaveName }
         val mappingName = annotations.getEffectiveMappingName(name)
-        validateJavaIdentifierName(name, "@KShadow function parameter name", mappingName == name)
+        validateJavaIdentifierName(name, "'@KShadow' function parameter name")
         return KMixinModel.Shadow.Function.Parameter(
             name = name,
             mappingName = mappingName,
@@ -369,22 +341,29 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         mixinAnnotations: List<MixinAnnotationModel>,
         enclosingTypeParameters: List<TypeParameterModel>,
     ): KMixinModel.Injection {
-        nodeRequire(isPublic) { "Injection functions must be public" }
-        nodeRequireNotNull(jvmName) { "Failed to parse injection function JVM name" }
-        nodeRequire(!isAbstract) { "Injection functions cannot be abstract" }
-        if (isInClass) {
-            nodeRequire(!isOpen) { "Injection functions in classes cannot be open. Remove the 'open' modifier." }
+        nodeRequire(isPublic) { InjectionFunctionMustBePublic }
+        val jvmName = nodeRequireNotNull(jvmName) {
+            FailedToParseJvmName("injection function")
         }
-        nodeRequire(!isSuspending) { "Kotlin Coroutines are not allowed in injections." }
+        nodeRequire(!isAbstract) { CannotBeAbstract("Injection functions") }
+        if (isInClass) {
+            nodeRequire(!isOpen) { CannotBeOpen("Injection functions in classes") }
+        }
+        nodeRequire(!isSuspending) { CoroutinesNotSupported("injections") }
         if (isInCompanionObject) {
             nodeRequire(extensionReceiverType == null) {
-                "Injection functions can have receiver only in instance context"
+                InjectionReceiverOnlyInInstanceContext
             }
         }
         val scopeTypeParameters = typeParameters.validate(enclosingTypeParameters) + enclosingTypeParameters
         val extensionReceiverType = extensionReceiverType
             ?.validate()
-            ?.requireSubtypeOf(target = targetType, node = this, nodeDesc = "Injection extension receiver")
+            ?.requireSupertypeOf(
+                target = targetType,
+                node = this,
+                useSiteDesc = "injection function receiver",
+                targetStrategy = TargetStrategy.RECEIVER_TYPE,
+            )
             ?.toModel(scopeTypeParameters)
         return KMixinModel.Injection(
             jvmName = jvmName,
@@ -392,14 +371,14 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
             mixinAnnotations = mixinAnnotations,
             parameters = parameters.map { it.validateAsInjectionParameter(scopeTypeParameters) },
             contextParameters = contextParameters.map { it.validateAsInjectionParameter(enclosingTypeParameters) },
-            returnType = returnType?.validate()?.toModel(scopeTypeParameters),
+            returnType = returnType.validate().toModel(scopeTypeParameters),
         )
     }
 
     private fun KMixinNode.Function.Parameter.validateAsInjectionParameter(
         scopeParameters: List<TypeParameterModel>,
     ): KMixinModel.Injection.Parameter {
-        nodeRequireNotNull(name) { "Parameter must have name" }
+        val name = nodeRequireNotNull(name) { ParameterMustHaveName }
         return KMixinModel.Injection.Parameter(
             name = name,
             type = type.validate().toModel(scopeParameters),
@@ -410,7 +389,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
     private fun ContextParameterNode.validateAsInjectionParameter(
         scopeTypeParameters: List<TypeParameterModel>,
     ): KMixinModel.Injection.Parameter {
-        nodeRequireNotNull(name) { "Parameter must have name" }
+        val name = nodeRequireNotNull(name) { ParameterMustHaveName }
         return KMixinModel.Injection.Parameter(
             name = name,
             type = type.validate().toModel(scopeTypeParameters),
@@ -419,7 +398,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
     }
 
     private fun ContextParameterNode.validate(scopeTypeParameters: List<TypeParameterModel>): ContextParameterModel {
-        nodeRequireNotNull(name) { "Parameter must have name" }
+        val name = nodeRequireNotNull(name) { ParameterMustHaveName }
         return ContextParameterModel(
             name = name,
             type = type.validate().toModel(scopeTypeParameters),
@@ -446,64 +425,63 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         }
 
         nodeRequire(STATIC !in rawModifiers) {
-            """
-            Static @KShadow members must be declared in the companion object instead of using the STATIC modifier.
-            Why: Java Mixin targets static members through companion object declarations to preserve Kotlin scoping.
-            How to fix: Remove 'STATIC' modifier and declare the @KShadow member inside the companion object.
-            """.trimIndent()
+            StaticShadowMustBeInCompanion
         }
 
-        fun requireModifiers(condition: Boolean, problem: () -> String) {
-            nodeRequire(condition) {
-                val javaMemberName = if (isProperty) "field" else "method"
-                val kotlinMemberName = if (isProperty) "property" else "function"
-                val containerName = if (isInterface) "interface" else "class"
-                """
-                @KShadow $kotlinMemberName representing Java $javaMemberName ${problem()}.
-                Why: Target bytecode cannot have this modifier combination.
-                How to fix: Copy the exact modifiers of $javaMemberName from the Minecraft $containerName source code.
-                """.trimIndent()
-            }
-        }
+        val memberDesc = if (isProperty) "property" else "function"
 
-        fun Iterable<Modifier>.joinToUppercase(): String = joinToString { it.name }
+        fun Iterable<Modifier>.joinToUppercase(): String = joinToString(prefix = "[", postfix = "]") { "'${it.name}'" }
         val allowedModifiers = if (isProperty) JavaModifiers.FIELD_ALLOWED else JavaModifiers.METHOD_ALLOWED
         val invalidModifiers = result.filter { it !in allowedModifiers }
-        requireModifiers(invalidModifiers.isEmpty()) {
-            "has invalid modifiers: ${invalidModifiers.joinToUppercase()}"
+        nodeRequire(invalidModifiers.isEmpty()) {
+            ShadowInvalidModifiers(memberDesc, invalidModifiers.joinToUppercase())
         }
         val visibilities = result.filter { it in JavaModifiers.VISIBILITIES }
-        requireModifiers(visibilities.size <= 1) {
-            "has multiple visibility modifiers: ${visibilities.joinToUppercase()}"
+        nodeRequire(visibilities.size <= 1) {
+            ShadowMultipleVisibilityModifiers(memberDesc, visibilities.joinToUppercase())
         }
         if (isProperty) {
             if (FINAL in result) {
-                requireModifiers(VOLATILE !in result) { "cannot be both FINAL and VOLATILE" }
+                nodeRequire(VOLATILE !in result) {
+                    ShadowConflictingModifiers(memberDesc, "FINAL", "VOLATILE")
+                }
             }
         } else {
             if (ABSTRACT in result) {
                 val illegalAbstractModifiers = result.filter { it in JavaModifiers.ABSTRACT_ILLEGALS }
-                requireModifiers(illegalAbstractModifiers.isEmpty()) {
-                    "has illegal modifiers for an abstract declaration: ${illegalAbstractModifiers.joinToUppercase()}"
+                nodeRequire(illegalAbstractModifiers.isEmpty()) {
+                    ShadowIllegalAbstractModifiers(
+                        memberDesc,
+                        illegalAbstractModifiers.joinToUppercase()
+                    )
                 }
             }
             if (NATIVE in result) {
-                requireModifiers(DEFAULT !in result) { "cannot be both NATIVE and DEFAULT" }
+                nodeRequire(DEFAULT !in result) {
+                    ShadowConflictingModifiers(memberDesc, "NATIVE", "DEFAULT")
+                }
             }
             if (isInterface) {
                 if (PRIVATE in result) {
-                    requireModifiers(DEFAULT !in result) { "cannot be both PRIVATE and DEFAULT in interface" }
-                    requireModifiers(ABSTRACT !in result) { "cannot be both PRIVATE and ABSTRACT in interface" }
+                    nodeRequire(DEFAULT !in result) {
+                        ShadowConflictingModifiers(memberDesc, "PRIVATE", "DEFAULT", "interface")
+                    }
+                    nodeRequire(ABSTRACT !in result) {
+                        ShadowConflictingModifiers(memberDesc, "PRIVATE", "ABSTRACT", "interface")
+                    }
                 } else {
                     val executionTypes = result.filter { it in JavaModifiers.EXECUTION_TYPES }
-                    requireModifiers(executionTypes.size == 1) {
-                        val types = JavaModifiers.EXECUTION_TYPES.joinToUppercase()
-                        "must specify exactly one execution type ($types) in interface, " +
-                            "found: ${executionTypes.joinToUppercase()}"
+                    nodeRequire(executionTypes.size == 1) {
+                        ShadowInterfaceExecutionType(
+                            expected = JavaModifiers.EXECUTION_TYPES.joinToUppercase(),
+                            found = executionTypes.joinToUppercase(),
+                        )
                     }
                 }
             } else {
-                requireModifiers(DEFAULT !in result) { "cannot use DEFAULT modifier outside of interface" }
+                nodeRequire(DEFAULT !in result) {
+                    DefaultModifierOutsideInterface
+                }
             }
         }
         return result
@@ -512,19 +490,9 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
     private fun NodeHolder.validateJavaIdentifierName(
         name: String,
         roleDesc: String,
-        sources: Boolean = false,
     ): String {
         nodeRequire(SourceVersion.isIdentifier(name)) {
-            val ensureDesc = if (sources) {
-                "matches a valid name in the decompiled Minecraft source code"
-            } else {
-                "is a valid Java identifier (e.g. starts with a letter and contains no spaces or special characters)"
-            }
-            """
-            $roleDesc '$name' must be a valid Java identifier.
-            Why: This name is used in Java Mixin.
-            How to fix: Ensure the name $ensureDesc.
-            """.trimIndent()
+            InvalidJavaIdentifier(roleDesc, name)
         }
         return name
     }
@@ -539,11 +507,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
 
     private fun AnnotationNode.toModel(): MixinAnnotationModel {
         nodeRequire(type is ParsedClassType) {
-            """
-            Annotations must be valid here.
-            Why: Package name is required to determine whether the annotation should be copied into Java Mixin.
-            How to fix: Ensure the annotation is correctly imported and has no compilation errors.
-            """.trimIndent()
+            InvalidAnnotationType
         }
         return MixinAnnotationModel(
             type = type.toModel(),
@@ -553,11 +517,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
 
     private fun AnnotationNode.Argument.validate(): MixinAnnotationModel.Argument {
         nodeRequire(this is AnnotationNode.ValidArgument) {
-            """
-            Mixin-related annotation arguments must be valid.
-            Why: Invalid arguments cannot be mapped into Java Mixin.
-            How to fix: Ensure the annotation argument has no compilation errors.
-            """.trimIndent()
+            InvalidAnnotationArgument
         }
         return when (this) {
             is AnnotationNode.ScalarArgument -> {
@@ -572,7 +532,9 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
 
     context(nodeHolder: NodeHolder)
     private fun AnnotationNode.Argument.Value.validate(): AnnotationNode.Argument.ValidValue =
-        nodeHolder.nodeRequireNotNull(this as? AnnotationNode.Argument.ValidValue) { "Invalid value" }
+        nodeHolder.nodeRequireNotNull(this as? AnnotationNode.Argument.ValidValue) {
+            InvalidAnnotationArgumentValue
+        }
 
     context(nodeHolder: NodeHolder)
     private fun AnnotationNode.Argument.ValidValue.toModel() = when (this) {
@@ -588,18 +550,10 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         is AnnotationNode.Argument.TypeValue -> {
             val typeModel = type.validate().toModel()
             val classTypeModel = nodeHolder.nodeRequireNotNull(typeModel as? ClassTypeModel) {
-                """
-                Class reference argument must resolve to a valid class declaration.
-                Why: The specified type could not be resolved.
-                How to fix: Ensure the class argument has no compilation errors.
-                """.trimIndent()
+                ClassReferenceMustBeClass
             }
             nodeHolder.nodeRequire(typeModel.typeArguments.all { it is ClassTypeModel.StarProjectionArgument }) {
-                """
-                Generic type arguments in class reference are not supported.
-                Why: Generic type arguments cannot be mapped to Java Mixin annotations.
-                How to fix: Remove type arguments from the class reference.
-                """.trimIndent()
+                GenericTypeArgumentsInClassReferenceNotSupported
             }
             MixinAnnotationModel.Argument.ClassValue(classTypeModel)
         }
@@ -607,7 +561,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         is AnnotationNode.Argument.EnumValue -> {
             val typeModel = type.validate().toModel()
             val classTypeModel = nodeHolder.nodeRequireNotNull(typeModel as? ClassTypeModel) {
-                "Enum type must be class"
+                EnumTypeMustBeClass
             }
             MixinAnnotationModel.Argument.EnumValue(classTypeModel, name)
         }
@@ -617,24 +571,17 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         }
     }
 
-    private fun ParsedValidType.requireSubtypeOf(
+    private fun ParsedValidType.requireSupertypeOf(
         target: ParsedClassType,
         node: NodeHolder,
-        nodeDesc: String,
+        useSiteDesc: String,
+        targetStrategy: TargetStrategy,
     ): ParsedValidType {
-        node.nodeRequire(!type.isNullable) {
-            """
-            $nodeDesc type cannot be nullable.
-            Why: In Java Mixin, an instance of the target type is always initialized and is guaranteed to be non-null.
-            How to fix: Remove the nullable mark ('?') from type.
-            """.trimIndent()
-        }
         node.nodeRequire(type.isSupertypeOf(target.type)) {
-            """
-            $nodeDesc type must be a parent class or the exact same class as the target.
-            Why: In Java Mixin, 'this' is the target type, so an unsafe cast requires a compatible class hierarchy.
-            How to fix: Make the ${nodeDesc.decapitalized()} type match the target class or use its parent class/interface.
-            """.trimIndent()
+            TargetTypeMismatch(useSiteDesc, targetStrategy, type, target.type)
+        }
+        if (type.isNullable) {
+            node.nodeWarn { RedundantNullableTargetType(useSiteDesc, targetStrategy) }
         }
         return this
     }
@@ -642,9 +589,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
     context(nodeHolder: NodeHolder)
     private fun ParsedType.validate(): ParsedValidType =
         nodeHolder.nodeRequireNotNull(this as? ParsedValidType) {
-            """
-            Ensure the type has no compilation errors.
-            """.trimIndent()
+            InvalidTypeDeclaration
         }
 
     private fun List<TypeParameterNode>.validate(enclosing: List<TypeParameterModel>): List<TypeParameterModel> {
@@ -654,11 +599,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
 
     private fun TypeParameterNode.toModel(enclosing: List<TypeParameterModel>): TypeParameterModel {
         nodeRequire(!isReified) {
-            """
-            Reified type parameter '$name' is not supported in @KMixin.
-            Why: 'reified' type parameters only exist in Kotlin inline functions and cannot be used in Java.
-            How to fix: Remove the 'reified' keyword from parameter.
-            """.trimIndent()
+            ReifiedTypeParameterNotSupported(name)
         }
         return TypeParameterModel(
             name = name,
@@ -681,7 +622,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
     context(nodeHolder: NodeHolder)
     private fun ParsedClassType.toModel(scopeTypeParameters: List<TypeParameterModel> = emptyList()): ClassTypeModel {
         val functionalType = functionalType?.let { type ->
-            nodeHolder.nodeRequire(!type.isSuspending) { "Kotlin Coroutines are not supported yet." }
+            nodeHolder.nodeRequire(!type.isSuspending) { CoroutinesNotSupported() }
             ClassTypeModel.FunctionalType(
                 contextTypes = type.contextTypes.map { it.toModel(scopeTypeParameters) },
                 receiverType = type.receiverType?.toModel(scopeTypeParameters),
@@ -695,20 +636,12 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
             )
         }
         nodeHolder.nodeRequire(packageName.isNotEmpty()) {
-            """
-            Class declarations must belong to a package.
-            Why: Java Mixin in a named package cannot access declarations in the default package.
-            How to fix: Move the class declaration into a named package.
-            """.trimIndent()
+            ClassMustBelongToPackage
         }
         return ClassTypeModel(
             packageName = packageName,
             qualifiedName = nodeHolder.nodeRequireNotNull(qualifiedName) {
-                """
-                Class declarations must have a fully qualified name; local classes are not supported.
-                Why: Java Mixin cannot access local class declarations.
-                How to fix: Move the class declaration out of the local scope.
-                """.trimIndent()
+                ClassMustHaveQualifiedName
             },
             typeArguments = typeArguments.map { it.validate(scopeTypeParameters) },
             actualType = actualType?.toModel(scopeTypeParameters),
@@ -729,7 +662,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
     context(nodeHolder: NodeHolder)
     private fun findTypeParameter(name: String, scopeTypeParameters: List<TypeParameterModel>): TypeParameterModel =
         nodeHolder.nodeRequireNotNull(scopeTypeParameters.find { it.name == name }) {
-            "Type parameter '$name' not found in scope"
+            TypeParameterNotFoundInScope(name)
         }
 
     context(nodeHolder: NodeHolder)
@@ -739,7 +672,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         visited: Set<String> = emptySet(),
     ): ClassTypeModel {
         nodeHolder.nodeRequire(typeParameter.name !in visited) {
-            "Cyclic type parameter bound detected for ${typeParameter.name}"
+            CyclicTypeParameterBound(typeParameter.name)
         }
         return when (val upperBound = typeParameter.bounds.firstOrNull() ?: ClassTypeModel.NULLABLE_ANY) {
             is ClassTypeModel -> upperBound
@@ -754,7 +687,7 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
     context(nodeHolder: NodeHolder)
     private fun AnnotationsContainer.getEffectiveMappingName(fallbackName: String): String =
         findApiArgument(MappingName::value)
-            ?.let { (value, node) -> node.validateJavaIdentifierName(value, "@MappingName value", sources = true) }
+            ?.let { (value, node) -> node.validateJavaIdentifierName(value, "@MappingName value") }
             ?: fallbackName
 
     private fun List<TypeParameterNode>.toModels(
@@ -765,12 +698,18 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         val targetIndices = targetNodes.withIndex().associate { it.value.name to it.index }
         return zip(candidateModels).map { (candidateNode, candidateModel) ->
             val targetIndex = candidateNode.nodeRequireNotNull(targetIndices[candidateModel.mappingName]) {
-                "Type parameter ${candidateModel.mappingName} not found in target class. " +
-                    "Existing: ${targetNodes.joinToString { it.name }}"
+                TargetTypeParameterNotFound(
+                    name = candidateModel.mappingName,
+                    existing = targetNodes.joinToString { it.name },
+                )
             }
             val targetNode = targetNodes[targetIndex]
             candidateNode.nodeRequire(candidateModel.bounds.size == targetNode.bounds.size) {
-                "Bounds mismatch: expected ${targetNode.bounds.size} count, but got ${candidateModel.bounds.size}"
+                BoundsCountMismatch(
+                    name = candidateModel.name,
+                    expected = targetNode.bounds.size,
+                    actual = candidateModel.bounds.size,
+                )
             }
             candidateModel.bounds.zip(targetNode.bounds).forEach { (candidateBound, targetBound) ->
                 candidateNode.requireBoundEquals(candidateBound, targetBound, mappingNames)
@@ -793,42 +732,46 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         fun visitedEntry(candidate: TypeParameterTypeModel, target: ParsedTypeParameterType) =
             candidate.name to target.name
 
-        nodeRequire(target is ParsedValidType) { "Bounds mismatch: target is invalid" }
+        nodeRequire(target is ParsedValidType) {
+            BoundsMismatch("target is invalid")
+        }
         when (target) {
             is ParsedClassType -> {
-                nodeRequire(candidate is ClassTypeModel) { "Bounds mismatch: expected class, but got type parameter" }
+                nodeRequire(candidate is ClassTypeModel) {
+                    BoundsMismatch("expected class, but got type parameter")
+                }
                 val candidateActual = candidate.actualOrThis
                 nodeRequire(candidateActual.qualifiedName == target.qualifiedName) {
-                    "Bounds mismatch: expected ${target.qualifiedName}, but got ${candidateActual.qualifiedName}"
+                    BoundsMismatch("expected ${target.qualifiedName}, but got ${candidateActual.qualifiedName}")
                 }
                 nodeRequire(candidateActual.typeArguments.size == target.typeArguments.size) {
-                    "Bounds mismatch: expected ${target.typeArguments.size}, but got ${candidateActual.typeArguments.size}"
+                    BoundsMismatch("expected ${target.typeArguments.size} arguments, but got ${candidateActual.typeArguments.size}")
                 }
                 candidateActual.typeArguments.zip(target.typeArguments).forEach { (candidateArgument, targetArgument) ->
                     when (targetArgument) {
                         is ParsedClassType.StarProjectionArgument -> {
                             nodeRequire(candidateArgument is ClassTypeModel.StarProjectionArgument) {
-                                "Bounds mismatch: expected star, but got type"
+                                BoundsMismatch("expected star projection")
                             }
                         }
 
                         is ParsedClassType.TypeProjectionArgument -> {
                             nodeRequire(candidateArgument is ClassTypeModel.TypeProjectionArgument) {
-                                "Bounds mismatch: expected type, but got star"
+                                BoundsMismatch("expected type projection")
                             }
                             if (candidateArgument.variance != Variance.INVARIANT) {
                                 nodeRequire(candidateArgument.variance == targetArgument.variance) {
-                                    "Bounds mismatch: expected ${targetArgument.variance}, but got ${candidateArgument.variance}"
+                                    BoundsMismatch("expected ${targetArgument.variance}, but got ${candidateArgument.variance}")
                                 }
                             }
-                            val candidate = candidateArgument.type
-                            val target = targetArgument.type
+                            val candidateType = candidateArgument.type
+                            val targetType = targetArgument.type
                             requireBoundEquals(
-                                candidate = candidate,
-                                target = target,
+                                candidate = candidateType,
+                                target = targetType,
                                 mappingNames = mappingNames,
-                                visited = if (candidate is TypeParameterTypeModel && target is ParsedTypeParameterType) {
-                                    visited + visitedEntry(candidate, target)
+                                visited = if (candidateType is TypeParameterTypeModel && targetType is ParsedTypeParameterType) {
+                                    visited + visitedEntry(candidateType, targetType)
                                 } else visited,
                             )
                         }
@@ -838,23 +781,33 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
 
             is ParsedTypeParameterType -> {
                 nodeRequire(candidate is TypeParameterTypeModel) {
-                    "Bounds mismatch: expected type parameter type, but got class type"
+                    BoundsMismatch("expected type parameter type, but got class type")
                 }
                 if (visitedEntry(candidate, target) in visited) return
                 nodeRequire(mappingNames[candidate.name] == target.name) {
-                    "Bounds mismatch: excepted ${target.name}, but got ${mappingNames[candidate.name]}"
+                    BoundsMismatch("expected ${target.name}, but got ${mappingNames[candidate.name]}")
                 }
             }
         }
     }
 
-    private inline fun NodeHolder.nodeError(crossinline message: () -> String): Nothing {
-        node.report(message())
+    private inline fun NodeHolder.nodeError(crossinline message: () -> Error): Nothing {
+        diagnosticReports += DiagnosticReport(
+            diagnostic = message(),
+            target = node,
+        )
         throw InvalidSymbolSignal()
     }
 
+    private inline fun NodeHolder.nodeWarn(crossinline message: () -> Warning) {
+        diagnosticReports += DiagnosticReport(
+            diagnostic = message(),
+            target = node,
+        )
+    }
+
     @OptIn(ExperimentalContracts::class)
-    private inline fun NodeHolder.nodeRequire(condition: Boolean, crossinline message: () -> String) {
+    private inline fun NodeHolder.nodeRequire(condition: Boolean, crossinline message: () -> Error) {
         contract { returns() implies condition }
         if (!condition) {
             nodeError(message = message)
@@ -862,7 +815,10 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
     }
 
     @OptIn(ExperimentalContracts::class)
-    private inline fun <T> NodeHolder.nodeRequireNotNull(value: T?, crossinline message: () -> String): T {
+    private inline fun <T> NodeHolder.nodeRequireNotNull(
+        value: T?,
+        crossinline message: () -> Error,
+    ): T {
         contract { returns() implies (value != null) }
         return value ?: nodeError(message = message)
     }
@@ -872,9 +828,12 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         message = "Calling 'nodeRequireNotNull' with non-nullable value is redundant. " +
             "Use 'nodeRequire' if checking a Boolean condition, " +
             "or remove this check if it is unnecessary.",
-        level = DeprecationLevel.ERROR
+        level = DeprecationLevel.ERROR,
     )
-    private inline fun <T : Any> NodeHolder.nodeRequireNotNull(value: T, crossinline message: () -> String): Nothing {
+    private inline fun <T : Any> NodeHolder.nodeRequireNotNull(
+        value: T,
+        crossinline message: () -> Diagnostic,
+    ): Nothing {
         throw UnsupportedOperationException("Deprecated function overload cannot be called at runtime.")
     }
 
@@ -883,29 +842,24 @@ class CoreValidator<O>(private val nodes: Sequence<KMixinNode<O>>, private val o
         message = "Calling 'nodeRequireNotNull' with nullable Boolean is ambiguous. " +
             "Use 'nodeRequire' with an explicit condition instead.",
         replaceWith = ReplaceWith("nodeRequire(value == true, message)"),
-        level = DeprecationLevel.ERROR
+        level = DeprecationLevel.ERROR,
     )
-    private fun NodeHolder.nodeRequireNotNull(value: Boolean?, message: () -> String): Nothing {
+    private fun NodeHolder.nodeRequireNotNull(value: Boolean?, message: () -> Diagnostic): Nothing {
         throw UnsupportedOperationException("Deprecated function overload cannot be called at runtime.")
     }
 
-    private inline fun <T, R : Any> Sequence<T>.mapValid(crossinline block: (T) -> R): Sequence<R> =
-        mapNotNull {
-            try {
-                block(it)
-            } catch (_: InvalidSymbolSignal) {
-                null
-            }
+    private inline fun <T, R : Any> T.ifValid(crossinline block: (T) -> R): R? =
+        try {
+            block(this)
+        } catch (_: InvalidSymbolSignal) {
+            null
         }
 
-    private inline fun <T, R : Any> Iterable<T>.mapValid(block: (T) -> R): List<R> =
-        mapNotNull {
-            try {
-                block(it)
-            } catch (_: InvalidSymbolSignal) {
-                null
-            }
-        }
+    private inline fun <T, R : Any> Sequence<T>.mapValid(crossinline block: (T) -> R): Sequence<R> =
+        mapNotNull { it.ifValid(block) }
+
+    private inline fun <T, R : Any> Iterable<T>.mapValid(crossinline block: (T) -> R): List<R> =
+        mapNotNull { it.ifValid(block) }
 
     private inline fun <T, R : Any> Iterable<T>.validateAll(block: (T) -> R): List<R> {
         var hasError = false

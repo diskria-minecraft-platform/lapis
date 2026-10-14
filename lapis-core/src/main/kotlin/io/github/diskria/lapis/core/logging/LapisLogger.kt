@@ -1,10 +1,10 @@
 package io.github.diskria.lapis.core.logging
 
-interface LapisLogger<N> {
-    fun warn(message: String, node: N? = null)
-    fun error(message: String, node: N? = null)
-    fun fatal(message: String, node: N? = null): Nothing {
-        error(message, node)
+interface LapisLogger {
+    fun warn(message: String)
+    fun error(message: String)
+    fun fatal(message: String): Nothing {
+        error(message)
         throw LapisException(message)
     }
 }

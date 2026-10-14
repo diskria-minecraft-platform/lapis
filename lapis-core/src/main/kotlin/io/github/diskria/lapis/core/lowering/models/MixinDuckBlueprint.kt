@@ -1,11 +1,11 @@
 package io.github.diskria.lapis.core.lowering.models
 
-import io.github.diskria.lapis.core.lowering.models.IrMixinDuck.Entry.Kind
+import io.github.diskria.lapis.core.lowering.models.MixinDuckBlueprint.Entry.Kind
 import io.github.diskria.poetesse.interop.XClassName
 import io.github.diskria.poetesse.interop.XTypeVariableName
 import io.github.diskria.poetesse.java.JPModifier
 
-class IrMixinDuck<O>(
+class MixinDuckBlueprint<O>(
     val origin: O?,
     val className: XClassName,
     val shadows: List<Shadow>,
@@ -19,14 +19,14 @@ class IrMixinDuck<O>(
         sealed interface Kind {
             val name: String
             val sourceJvmName: String
-            val parameters: List<IrFunctionParameter>
-            val returnType: IrType?
+            val parameters: List<FunctionParameterBlueprint>
+            val returnType: TypeBlueprint?
         }
     }
 
     sealed interface Property : Entry {
 
-        val type: IrType
+        val type: TypeBlueprint
         val getterName: String
         val declaredGetterJvmName: String
         val setterName: String?
@@ -50,19 +50,19 @@ class IrMixinDuck<O>(
         class Getter(
             override val name: String,
             override val sourceJvmName: String,
-            override val returnType: IrType,
+            override val returnType: TypeBlueprint,
         ) : AccessorKind {
-            override val parameters: List<IrFunctionParameter> = emptyList()
+            override val parameters: List<FunctionParameterBlueprint> = emptyList()
         }
 
         class Setter(
             override val name: String,
             override val sourceJvmName: String,
-            type: IrType,
+            type: TypeBlueprint,
         ) : AccessorKind {
-            val parameter = IrFunctionParameter("value", type)
-            override val parameters: List<IrFunctionParameter> = listOf(parameter)
-            override val returnType: IrType? = null
+            val parameter = FunctionParameterBlueprint("value", type)
+            override val parameters: List<FunctionParameterBlueprint> = listOf(parameter)
+            override val returnType: TypeBlueprint? = null
         }
     }
 
@@ -73,33 +73,33 @@ class IrMixinDuck<O>(
 
     sealed interface Extension : Entry {
 
-        val receiverType: IrType
-        val contextParameters: List<IrFunctionParameter>
+        val receiverType: TypeBlueprint
+        val contextParameters: List<FunctionParameterBlueprint>
         val typeVariables: List<XTypeVariableName>
 
         class Property(
             override val declaredName: String,
-            override val type: IrType,
+            override val type: TypeBlueprint,
             override val declaredGetterJvmName: String,
             override val declaredSetterJvmName: String?,
             override val getterName: String,
             override val setterName: String?,
-            override val receiverType: IrType,
-            override val contextParameters: List<IrFunctionParameter>,
+            override val receiverType: TypeBlueprint,
+            override val contextParameters: List<FunctionParameterBlueprint>,
             override val typeVariables: List<XTypeVariableName>,
-        ) : IrMixinDuck.Property,
+        ) : MixinDuckBlueprint.Property,
             Extension
 
         class Function(
             override val declaredName: String,
             override val name: String,
             override val sourceJvmName: String,
-            override val parameters: List<IrFunctionParameter>,
-            override val contextParameters: List<IrFunctionParameter>,
-            override val returnType: IrType?,
-            override val receiverType: IrType,
+            override val parameters: List<FunctionParameterBlueprint>,
+            override val contextParameters: List<FunctionParameterBlueprint>,
+            override val returnType: TypeBlueprint?,
+            override val receiverType: TypeBlueprint,
             override val typeVariables: List<XTypeVariableName>,
-        ) : IrMixinDuck.Function,
+        ) : MixinDuckBlueprint.Function,
             Extension
     }
 
@@ -107,19 +107,19 @@ class IrMixinDuck<O>(
 
         val modifiers: List<JPModifier>
         val mappingName: String
-        val annotations: List<IrAnnotation>
+        val annotations: List<AnnotationBlueprint>
 
         class Property(
             override val declaredName: String,
-            override val type: IrType,
+            override val type: TypeBlueprint,
             override val getterName: String,
             override val declaredGetterJvmName: String,
             override val setterName: String?,
             override val declaredSetterJvmName: String?,
             override val modifiers: List<JPModifier>,
             override val mappingName: String,
-            override val annotations: List<IrAnnotation>,
-        ) : IrMixinDuck.Property,
+            override val annotations: List<AnnotationBlueprint>,
+        ) : MixinDuckBlueprint.Property,
             Shadow
 
         class Function(
@@ -127,14 +127,14 @@ class IrMixinDuck<O>(
             override val name: String,
             override val sourceJvmName: String,
             override val parameters: List<Parameter>,
-            override val returnType: IrType?,
+            override val returnType: TypeBlueprint?,
             override val modifiers: List<JPModifier>,
             override val mappingName: String,
-            override val annotations: List<IrAnnotation>,
+            override val annotations: List<AnnotationBlueprint>,
             override val typeVariables: List<XTypeVariableName>,
-        ) : IrMixinDuck.Function, Shadow {
+        ) : MixinDuckBlueprint.Function, Shadow {
 
-            class Parameter(name: String, val mappingName: String, type: IrType) : IrFunctionParameter(name, type)
+            class Parameter(name: String, val mappingName: String, type: TypeBlueprint) : FunctionParameterBlueprint(name, type)
         }
     }
 }

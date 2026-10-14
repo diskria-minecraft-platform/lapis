@@ -3,8 +3,13 @@ package io.github.diskria.lapis.core.cli
 import io.github.diskria.lapis.core.extensions.lapisError
 import io.github.diskria.lapis.core.extensions.quoted
 import io.github.diskria.lapis.core.extensions.simpleNameOf
+import io.github.diskria.poetesse.Poetesse
+import io.github.diskria.poetesse.java.JPAnnotation
+import io.github.diskria.poetesse.java.JPClassName
+import io.github.diskria.poetesse.java.JPTypeName
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.serialDescriptor
@@ -34,6 +39,29 @@ data class CliOptions(
     @Serializable(with = DelimitedStringListSerializer::class)
     val mixinAnnotationPackages: List<String> = MIXIN_ANNOTATION_PACKAGES,
 ) {
+    @Transient
+    val poetesse = Poetesse {
+        javaNullabilityResolver = object : Poetesse.JavaNullabilityResolver {
+
+            private val nullableAnnotationClassName = nullableAnnotation?.let { JPClassName.bestGuess(it) }
+            private val nonNullAnnotationClassName = nonNullAnnotation?.let { JPClassName.bestGuess(it) }
+
+            override fun setNullable(typeName: JPTypeName, nullable: Boolean): JPTypeName {
+                if (nullableAnnotationClassName == null && nonNullAnnotationClassName == null) return typeName
+                val targetAnnotation = if (nullable) nullableAnnotationClassName else nonNullAnnotationClassName
+                val cleanAnnotations = typeName.annotations().filterNot {
+                    it.type() == nullableAnnotationClassName || it.type() == nonNullAnnotationClassName
+                }
+                val finalAnnotations = if (targetAnnotation != null) {
+                    cleanAnnotations + JPAnnotation.builder(targetAnnotation).build()
+                } else {
+                    cleanAnnotations
+                }
+                return typeName.withoutAnnotations().annotated(finalAnnotations)
+            }
+        }
+    }
+
     fun validate() = buildList {
         validateJavaIdentifierName(::uniqueModPrefix, "modid$")
         validateJavaPackageName(::mixinPackage, "com.example.modid.mixin")

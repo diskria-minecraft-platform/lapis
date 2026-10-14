@@ -3,24 +3,24 @@ package io.github.diskria.lapis.core.lowering.models
 import io.github.diskria.lapis.annotations.InitStrategy
 import io.github.diskria.poetesse.interop.XClassName
 
-sealed interface IrKMixin<O> {
+sealed interface KMixinBlueprint<O> {
     val className: XClassName
-    val mixin: IrMixin<O>
+    val mixin: MixinBlueprint<O>
 }
 
-class IrKMixinClass<O>(
+class KMixinClassBlueprint<O>(
     override val className: XClassName,
-    override val mixin: IrMixin<O>,
-    val impl: IrKMixinImpl<O>?,
+    override val mixin: MixinBlueprint<O>,
+    val impl: KMixinImplBlueprint<O>?,
     val constructorParameters: List<ConstructorParameter>,
     val initStrategy: InitStrategy,
-) : IrKMixin<O> {
+) : KMixinBlueprint<O> {
     sealed interface ConstructorParameter {
-        class Origin(val name: String, val type: IrType) : ConstructorParameter
+        class Origin(val name: String, val type: TypeBlueprint) : ConstructorParameter
     }
 }
 
-class IrKMixinInterface<O>(
+class KMixinInterfaceBlueprint<O>(
     override val className: XClassName,
-    override val mixin: IrMixin<O>,
-) : IrKMixin<O>
+    override val mixin: MixinBlueprint<O>,
+) : KMixinBlueprint<O>

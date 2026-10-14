@@ -5,7 +5,6 @@ import io.github.diskria.lapis.core.lowering.models.*
 import io.github.diskria.lapis.core.utils.JavaModifiers
 import io.github.diskria.lapis.core.utils.Variance
 import io.github.diskria.lapis.core.validator.models.*
-import io.github.diskria.poetesse.Poetesse
 import io.github.diskria.poetesse.interop.*
 import io.github.diskria.poetesse.java.JPModifier
 import java.util.*
@@ -15,8 +14,9 @@ import javax.lang.model.element.Modifier.*
 class CoreLowering<O>(
     private val models: List<KMixinModel<O>>,
     private val options: CliOptions,
-    private val poetesse: Poetesse,
 ) {
+    private val poetesse = options.poetesse
+
     private val mixinSourcePackageLCP by lazy {
         if (options.disableLCP) null
         else {
@@ -30,16 +30,16 @@ class CoreLowering<O>(
         }
     }
 
-    fun lower(): List<IrKMixin<O>> = models.map { it.lower() }
+    fun lower(): List<KMixinBlueprint<O>> = models.map { it.lower() }
 
-    private fun KMixinModel<O>.lower(): IrKMixin<O> {
+    private fun KMixinModel<O>.lower(): KMixinBlueprint<O> {
         val className = type.toXClassName()
         val typeVariables = typeParameters.lower()
         val mixin = deriveMixin(className)
         return when (val classKind = classKind) {
             is KMixinModel.Class -> {
                 val constructorParameters = classKind.constructorParameters.map { it.lower() }
-                IrKMixinClass(
+                KMixinClassBlueprint(
                     className = className,
                     mixin = mixin,
                     impl = if (classKind.isAbstract) {
@@ -50,7 +50,7 @@ class CoreLowering<O>(
                 )
             }
 
-            KMixinModel.Interface -> IrKMixinInterface(
+            KMixinModel.Interface -> KMixinInterfaceBlueprint(
                 className = className,
                 mixin = mixin,
             )
@@ -60,23 +60,23 @@ class CoreLowering<O>(
     private fun KMixinModel<O>.deriveImpl(
         originClassName: XClassName,
         typeVariables: List<XTypeVariableName>,
-        constructorParameters: List<IrKMixinClass.ConstructorParameter>,
-        duck: IrMixinDuck<*>?,
-    ) = IrKMixinImpl(
+        constructorParameters: List<KMixinClassBlueprint.ConstructorParameter>,
+        duck: MixinDuckBlueprint<*>?,
+    ) = KMixinImplBlueprint(
         origin = origin,
         className = originClassName.withSuffix("_Impl"),
         typeVariables = typeVariables,
         constructorParameters = buildList {
-            constructorParameters.firstNotNullOfOrNull { it as? IrKMixinClass.ConstructorParameter.Origin }?.let {
-                add(IrKMixinImpl.ConstructorParameter.Instance(it.name, it.type))
+            constructorParameters.firstNotNullOfOrNull { it as? KMixinClassBlueprint.ConstructorParameter.Origin }?.let {
+                add(KMixinImplBlueprint.ConstructorParameter.Instance(it.name, it.type))
             }
             if (duck != null && shadowSources.isNotEmpty()) {
-                add(IrKMixinImpl.ConstructorParameter.Duck(duck.className))
+                add(KMixinImplBlueprint.ConstructorParameter.Duck(duck.className))
             }
         },
     )
 
-    private fun KMixinModel<O>.deriveMixin(originClassName: XClassName) = IrMixin(
+    private fun KMixinModel<O>.deriveMixin(originClassName: XClassName) = MixinBlueprint(
         origin = origin,
         className = resolveMixinClassName(originClassName),
         side = side,
@@ -88,17 +88,17 @@ class CoreLowering<O>(
         annotations = if (mixinAnnotations.isNotEmpty()) {
             mixinAnnotations.map { it.lower() }
         } else {
-            val targetClassValue = IrAnnotation.Argument.ClassValue(targetType.toXClassName())
-            val valueArgument = IrAnnotation.ScalarArgument("value", targetClassValue)
-            listOf(IrAnnotation(poetesse.xClass(options.mixinAnnotation), listOf(valueArgument)))
+            val targetClassValue = AnnotationBlueprint.Argument.ClassValue(targetType.toXClassName())
+            val valueArgument = AnnotationBlueprint.ScalarArgument("value", targetClassValue)
+            listOf(AnnotationBlueprint(poetesse.xClass(options.mixinAnnotation), listOf(valueArgument)))
         },
     )
 
-    private fun KMixinModel<O>.deriveMixinDuck(originClassName: XClassName): IrMixinDuck<O>? {
+    private fun KMixinModel<O>.deriveMixinDuck(originClassName: XClassName): MixinDuckBlueprint<O>? {
         val shadows = shadowSources.map { it.lower(classKind is KMixinModel.Interface) }
         val extensions = extensionSources.map { it.lower(targetType, typeParameters) }
         return if (shadows.isNotEmpty() || extensions.isNotEmpty()) {
-            IrMixinDuck(
+            MixinDuckBlueprint(
                 origin = origin,
                 className = originClassName.withSuffix("_Duck"),
                 shadows = shadows,
@@ -108,16 +108,16 @@ class CoreLowering<O>(
     }
 
     private fun KMixinModel.Class.ConstructorParameter.lower() = when (this) {
-        is KMixinModel.Class.ConstructorParameter.Origin -> IrKMixinClass.ConstructorParameter.Origin(
+        is KMixinModel.Class.ConstructorParameter.Origin -> KMixinClassBlueprint.ConstructorParameter.Origin(
             name = name,
-            type = type.lower().irType,
+            type = type.lower().typeBlueprint,
         )
     }
 
     private fun KMixinModel.Extension.lower(
         targetType: ClassTypeModel,
         enclosingTypeParameters: List<KMixinModel.TargetTypeParameterModel>,
-    ): IrMixinDuck.Extension {
+    ): MixinDuckBlueprint.Extension {
         val allUsedTypeParameterNames = mutableSetOf<String>()
         fun LoweredTypeResult.collectUsedTypeParameterNames() = allUsedTypeParameterNames.addAll(usedTypeParameterNames)
         val enclosingParameters = enclosingTypeParameters.associate { parameter ->
@@ -128,7 +128,7 @@ class CoreLowering<O>(
             is KMixinModel.Extension.Property -> {
                 val contextParameters = contextParameters.map { contextParameter ->
                     val typeResult = contextParameter.type.lower().also { it.collectUsedTypeParameterNames() }
-                    IrFunctionParameter(name = contextParameter.name, type = typeResult.irType)
+                    FunctionParameterBlueprint(name = contextParameter.name, type = typeResult.typeBlueprint)
                 }
                 val typeResult = type.lower().also { it.collectUsedTypeParameterNames() }
                 val (receiverType, typeVariables) = lowerTypeParameters(
@@ -136,8 +136,8 @@ class CoreLowering<O>(
                     targetType = targetType,
                     enclosingParameters = enclosingParameters,
                 )
-                IrMixinDuck.Extension.Property(
-                    type = typeResult.irType,
+                MixinDuckBlueprint.Extension.Property(
+                    type = typeResult.typeBlueprint,
                     declaredName = declaredName,
                     declaredGetterJvmName = getterJvmName,
                     declaredSetterJvmName = setterJvmName,
@@ -152,11 +152,11 @@ class CoreLowering<O>(
             is KMixinModel.Extension.Function -> {
                 val contextParameters = contextParameters.map { contextParameter ->
                     val typeResult = contextParameter.type.lower().also { it.collectUsedTypeParameterNames() }
-                    IrFunctionParameter(name = contextParameter.name, type = typeResult.irType)
+                    FunctionParameterBlueprint(name = contextParameter.name, type = typeResult.typeBlueprint)
                 }
                 val parameters = parameters.map { parameter ->
                     val typeResult = parameter.type.lower().also { it.collectUsedTypeParameterNames() }
-                    IrFunctionParameter(name = parameter.name, type = typeResult.irType)
+                    FunctionParameterBlueprint(name = parameter.name, type = typeResult.typeBlueprint)
                 }
                 val returnTypeResult = returnType?.lower()?.also { it.collectUsedTypeParameterNames() }
                 val (receiverType, typeVariables) = lowerTypeParameters(
@@ -164,13 +164,13 @@ class CoreLowering<O>(
                     targetType = targetType,
                     enclosingParameters = enclosingParameters,
                 )
-                IrMixinDuck.Extension.Function(
+                MixinDuckBlueprint.Extension.Function(
                     declaredName = declaredName,
                     sourceJvmName = jvmName,
                     name = jvmName.withUniqueModPrefix(),
                     parameters = parameters,
                     contextParameters = contextParameters,
-                    returnType = returnTypeResult?.irType,
+                    returnType = returnTypeResult?.typeBlueprint,
                     receiverType = receiverType,
                     typeVariables = typeVariables,
                 )
@@ -216,14 +216,14 @@ class CoreLowering<O>(
             targetType
         }
         return LoweredExtensionTypeParametersResult(
-            receiverType = receiverTypeModel.lower().irType,
+            receiverType = receiverTypeModel.lower().typeBlueprint,
             typeVariables = (usedEnclosingParameters + localParameters).lower(),
         )
     }
 
     private fun KMixinModel.Shadow.lower(isInterface: Boolean) = when (this) {
-        is KMixinModel.Shadow.Property -> IrMixinDuck.Shadow.Property(
-            type = type.lower().irType,
+        is KMixinModel.Shadow.Property -> MixinDuckBlueprint.Shadow.Property(
+            type = type.lower().typeBlueprint,
             declaredName = declaredName,
             declaredGetterJvmName = getterJvmName,
             declaredSetterJvmName = setterJvmName,
@@ -240,69 +240,69 @@ class CoreLowering<O>(
                         add(options.finalAnnotation)
                     }
                     add(options.shadowAnnotation)
-                }.map { IrAnnotation(poetesse.xClass(it)) }
+                }.map { AnnotationBlueprint(poetesse.xClass(it)) }
             },
         )
 
-        is KMixinModel.Shadow.Function -> IrMixinDuck.Shadow.Function(
+        is KMixinModel.Shadow.Function -> MixinDuckBlueprint.Shadow.Function(
             declaredName = declaredName,
             sourceJvmName = jvmName,
             name = jvmName.withUniqueModPrefix(),
             parameters = parameters.map { parameter ->
-                IrMixinDuck.Shadow.Function.Parameter(
+                MixinDuckBlueprint.Shadow.Function.Parameter(
                     name = parameter.name,
                     mappingName = parameter.mappingName,
-                    type = parameter.type.lower().irType,
+                    type = parameter.type.lower().typeBlueprint,
                 )
             },
-            returnType = returnType?.lower()?.irType,
+            returnType = returnType?.lower()?.typeBlueprint,
             mappingName = mappingName,
             modifiers = modifiers.lowerToShadowModifiers(isInterface, isField = false),
             annotations = if (mixinAnnotations.isNotEmpty()) {
                 mixinAnnotations.map { it.lower() }
             } else {
-                listOf(IrAnnotation(poetesse.xClass(options.shadowAnnotation)))
+                listOf(AnnotationBlueprint(poetesse.xClass(options.shadowAnnotation)))
             },
             typeVariables = typeParameters.lower(),
         )
     }
 
-    private fun KMixinModel.Injection.lowerAsMember() = IrMixin.MemberInjection(
+    private fun KMixinModel.Injection.lowerAsMember() = MixinBlueprint.MemberInjection(
         sourceJvmName = jvmName,
         name = jvmName.withUniqueModPrefix(),
         annotations = mixinAnnotations.map { it.lower() },
         parameters = parameters.map { it.lower() },
         contextParameters = contextParameters.map { it.lower() },
-        returnType = returnType?.lower()?.irType,
-        extensionReceiverType = extensionReceiverType?.lower()?.irType,
+        returnType = returnType?.lower()?.typeBlueprint,
+        extensionReceiverType = extensionReceiverType?.lower()?.typeBlueprint,
     )
 
-    private fun KMixinModel.Injection.lowerAsStatic(companion: KMixinModel.CompanionObject) = IrMixin.StaticInjection(
+    private fun KMixinModel.Injection.lowerAsStatic(companion: KMixinModel.CompanionObject) = MixinBlueprint.StaticInjection(
         sourceJvmName = jvmName,
         name = jvmName.withUniqueModPrefix(),
         annotations = mixinAnnotations.map { it.lower() },
         parameters = parameters.map { it.lower() },
         contextParameters = contextParameters.map { it.lower() },
-        returnType = returnType?.lower()?.irType,
+        returnType = returnType?.lower()?.typeBlueprint,
         kMixinCompanionObjectName = companion.name,
     )
 
-    private fun KMixinModel.Injection.Parameter.lower() = IrMixin.Injection.Parameter(
+    private fun KMixinModel.Injection.Parameter.lower() = MixinBlueprint.Injection.Parameter(
         name = name,
-        type = type.lower().irType,
+        type = type.lower().typeBlueprint,
         annotations = mixinAnnotations.map { it.lower() },
     )
 
-    private fun MixinAnnotationModel.lower() = IrAnnotation(
+    private fun MixinAnnotationModel.lower() = AnnotationBlueprint(
         className = type.toXClassName(),
         arguments = arguments.map { argument ->
             when (argument) {
-                is MixinAnnotationModel.ScalarArgument -> IrAnnotation.ScalarArgument(
+                is MixinAnnotationModel.ScalarArgument -> AnnotationBlueprint.ScalarArgument(
                     name = argument.name,
                     value = argument.value.lower(),
                 )
 
-                is MixinAnnotationModel.ArrayArgument -> IrAnnotation.ArrayArgument(
+                is MixinAnnotationModel.ArrayArgument -> AnnotationBlueprint.ArrayArgument(
                     name = argument.name,
                     elements = argument.elements.map { it.lower() },
                 )
@@ -310,19 +310,19 @@ class CoreLowering<O>(
         },
     )
 
-    private fun MixinAnnotationModel.Argument.Value.lower(): IrAnnotation.Argument.Value = when (this) {
-        is MixinAnnotationModel.Argument.BooleanValue -> IrAnnotation.Argument.BooleanValue(boolean)
-        is MixinAnnotationModel.Argument.ByteValue -> IrAnnotation.Argument.ByteValue(byte)
-        is MixinAnnotationModel.Argument.ShortValue -> IrAnnotation.Argument.ShortValue(short)
-        is MixinAnnotationModel.Argument.IntValue -> IrAnnotation.Argument.IntValue(int)
-        is MixinAnnotationModel.Argument.LongValue -> IrAnnotation.Argument.LongValue(long)
-        is MixinAnnotationModel.Argument.CharValue -> IrAnnotation.Argument.CharValue(char)
-        is MixinAnnotationModel.Argument.FloatValue -> IrAnnotation.Argument.FloatValue(float)
-        is MixinAnnotationModel.Argument.DoubleValue -> IrAnnotation.Argument.DoubleValue(double)
-        is MixinAnnotationModel.Argument.StringValue -> IrAnnotation.Argument.StringValue(string)
-        is MixinAnnotationModel.Argument.ClassValue -> IrAnnotation.Argument.ClassValue(type.toXClassName())
-        is MixinAnnotationModel.Argument.EnumValue -> IrAnnotation.Argument.EnumValue(type.toXClassName(), name)
-        is MixinAnnotationModel.Argument.AnnotationValue -> IrAnnotation.Argument.AnnotationValue(annotation.lower())
+    private fun MixinAnnotationModel.Argument.Value.lower(): AnnotationBlueprint.Argument.Value = when (this) {
+        is MixinAnnotationModel.Argument.BooleanValue -> AnnotationBlueprint.Argument.BooleanValue(boolean)
+        is MixinAnnotationModel.Argument.ByteValue -> AnnotationBlueprint.Argument.ByteValue(byte)
+        is MixinAnnotationModel.Argument.ShortValue -> AnnotationBlueprint.Argument.ShortValue(short)
+        is MixinAnnotationModel.Argument.IntValue -> AnnotationBlueprint.Argument.IntValue(int)
+        is MixinAnnotationModel.Argument.LongValue -> AnnotationBlueprint.Argument.LongValue(long)
+        is MixinAnnotationModel.Argument.CharValue -> AnnotationBlueprint.Argument.CharValue(char)
+        is MixinAnnotationModel.Argument.FloatValue -> AnnotationBlueprint.Argument.FloatValue(float)
+        is MixinAnnotationModel.Argument.DoubleValue -> AnnotationBlueprint.Argument.DoubleValue(double)
+        is MixinAnnotationModel.Argument.StringValue -> AnnotationBlueprint.Argument.StringValue(string)
+        is MixinAnnotationModel.Argument.ClassValue -> AnnotationBlueprint.Argument.ClassValue(type.toXClassName())
+        is MixinAnnotationModel.Argument.EnumValue -> AnnotationBlueprint.Argument.EnumValue(type.toXClassName(), name)
+        is MixinAnnotationModel.Argument.AnnotationValue -> AnnotationBlueprint.Argument.AnnotationValue(annotation.lower())
     }
 
     private fun EnumSet<Modifier>.lowerToShadowModifiers(isInterface: Boolean, isField: Boolean): List<JPModifier> {
@@ -352,7 +352,7 @@ class CoreLowering<O>(
         map { typeParameter ->
             poetesse.xTypeVariable(
                 name = typeParameter.name,
-                bounds = typeParameter.bounds.map { it.lower().irType.inKotlin },
+                bounds = typeParameter.bounds.map { it.lower().typeBlueprint.inKotlin },
             )
         }
 
@@ -362,14 +362,14 @@ class CoreLowering<O>(
             val kotlinTypeName = kotlinResult.typeName
             val javaResult = toTypeName(forJava = true)
             val javaTypeName = javaResult.typeName
-            val irType = if (actualOrThis.functionalType != null) {
+            val typeBlueprint = if (actualOrThis.functionalType != null) {
                 val toJavaTypeName = (javaTypeName as? XClassName)
                     ?.takeIf { it.qualifiedName == XFunctionalTypeName.JVM_FUNCTION_N }
                     ?.generic(poetesse.xStar())
-                IrType(
+                TypeBlueprint(
                     inKotlin = kotlinTypeName,
                     inJava = javaTypeName,
-                    castContext = IrType.CastContext(toKotlin = kotlinTypeName, toJava = toJavaTypeName),
+                    castContext = TypeBlueprint.CastContext(toKotlin = kotlinTypeName, toJava = toJavaTypeName),
                     isReturnable = true,
                     isFunctionType = true,
                 )
@@ -377,14 +377,14 @@ class CoreLowering<O>(
                 val isUnit = javaTypeName is XVoidTypeName && !javaTypeName.isBoxed
                 val isNothing = javaTypeName is XVoidTypeName && javaTypeName.isNothing
                 val toKotlinTypeName = if (javaResult.isErased || isNothing) kotlinTypeName else null
-                IrType(
+                TypeBlueprint(
                     inKotlin = kotlinTypeName,
                     inJava = javaTypeName,
-                    castContext = IrType.CastContext(toKotlin = toKotlinTypeName, toJava = null),
+                    castContext = TypeBlueprint.CastContext(toKotlin = toKotlinTypeName, toJava = null),
                     isReturnable = !isUnit,
                 )
             }
-            LoweredTypeResult(irType, kotlinResult.usedTypeParameterNames)
+            LoweredTypeResult(typeBlueprint, kotlinResult.usedTypeParameterNames)
         }
 
         is TypeParameterTypeModel -> {
@@ -392,13 +392,13 @@ class CoreLowering<O>(
             val kotlinTypeName = kotlinResult.typeName
             val javaTypeName = toTypeName(forJava = true).typeName
             val isUnit = javaTypeName is XVoidTypeName && !javaTypeName.isBoxed
-            val irType = IrType(
+            val typeBlueprint = TypeBlueprint(
                 inKotlin = kotlinTypeName,
                 inJava = javaTypeName,
-                castContext = IrType.CastContext(toKotlin = kotlinTypeName, toJava = null),
+                castContext = TypeBlueprint.CastContext(toKotlin = kotlinTypeName, toJava = null),
                 isReturnable = !isUnit,
             )
-            LoweredTypeResult(irType, kotlinResult.usedTypeParameterNames)
+            LoweredTypeResult(typeBlueprint, kotlinResult.usedTypeParameterNames)
         }
     }
 
@@ -513,7 +513,7 @@ class CoreLowering<O>(
     )
 
     private data class LoweredTypeResult(
-        val irType: IrType,
+        val typeBlueprint: TypeBlueprint,
         val usedTypeParameterNames: Set<String> = emptySet(),
     )
 
@@ -523,7 +523,7 @@ class CoreLowering<O>(
     )
 
     private data class LoweredExtensionTypeParametersResult(
-        val receiverType: IrType,
+        val receiverType: TypeBlueprint,
         val typeVariables: List<XTypeVariableName> = emptyList(),
     )
 }

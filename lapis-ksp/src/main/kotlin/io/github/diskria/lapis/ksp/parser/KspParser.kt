@@ -8,18 +8,18 @@ import io.github.diskria.lapis.core.extensions.qualifiedNameOf
 import io.github.diskria.lapis.core.extensions.simpleNameOf
 import io.github.diskria.lapis.core.parser.models.*
 import io.github.diskria.lapis.core.utils.Variance
-import io.github.diskria.lapis.ksp.logging.KspLogger
+import io.github.diskria.lapis.ksp.parser.polyfills.fullyExpandedType
 import kotlin.reflect.KProperty1
 
-class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
+class KspParser(private val resolver: Resolver) {
 
     fun parseNodes(): Sequence<KMixinNode<KSFile>> =
         resolver
-            .getSymbolsWithAnnotation(AnnotationsContainer.ROOT_FQCN)
+            .getSymbolsWithAnnotation(AnnotationsContainer.KMIXIN_FQCN)
             .filterIsInstance<KSClassDeclaration>()
-            .map { it.parseAsRoot() }
+            .map { it.parseAsKMixin() }
 
-    private fun KSClassDeclaration.parseAsRoot(): KMixinNode<KSFile> {
+    private fun KSClassDeclaration.parseAsKMixin(): KMixinNode<KSFile> {
         val allFunctionDeclarations = getDeclaredFunctions()
         val constructorDeclarations = allFunctionDeclarations.filter { it.isConstructor() }
         val primaryConstructorPropertyNames = constructorDeclarations.flatMap { constructor ->
@@ -68,6 +68,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
     private fun KSPropertyDeclaration.parse() = KMixinNode.Property(
         name = simpleName.toName(),
         type = type.parse(),
+        hasExplicitType = true,
         isPublic = isPublic(),
         isOpen = Modifier.OPEN in modifiers,
         isAbstract = Modifier.ABSTRACT in modifiers,
@@ -96,6 +97,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
         parameters = parameters.map { it.parseAsFunctionParameter() },
         contextParameters = contextParameters.map { it.parse() },
         returnType = returnType?.parse() ?: ParsedInvalidType,
+        hasExplicitReturnType = true,
         isPublic = isPublic(),
         isOpen = Modifier.OPEN in modifiers,
         isSuspending = Modifier.SUSPEND in modifiers,
@@ -142,15 +144,15 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
 
     private fun KSValueArgument.parseAsAnnotationArgument(name: String): AnnotationNode.Argument {
         val value = value
-        val arrayValues = when (value) {
+        val arrayElements = when (value) {
             is Collection<*> -> value.toList()
             is Array<*> -> value.toList()
             else -> null
         }
-        if (arrayValues != null) {
+        if (arrayElements != null) {
             return AnnotationNode.ArrayArgument(
                 name = name,
-                elements = arrayValues.map { it.parseAsAnnotationArgumentValue() },
+                elements = arrayElements.map { it.parseAsAnnotationArgumentValue() },
                 node = toNode(),
             )
         }
@@ -193,7 +195,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
             return ParsedTypeParameterType(ksDeclaration.name.toName(), toType())
         }
         val actualType = if (ksDeclaration is KSTypeAlias) {
-            val expanded = fullyExpandedType(ksDeclaration)
+            val expanded = fullyExpandedType(ksDeclaration, resolver)
             if (expanded === this) return ParsedInvalidType
             val parsedExpanded = expanded.parse() as? ParsedClassType ?: return ParsedInvalidType
             parsedExpanded.actualOrThis
@@ -228,65 +230,7 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
         )
     }
 
-    private fun KSType.fullyExpandedType(alias: KSTypeAlias): KSType =
-        directExpansionType(alias, visited = emptySet()) ?: this
-
-    private fun KSType.directExpansionType(ksTypeAlias: KSTypeAlias, visited: Set<KSTypeAlias>): KSType? {
-        if (ksTypeAlias in visited) return null
-        if (ksTypeAlias.typeParameters.size != arguments.size) return null
-        val ksTypeArguments = ksTypeAlias.typeParameters.zip(arguments) { ksTypeParameter, ksTypeArgument ->
-            ksTypeParameter.name.toName() to ksTypeArgument
-        }.toMap()
-        val mapped = ksTypeAlias.type.resolve().mapTypeAliasArguments(ksTypeArguments, visited + ksTypeAlias)
-        return mapped?.applyNullabilityFrom(this)
-    }
-
-    private fun KSType.mapTypeAliasArguments(
-        ksTypeArguments: Map<String, KSTypeArgument>,
-        visited: Set<KSTypeAlias> = emptySet(),
-    ): KSType? {
-        val ksDeclaration = declaration
-        val expanded = if (ksDeclaration is KSTypeParameter) {
-            val ksTypeArgument = ksTypeArguments[ksDeclaration.name.toName()]
-            if (ksTypeArgument != null) {
-                ksTypeArgument.type?.resolve()?.applyNullabilityFrom(this) ?: return null
-            } else {
-                this
-            }
-        } else {
-            this
-        }
-        val substituted = if (expanded.arguments.isNotEmpty()) {
-            expanded.replace(expanded.arguments.map { argument ->
-                val kspVariance = argument.variance
-                if (kspVariance == KspVariance.STAR) return@map argument
-                val type = argument.type?.resolve() ?: return null
-                val mapped = type.mapTypeAliasArguments(ksTypeArguments, visited) ?: return null
-                val ksTypeArgument = (type.declaration as? KSTypeParameter)?.let { ksTypeArguments[it.name.toName()] }
-                val variance = if (ksTypeArgument != null) {
-                    combineVariance(ksTypeArgument.variance, kspVariance) ?: return null
-                } else {
-                    kspVariance
-                }
-                resolver.getTypeArgument(resolver.createKSTypeReferenceFromKSType(mapped), variance)
-            })
-        } else {
-            expanded
-        }
-        val ksTypeAlias = substituted.declaration as? KSTypeAlias ?: return substituted
-        return substituted.directExpansionType(ksTypeAlias, visited)
-    }
-
-    private fun combineVariance(callSite: KspVariance, declarationSite: KspVariance): KspVariance? {
-        if (callSite == declarationSite) return callSite
-        if (callSite == KspVariance.STAR || declarationSite == KspVariance.STAR) return KspVariance.STAR
-        if (callSite == KspVariance.INVARIANT) return declarationSite
-        if (declarationSite == KspVariance.INVARIANT) return callSite
-        return null
-    }
-
-    private fun KSType.applyNullabilityFrom(abbreviation: KSType): KSType =
-        if (abbreviation.isMarkedNullable && !isMarkedNullable) makeNullable() else this
+    private fun KSTypeReference.parse(): ParsedType = resolve().parse()
 
     private fun KSType.parseFunctionalType(
         ksTypeArguments: List<KSTypeArgument>,
@@ -309,8 +253,6 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
         getParameterName = { argument, _ -> argument.annotations.findArgument(ParameterName::name) },
     )
 
-    private fun KSTypeReference.parse(): ParsedType = resolve().parse()
-
     private fun KSTypeParameter.parse() = TypeParameterNode(
         name = name.toName(),
         bounds = bounds.map { it.parse() }.toList(),
@@ -319,31 +261,33 @@ class KspParser(private val resolver: Resolver, private val logger: KspLogger) {
         node = toNode(),
     )
 
-    private inline fun <reified A : Annotation> Sequence<KSAnnotation>.findAnnotation(): KSAnnotation? {
-        val expectedShortName = simpleNameOf<A>()
-        val expectedQualifiedName = qualifiedNameOf<A>()
-        return find { annotation ->
-            val type = annotation.annotationType
-            if (annotation.shortName.toName() != expectedShortName) return@find false
-            if (type.validate(enableNewFeatures = true)) {
-                type.resolve().declaration.qualifiedName?.toName() == expectedQualifiedName
-            } else {
-                type.toString() == "<ERROR TYPE: $expectedQualifiedName>"
-            }
+    private fun KSNode.toNode(): KspNode = KspNode(this)
+}
+
+private inline fun <reified A : Annotation> Sequence<KSAnnotation>.findAnnotation(): KSAnnotation? {
+    val expectedShortName = simpleNameOf<A>()
+    val expectedQualifiedName = qualifiedNameOf<A>()
+    return find { annotation ->
+        val type = annotation.annotationType
+        if (annotation.shortName.toName() != expectedShortName) return@find false
+        if (type.validate(enableNewFeatures = true)) {
+            type.resolve().declaration.qualifiedName?.toName() == expectedQualifiedName
+        } else {
+            type.toString() == "<ERROR TYPE: $expectedQualifiedName>"
         }
     }
-
-    private inline fun <reified A : Annotation> Sequence<KSAnnotation>.hasAnnotation(): Boolean =
-        findAnnotation<A>() != null
-
-    private inline fun <reified A : Annotation, reified V> Sequence<KSAnnotation>.findArgument(
-        property: KProperty1<out A, V>
-    ): V? = findAnnotation<A>()?.arguments?.find { it.name?.toName() == property.name }?.value as? V
-
-    private fun KSNode.toNode(): KspNode = KspNode(this, logger)
-    private fun KSType.toType(): KspType = KspType(this)
-    private fun KSName.toName(): String = asString()
-
-    private typealias KspOrigin = com.google.devtools.ksp.symbol.Origin
-    private typealias KspVariance = com.google.devtools.ksp.symbol.Variance
 }
+
+private inline fun <reified A : Annotation> Sequence<KSAnnotation>.hasAnnotation(): Boolean =
+    findAnnotation<A>() != null
+
+private inline fun <reified A : Annotation, reified V> Sequence<KSAnnotation>.findArgument(
+    property: KProperty1<out A, V>
+): V? = findAnnotation<A>()?.arguments?.find { it.name?.toName() == property.name }?.value as? V
+
+fun KSType.toType(): KspType = KspType(this)
+fun KSName.toName(): String = asString()
+
+typealias KspResolver = com.google.devtools.ksp.processing.Resolver
+typealias KspOrigin = com.google.devtools.ksp.symbol.Origin
+typealias KspVariance = com.google.devtools.ksp.symbol.Variance

@@ -22,7 +22,6 @@ class Kcp : CompilerPluginRegistrar() {
     override val supportsK2: Boolean = true
 
     override fun ExtensionStorage.registerExtensions(configuration: CompilerConfiguration) {
-        lapisLog(configuration.toString())
         lapisLog(">>> ExtensionStorage.registerExtensions")
         try {
             val logger = KcpLogger(configuration.messageCollector)
@@ -35,3 +34,4 @@ class Kcp : CompilerPluginRegistrar() {
         }
     }
 }
+

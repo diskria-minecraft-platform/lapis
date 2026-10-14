@@ -31,7 +31,7 @@ class KcpCliProcessor : CommandLineProcessor {
     }
 
     companion object {
-        private val CLI_ARGUMENTS = CompilerConfigurationKey.create<Map<String, String>>("lapis.cliArguments")
+        private val CLI_ARGUMENTS = CompilerConfigurationKey.create<Map<String, String>>("LAPIS_CLI_ARGUMENTS2")
 
         fun getOptions(configuration: CompilerConfiguration, logger: KcpLogger) = CliOptions.fromArguments(
             rawArguments = configuration.getMap(CLI_ARGUMENTS),

@@ -8,9 +8,11 @@ class KspType(private val ksType: KSType) : Type {
     override val isNullable: Boolean get() = ksType.isMarkedNullable
 
     override fun isSupertypeOf(subtype: Type): Boolean {
-        if (subtype !is KspType) return false
+        subtype as KspType
         val subtypeCandidate = subtype.ksType.starProjection()
         val supertypeCandidate = ksType.starProjection()
         return supertypeCandidate.isAssignableFrom(subtypeCandidate)
     }
+
+    override fun toString(): String = ksType.toString()
 }

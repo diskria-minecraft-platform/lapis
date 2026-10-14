@@ -9,11 +9,13 @@ class FirType(private val coneType: ConeKotlinType, private val session: FirSess
     override val isNullable: Boolean get() = coneType.isMarkedNullable
 
     override fun isSupertypeOf(subtype: Type): Boolean {
-        if (subtype !is FirType) return false
+        subtype as FirType
         val subtypeCandidate = subtype.coneType.starProjection()
         val supertypeCandidate = coneType.starProjection()
         return subtypeCandidate.isSubtypeOf(supertypeCandidate, session)
     }
+
+    override fun toString(): String = coneType.renderReadable()
 }
 
 private fun ConeKotlinType.starProjection(): ConeKotlinType =
