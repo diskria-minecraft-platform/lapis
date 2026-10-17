@@ -19,6 +19,7 @@ class KMixinNode<O>(
     val functions: List<Function>,
     val annotations: AnnotationsContainer,
     val origin: O?,
+    val frontendName: String,
     override val node: Node,
 ) : NodeHolder {
 
@@ -104,8 +105,10 @@ class ContextParameterNode(
 
 sealed interface ParsedType
 
-sealed interface ParsedValidType : ParsedType {
-    val type: Type
+sealed class ParsedValidType : ParsedType {
+    abstract val type: Type
+
+    override fun toString(): String = type.toString()
 }
 
 object ParsedInvalidType : ParsedType
@@ -117,7 +120,7 @@ class ParsedClassType(
     val actualType: ParsedClassType?,
     val functionalType: FunctionalType?,
     override val type: Type,
-) : ParsedValidType {
+) : ParsedValidType() {
 
     val actualOrThis: ParsedClassType get() = actualType ?: this
 
@@ -183,7 +186,7 @@ class ParsedClassType(
 class ParsedTypeParameterType(
     val name: String,
     override val type: Type,
-) : ParsedValidType
+) : ParsedValidType()
 
 class TypeParameterNode(
     val name: String,

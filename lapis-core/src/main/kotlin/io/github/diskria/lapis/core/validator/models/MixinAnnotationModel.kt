@@ -17,7 +17,7 @@ class MixinAnnotationModel(val type: ClassTypeModel, val arguments: List<Argumen
         class DoubleValue(val double: Double) : Value
         class StringValue(val string: String) : Value
         class ClassValue(val type: ClassTypeModel) : Value
-        class EnumValue(val type: ClassTypeModel, val name: String) : Value
+        class EnumEntryValue(val type: ClassTypeModel, val name: String) : Value
         class AnnotationValue(val annotation: MixinAnnotationModel) : Value
     }
 

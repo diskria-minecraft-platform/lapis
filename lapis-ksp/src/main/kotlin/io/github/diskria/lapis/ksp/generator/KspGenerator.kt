@@ -27,7 +27,7 @@ class KspGenerator(
             kMixin.mixin.duck?.let {
                 generateMixinDuck(it, kMixin)
                 if (it.extensions.isNotEmpty()) {
-//                    generateExtensions(it, kMixin)
+                    generateExtensions(it, kMixin)
                 }
             }
             when (kMixin) {
@@ -103,159 +103,166 @@ class KspGenerator(
         }
     }.writeWith(aggregating = false, listOfNotNull(duck.origin))
 
-//    // TODO: Migrate to FIR plugin
-//    private fun generateExtensions(duck: MixinDuckBlueprint<KSFile>, kMixin: KMixinBlueprint<KSFile>) = poetesse {
-//        val receiver = kotlin.code { "(this as ${T(duck.className)})" }
-//        kotlin.file(kMixin.className.withSuffix("_Extensions")) {
-//            duck.extensions.forEach { extension ->
-//                when (extension) {
-//                    is MixinDuckBlueprint.Extension.Property -> property(extension.declaredName, extension.type.inKotlin) {
-//                        extension.contextParameters.forEach { contextParameter(it.name, it.type.inKotlin) }
-//                        public()
-//                        inline()
-//                        extension.typeVariables.forEach { +it }
-//                        extensionReceiver(extension.receiverType.inKotlin)
-//                        getter {
-//                            expression {
-//                                val callable = code { N(extension.getter.name) }
-//                                val arguments = code {
-//                                    extension.contextParameters.joinToString { N(it.name).maybeCastToJava(it.type) }
-//                                }
-//                                "${L(receiver)}.${L(callable)}(${L(arguments)})"
-//                                    .maybeReturnCastFromJavaTo(extension.type)
-//                            }
-//                        }
-//                        extension.setter?.let { setter ->
-//                            setter(setter.parameter.name) { newValue ->
-//                                body {
-//                                    val callable = code { N(setter.name) }
-//                                    val arguments = code {
-//                                        val nameToType = buildList {
-//                                            addAll(extension.contextParameters.map { it.name to it.type })
-//                                            add(newValue to extension.type)
-//                                        }
-//                                        nameToType.joinToString { (name, type) -> N(name).maybeCastToJava(type) }
-//                                    }
-//                                    line { "${L(receiver)}.${L(callable)}(${L(arguments)})" }
-//                                }
-//                            }
-//                        }
-//                    }
-//
-//                    is MixinDuckBlueprint.Extension.Function -> function(extension.declaredName) {
-//                        extension.contextParameters.forEach { contextParameter(it.name, it.type.inKotlin) }
-//                        public()
-//                        inline()
-//                        extension.typeVariables.forEach { +it }
-//                        extensionReceiver(extension.receiverType.inKotlin)
-//                        extension.parameters.forEach {
-//                            parameter(it.name, it.type.inKotlin) {
-//                                if (it.type.isFunctionType) noinline()
-//                            }
-//                        }
-//                        val returner = returnsIfNeeded(extension.returnType)
-//                        body {
-//                            val callable = code { N(extension.name) }
-//                            val arguments = code {
-//                                (extension.contextParameters + extension.parameters)
-//                                    .joinToString { N(it.name).maybeCastToJava(it.type) }
-//                            }
-//                            line {
-//                                "$returner${L(receiver)}.${L(callable)}(${L(arguments)})"
-//                                    .maybeReturnCastFromJavaTo(extension.returnType)
-//                            }
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//    }.writeWith(aggregating = false, listOfNotNull(duck.origin))
-
-    private fun generateKMixinImpl(kMixinImpl: KMixinImplBlueprint<KSFile>, kMixin: KMixinClassBlueprint<KSFile>) = poetesse {
-        kotlin.file(kMixinImpl.className) {
-            class_(fileName) { _ ->
-                generatedMarkers(
-                    originClassName = kMixin.className,
-                    roleDesc = "KMixin implementation for binding Mixin shadows",
-                )
-                suppressAllWarnings()
-                public()
-                kMixinImpl.typeVariables.forEach { +it }
-                if (kMixinImpl.constructorParameters.isNotEmpty()) {
-                    constructor(primary = true) {
+    // TODO: Migrate to FIR plugin
+    private fun generateExtensions(duck: MixinDuckBlueprint<KSFile>, kMixin: KMixinBlueprint<KSFile>) = poetesse {
+        val receiver = kotlin.code { "(this as ${T(duck.className)})" }
+        kotlin.file(kMixin.className.withSuffix("_Extensions")) {
+            duck.extensions.forEach { extension ->
+                when (extension) {
+                    is MixinDuckBlueprint.Extension.Property -> property(
+                        extension.declaredName,
+                        extension.type.inKotlin
+                    ) {
+                        extension.contextParameters.forEach { contextParameter(it.name, it.type.inKotlin) }
                         public()
-                        kMixinImpl.constructorParameters.forEach { parameter ->
-                            when (parameter) {
-                                is KMixinImplBlueprint.ConstructorParameter.Instance -> {
-                                    parameter(parameter.name, parameter.type.inKotlin)
-                                }
-
-                                is KMixinImplBlueprint.ConstructorParameter.Duck -> {
-                                    parameter("duck", parameter.className).property { private() }
-                                }
-                            }
-                        }
-                    }
-                }
-                val superclassName = if (kMixinImpl.typeVariables.isNotEmpty()) {
-                    kMixin.className.generic(kMixinImpl.typeVariables)
-                } else kMixin.className
-                superclass(superclassName) {
-                    kMixin.constructorParameters.forEach { parameter ->
-                        argument {
-                            when (parameter) {
-                                is KMixinClassBlueprint.ConstructorParameter.Origin -> N(parameter.name)
-                            }
-                        }
-                    }
-                }
-                kMixin.mixin.duck?.shadows?.forEach { shadow ->
-                    when (shadow) {
-                        is MixinDuckBlueprint.Shadow.Property -> property(shadow.declaredName, shadow.type.inKotlin) {
-                            public()
-                            override()
-                            getter {
-                                expression {
-                                    val receiver = code { N("duck") }
-                                    val callable = code { N(shadow.getter.name) }
-                                    "${L(receiver)}.${L(callable)}()".maybeReturnCastFromJavaTo(shadow.type)
-                                }
-                            }
-                            shadow.setter?.let { setter ->
-                                setter(setter.parameter.name) { newValue ->
-                                    body {
-                                        val receiver = code { N("duck") }
-                                        val callable = code { N(setter.name) }
-                                        val arguments = code { N(newValue).maybeCastToJava(shadow.type) }
-                                        line { "${L(receiver)}.${L(callable)}(${L(arguments)})" }
-                                    }
-                                }
-                            }
-                        }
-
-                        is MixinDuckBlueprint.Shadow.Function -> function(shadow.declaredName) {
-                            public()
-                            override()
-                            shadow.typeVariables.forEach { +it }
-                            shadow.parameters.forEach { parameter(it.name, it.type.inKotlin) }
-                            val returner = returnsIfNeeded(shadow.returnType)
-                            body {
-                                val receiver = code { N("duck") }
-                                val callable = code { N(shadow.name) }
+                        inline()
+                        extension.typeVariables.forEach { +it }
+                        extensionReceiver(extension.receiverType.inKotlin)
+                        getter {
+                            expression {
+                                val callable = code { N(extension.getter.name) }
                                 val arguments = code {
-                                    shadow.parameters.joinToString { N(it.name).maybeCastToJava(it.type) }
+                                    extension.contextParameters.joinToString { N(it.name).maybeCastToJava(it.type) }
                                 }
-                                line {
-                                    "$returner${L(receiver)}.${L(callable)}(${L(arguments)})"
-                                        .maybeReturnCastFromJavaTo(shadow.returnType)
+                                "${L(receiver)}.${L(callable)}(${L(arguments)})"
+                                    .maybeReturnCastFromJavaTo(extension.type)
+                            }
+                        }
+                        extension.setter?.let { setter ->
+                            setter(setter.parameter.name) { newValue ->
+                                body {
+                                    val callable = code { N(setter.name) }
+                                    val arguments = code {
+                                        val nameToType = buildList {
+                                            addAll(extension.contextParameters.map { it.name to it.type })
+                                            add(newValue to extension.type)
+                                        }
+                                        nameToType.joinToString { (name, type) -> N(name).maybeCastToJava(type) }
+                                    }
+                                    line { "${L(receiver)}.${L(callable)}(${L(arguments)})" }
                                 }
+                            }
+                        }
+                    }
+
+                    is MixinDuckBlueprint.Extension.Function -> function(extension.declaredName) {
+                        extension.contextParameters.forEach { contextParameter(it.name, it.type.inKotlin) }
+                        public()
+                        inline()
+                        extension.typeVariables.forEach { +it }
+                        extensionReceiver(extension.receiverType.inKotlin)
+                        extension.parameters.forEach {
+                            parameter(it.name, it.type.inKotlin) {
+                                if (it.type.isFunctionType) noinline()
+                            }
+                        }
+                        val returner = returnsIfNeeded(extension.returnType)
+                        body {
+                            val callable = code { N(extension.name) }
+                            val arguments = code {
+                                (extension.contextParameters + extension.parameters)
+                                    .joinToString { N(it.name).maybeCastToJava(it.type) }
+                            }
+                            line {
+                                "$returner${L(receiver)}.${L(callable)}(${L(arguments)})"
+                                    .maybeReturnCastFromJavaTo(extension.returnType)
                             }
                         }
                     }
                 }
             }
         }
-    }.writeWith(aggregating = false, listOfNotNull(kMixinImpl.origin))
+    }.writeWith(aggregating = false, listOfNotNull(duck.origin))
+
+    private fun generateKMixinImpl(kMixinImpl: KMixinImplBlueprint<KSFile>, kMixin: KMixinClassBlueprint<KSFile>) =
+        poetesse {
+            kotlin.file(kMixinImpl.className) {
+                class_(fileName) { _ ->
+                    generatedMarkers(
+                        originClassName = kMixin.className,
+                        roleDesc = "KMixin implementation for binding Mixin shadows",
+                    )
+                    suppressAllWarnings()
+                    public()
+                    kMixinImpl.typeVariables.forEach { +it }
+                    if (kMixinImpl.constructorParameters.isNotEmpty()) {
+                        constructor(primary = true) {
+                            public()
+                            kMixinImpl.constructorParameters.forEach { parameter ->
+                                when (parameter) {
+                                    is KMixinImplBlueprint.ConstructorParameter.Instance -> {
+                                        parameter(parameter.name, parameter.type.inKotlin)
+                                    }
+
+                                    is KMixinImplBlueprint.ConstructorParameter.Duck -> {
+                                        parameter("duck", parameter.className).property { private() }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    val superclassName = if (kMixinImpl.typeVariables.isNotEmpty()) {
+                        kMixin.className.generic(kMixinImpl.typeVariables)
+                    } else kMixin.className
+                    superclass(superclassName) {
+                        kMixin.constructorParameters.forEach { parameter ->
+                            argument {
+                                when (parameter) {
+                                    is KMixinClassBlueprint.ConstructorParameter.Origin -> N(parameter.name)
+                                }
+                            }
+                        }
+                    }
+                    kMixin.mixin.duck?.shadows?.forEach { shadow ->
+                        when (shadow) {
+                            is MixinDuckBlueprint.Shadow.Property -> property(
+                                shadow.declaredName,
+                                shadow.type.inKotlin
+                            ) {
+                                public()
+                                override()
+                                getter {
+                                    expression {
+                                        val receiver = code { N("duck") }
+                                        val callable = code { N(shadow.getter.name) }
+                                        "${L(receiver)}.${L(callable)}()".maybeReturnCastFromJavaTo(shadow.type)
+                                    }
+                                }
+                                shadow.setter?.let { setter ->
+                                    setter(setter.parameter.name) { newValue ->
+                                        body {
+                                            val receiver = code { N("duck") }
+                                            val callable = code { N(setter.name) }
+                                            val arguments = code { N(newValue).maybeCastToJava(shadow.type) }
+                                            line { "${L(receiver)}.${L(callable)}(${L(arguments)})" }
+                                        }
+                                    }
+                                }
+                            }
+
+                            is MixinDuckBlueprint.Shadow.Function -> function(shadow.declaredName) {
+                                public()
+                                override()
+                                shadow.typeVariables.forEach { +it }
+                                shadow.parameters.forEach { parameter(it.name, it.type.inKotlin) }
+                                val returner = returnsIfNeeded(shadow.returnType)
+                                body {
+                                    val receiver = code { N("duck") }
+                                    val callable = code { N(shadow.name) }
+                                    val arguments = code {
+                                        shadow.parameters.joinToString { N(it.name).maybeCastToJava(it.type) }
+                                    }
+                                    line {
+                                        "$returner${L(receiver)}.${L(callable)}(${L(arguments)})"
+                                            .maybeReturnCastFromJavaTo(shadow.returnType)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }.writeWith(aggregating = false, listOfNotNull(kMixinImpl.origin))
 
     private fun generateMixinClass(mixin: MixinBlueprint<KSFile>, kMixin: KMixinClassBlueprint<KSFile>) = poetesse {
         val extensions = mixin.duck?.extensions.orEmpty()
@@ -448,57 +455,61 @@ class KspGenerator(
         return { "${N(getDelegate)}()" }
     }
 
-    private fun generateMixinInterface(mixin: MixinBlueprint<KSFile>, kMixin: KMixinInterfaceBlueprint<KSFile>) = poetesse {
-        java.file(mixin.className) {
-            interface_(fileName) { _ ->
-                generatedMarkers(
-                    originClassName = kMixin.className,
-                    roleDesc = "Runtime entrypoint of the Mixin engine delegating logic to the KMixin",
-                )
-                suppressAllWarnings()
-                annotations(mixin.annotations)
-                public()
-                superinterface(mixin.duck?.className ?: kMixin.className)
-                mixin.duck?.shadows?.filterIsInstance<MixinDuckBlueprint.Shadow.Function>()?.forEach { shadow ->
-                    val shadowMethod = method("shadow$${shadow.mappingName}") {
-                        annotations(shadow.annotations)
-                        shadow.modifiers.forEach { +it }
-                        returnsIfNeeded(shadow.returnType)
-                        shadow.parameters.forEach { parameter(it.name, it.type.inJava) }
-                        if (JPModifier.STATIC in shadow.modifiers || JPModifier.PRIVATE in shadow.modifiers) {
+    private fun generateMixinInterface(mixin: MixinBlueprint<KSFile>, kMixin: KMixinInterfaceBlueprint<KSFile>) =
+        poetesse {
+            java.file(mixin.className) {
+                interface_(fileName) { _ ->
+                    generatedMarkers(
+                        originClassName = kMixin.className,
+                        roleDesc = "Runtime entrypoint of the Mixin engine delegating logic to the KMixin",
+                    )
+                    suppressAllWarnings()
+                    annotations(mixin.annotations)
+                    public()
+                    superinterface(mixin.duck?.className ?: kMixin.className)
+                    mixin.duck?.shadows?.filterIsInstance<MixinDuckBlueprint.Shadow.Function>()?.forEach { shadow ->
+                        val shadowMethod = method("shadow$${shadow.mappingName}") {
+                            annotations(shadow.annotations)
+                            shadow.modifiers.forEach { +it }
+                            returnsIfNeeded(shadow.returnType)
+                            shadow.parameters.forEach { parameter(it.name, it.type.inJava) }
+                            if (JPModifier.STATIC in shadow.modifiers || JPModifier.PRIVATE in shadow.modifiers) {
+                                body {
+                                    line { "throw new ${T<AssertionError>()}(${S("Stub!")})" }
+                                }
+                            }
+                        }
+                        method(shadow.name) {
+                            annotation<Override>()
+                            public()
+                            default()
+                            val returner = returnsIfNeeded(shadow.returnType)
+                            shadow.parameters.forEach { parameter(it.name, it.type.inJava) }
                             body {
-                                line { "throw new ${T<AssertionError>()}(${S("Stub!")})" }
+                                val callable = code { N(shadowMethod) }
+                                val arguments = code { shadow.parameters.joinToString { N(it.name) } }
+                                line { "$returner${L(callable)}(${L(arguments)})" }
                             }
                         }
                     }
-                    method(shadow.name) {
-                        annotation<Override>()
-                        public()
-                        default()
-                        val returner = returnsIfNeeded(shadow.returnType)
-                        shadow.parameters.forEach { parameter(it.name, it.type.inJava) }
-                        body {
-                            val callable = code { N(shadowMethod) }
-                            val arguments = code { shadow.parameters.joinToString { N(it.name) } }
-                            line { "$returner${L(callable)}(${L(arguments)})" }
+                    mixin.injections.filterIsInstance<MixinBlueprint.MemberInjection>().forEach { memberInjection ->
+                        mixinInjection(memberInjection) {
+                            "${T(mixin.duck?.className ?: kMixin.className)}.super"
+                        }
+                    }
+                    mixin.injections.filterIsInstance<MixinBlueprint.StaticInjection>().forEach { staticInjection ->
+                        mixinInjection(staticInjection) {
+                            "${T(kMixin.className)}.${N(staticInjection.kMixinCompanionObjectName)}"
                         }
                     }
                 }
-                mixin.injections.filterIsInstance<MixinBlueprint.MemberInjection>().forEach { memberInjection ->
-                    mixinInjection(memberInjection) {
-                        "${T(mixin.duck?.className ?: kMixin.className)}.super"
-                    }
-                }
-                mixin.injections.filterIsInstance<MixinBlueprint.StaticInjection>().forEach { staticInjection ->
-                    mixinInjection(staticInjection) {
-                        "${T(kMixin.className)}.${N(staticInjection.kMixinCompanionObjectName)}"
-                    }
-                }
             }
-        }
-    }.writeWith(aggregating = false, listOfNotNull(mixin.origin))
+        }.writeWith(aggregating = false, listOfNotNull(mixin.origin))
 
-    private fun JavaTypeScope.mixinInjection(injection: MixinBlueprint.Injection, delegate: JavaCodeScope.() -> String) {
+    private fun JavaTypeScope.mixinInjection(
+        injection: MixinBlueprint.Injection,
+        delegate: JavaCodeScope.() -> String
+    ) {
         method(injection.name) {
             annotations(injection.annotations)
             private()
@@ -527,7 +538,7 @@ class KspGenerator(
     }
 
     private fun JavaAnnotationFactory.annotation(annotation: AnnotationBlueprint): JavaAnnotationRef =
-        annotation<Annotation>(annotation.className) {
+        annotation<Annotation>(annotation.type.inJava) {
             annotation.arguments.forEach { argument ->
                 member(argument.name) {
                     when (argument) {
@@ -550,8 +561,8 @@ class KspGenerator(
         is AnnotationBlueprint.Argument.FloatValue -> L(value.float)
         is AnnotationBlueprint.Argument.DoubleValue -> L(value.double)
         is AnnotationBlueprint.Argument.StringValue -> S(value.string)
-        is AnnotationBlueprint.Argument.EnumValue -> "${T(value.className)}.${N(value.name)}"
-        is AnnotationBlueprint.Argument.ClassValue -> "${T(value.className)}.class"
+        is AnnotationBlueprint.Argument.EnumEntryValue -> "${T(value.type.inJava)}.${N(value.name)}"
+        is AnnotationBlueprint.Argument.ClassValue -> "${T(value.type.inJava)}.class"
         is AnnotationBlueprint.Argument.AnnotationValue -> L(poetesse.java.annotation(value.annotation))
     }
 

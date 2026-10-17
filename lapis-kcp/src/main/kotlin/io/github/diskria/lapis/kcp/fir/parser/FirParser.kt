@@ -11,15 +11,14 @@ import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.fir.FirElement
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.analysis.checkers.declaration.hasExplicitReturnType
-import org.jetbrains.kotlin.fir.declarations.DirectDeclarationsAccess
 import org.jetbrains.kotlin.fir.declarations.FirResolvePhase
 import org.jetbrains.kotlin.fir.declarations.primaryConstructorIfAny
 import org.jetbrains.kotlin.fir.declarations.toAnnotationClassId
 import org.jetbrains.kotlin.fir.declarations.utils.*
 import org.jetbrains.kotlin.fir.expressions.*
-import org.jetbrains.kotlin.fir.extensions.*
-import org.jetbrains.kotlin.fir.extensions.predicate.DeclarationPredicate
-import org.jetbrains.kotlin.fir.extensions.predicate.LookupPredicate
+import org.jetbrains.kotlin.fir.extensions.FirExtensionSessionComponent
+import org.jetbrains.kotlin.fir.extensions.extensionService
+import org.jetbrains.kotlin.fir.extensions.extensionSessionComponents
 import org.jetbrains.kotlin.fir.java.findJvmNameValue
 import org.jetbrains.kotlin.fir.references.FirResolvedNamedReference
 import org.jetbrains.kotlin.fir.resolve.defaultType
@@ -35,7 +34,6 @@ import org.jetbrains.kotlin.fir.symbols.SymbolInternals
 import org.jetbrains.kotlin.fir.symbols.impl.*
 import org.jetbrains.kotlin.fir.types.*
 import org.jetbrains.kotlin.load.java.JvmAbi
-import org.jetbrains.kotlin.name.CallableId
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
@@ -44,52 +42,11 @@ import org.jetbrains.kotlin.types.ConstantValueKind
 class FirParser(session: FirSession) : FirExtensionSessionComponent(session) {
 
     private val kMixinClassId = FqName(AnnotationsContainer.KMIXIN_FQCN)
-    private val extensionClassId = FqName(AnnotationsContainer.EXTENSION_FQCN)
-
-    val kMixinLookupPredicate = LookupPredicate.create { annotated(AnnotationFqn(AnnotationsContainer.KMIXIN_FQCN)) }
-    val kMixinPredicate = DeclarationPredicate.create { annotated(AnnotationFqn(AnnotationsContainer.KMIXIN_FQCN)) }
-
-    override fun FirDeclarationPredicateRegistrar.registerPredicates() {
-        register(kMixinLookupPredicate, kMixinPredicate)
-    }
 
     private fun FirBasedSymbol<*>.findAnnotation(fqName: FqName): FirAnnotation? =
         resolvedAnnotationsWithArguments.firstOrNull { annotation ->
             annotation.toAnnotationClassId(session)?.getTopLevelFqNameOrNull() == fqName
         }
-
-    private fun annotatedKMixins(): List<AnnotatedKMixin> =
-        session.predicateBasedProvider.getSymbolsByPredicate(kMixinLookupPredicate).mapNotNull { lookupSymbol ->
-            val classSymbol = lookupSymbol as? FirRegularClassSymbol ?: return@mapNotNull null
-            val kMixinAnnotation = classSymbol.findAnnotation(kMixinClassId) ?: return@mapNotNull null
-            AnnotatedKMixin(classSymbol, kMixinAnnotation)
-        }
-
-    data class AnnotatedKMixin(
-        val classSymbol: FirRegularClassSymbol,
-        val annotation: FirAnnotation,
-    )
-
-    @OptIn(UnresolvedExpressionTypeAccess::class, DirectDeclarationsAccess::class)
-    fun getExtensionCallableIds(): Set<CallableId> {
-        val mixins = annotatedKMixins()
-        return mixins.flatMapTo(mutableSetOf()) { (classSymbol, annotation) ->
-            val targetArg = annotation.argumentMapping.mapping[Name.identifier("target")]
-                ?: (annotation as? FirAnnotationCall)?.argumentList?.arguments?.firstOrNull()
-            val targetPackageName = when (targetArg) {
-                is FirGetClassCall -> targetArg.argument.coneTypeOrNull
-                is FirClassReferenceExpression -> targetArg.classTypeRef.coneTypeOrNull
-                else -> null
-            }?.classId?.packageFqName
-            if (targetPackageName == null) return@flatMapTo emptySet()
-            classSymbol.declarationSymbols.mapNotNullTo(mutableSetOf()) { memberSymbol ->
-                val callable = memberSymbol as? FirCallableSymbol<*> ?: return@mapNotNullTo null
-                val isExtension = callable.findAnnotation(extensionClassId) != null
-                if (!isExtension) return@mapNotNullTo null
-                CallableId(targetPackageName, callable.name)
-            }
-        }
-    }
 
     fun parse(classSymbols: List<FirRegularClassSymbol>): List<KMixinNode<Nothing>> =
         classSymbols.mapNotNull { symbol ->
@@ -117,6 +74,7 @@ class FirParser(session: FirSession) : FirExtensionSessionComponent(session) {
             functions = declaredMemberScope.collectAllFunctions().map { it.parse() },
             annotations = annotations.parse(),
             origin = null,
+            frontendName = "FIR",
             node = toNode(),
         )
     }
@@ -284,7 +242,7 @@ class FirParser(session: FirSession) : FirExtensionSessionComponent(session) {
 
             when (val resolvedSymbol = reference.resolvedSymbol) {
                 is FirEnumEntrySymbol -> {
-                    AnnotationNode.Argument.EnumValue(
+                    AnnotationNode.Argument.EnumEntryValue(
                         type = resolvedType.parse(),
                         name = resolvedSymbol.callableId.callableName.asString()
                     )
@@ -294,7 +252,7 @@ class FirParser(session: FirSession) : FirExtensionSessionComponent(session) {
             }
         }
 
-        is FirEnumEntryDeserializedAccessExpression -> AnnotationNode.Argument.EnumValue(
+        is FirEnumEntryDeserializedAccessExpression -> AnnotationNode.Argument.EnumEntryValue(
             type = enumClassId.toLookupTag().constructClassType().parse(),
             name = enumEntryName.asString(),
         )
@@ -320,7 +278,7 @@ class FirParser(session: FirSession) : FirExtensionSessionComponent(session) {
                 }
 
                 is FirEnumEntrySymbol -> {
-                    AnnotationNode.Argument.EnumValue(
+                    AnnotationNode.Argument.EnumEntryValue(
                         type = resolvedType.parse(),
                         name = resolvedSymbol.callableId.callableName.asString()
                     )

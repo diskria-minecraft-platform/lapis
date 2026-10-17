@@ -2,6 +2,7 @@ package io.github.diskria.lapis.kcp.fir.validator
 
 import io.github.diskria.lapis.core.cli.CliOptions
 import io.github.diskria.lapis.core.extensions.lapisError
+import io.github.diskria.lapis.core.extensions.lapisFatal
 import io.github.diskria.lapis.core.parser.models.KMixinNode
 import io.github.diskria.lapis.core.validator.CoreValidator
 import io.github.diskria.lapis.core.validator.DiagnosticReport
@@ -43,28 +44,17 @@ class FirValidator(session: FirSession, private val options: CliOptions) : FirAd
 
         context(context: CheckerContext, reporter: DiagnosticReporter)
         override fun check(declaration: FirRegularClass) {
-            val nodes = context.session.parser.parse(listOf(declaration.symbol))
-            nodes.forEach { node ->
-                val (model, diagnosticReports) = coreValidator.validate(node)
-                diagnosticReports.forEach { report ->
-                    val targetNode = report.target as FirNode
-                    targetNode.reportDiagnostic(report.diagnostic, context, reporter)
+            try {
+                val nodes = context.session.parser.parse(listOf(declaration.symbol))
+                nodes.forEach { node ->
+                    val (model, diagnosticReports) = coreValidator.validate(node)
+                    diagnosticReports.forEach { report ->
+                        val targetNode = report.target as FirNode
+                        targetNode.reportDiagnostic(report.diagnostic, context, reporter)
+                    }
                 }
-//                try {
-//                val model = declaration.kMixinModel ?: return
-
-//                val generatedSymbols = context.session.symbolProvider.getTopLevelFunctionSymbols(
-//                    packageFqName = TARGET_PACKAGE,
-//                    name = METHOD_NAME
-//                )
-//                generatedSymbols.forEach { functionSymbol ->
-//                    if (functionSymbol.origin == FirDeclarationOrigin.Plugin(LapisParsedKey)) {
-//                        lapisLog("--- MyPlugin: Successfully attached lowering metadata to hardcoded boom!")
-//                    }
-//                }
-//            } catch (t: Throwable) {
-//                lapisLog("    CRASH IN VALIDATOR:\n${t.stackTraceToString()}")
-//            }
+            } catch (t: Throwable) {
+                lapisFatal("[KCP-VALIDATOR]", t)
             }
         }
     }

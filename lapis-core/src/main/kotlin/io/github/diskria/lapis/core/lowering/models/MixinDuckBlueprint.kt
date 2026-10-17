@@ -134,7 +134,8 @@ class MixinDuckBlueprint<O>(
             override val typeVariables: List<XTypeVariableName>,
         ) : MixinDuckBlueprint.Function, Shadow {
 
-            class Parameter(name: String, val mappingName: String, type: TypeBlueprint) : FunctionParameterBlueprint(name, type)
+            class Parameter(name: String, val mappingName: String, type: TypeBlueprint) :
+                FunctionParameterBlueprint(name, type)
         }
     }
 }

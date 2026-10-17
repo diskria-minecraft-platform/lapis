@@ -47,6 +47,7 @@ class KspParser(private val resolver: Resolver) {
             annotations = annotations.parse(),
             typeParameters = typeParameters.map { it.parse() },
             origin = containingFile,
+            frontendName = "KSP",
             node = toNode(),
         )
     }
@@ -178,7 +179,7 @@ class KspParser(private val resolver: Resolver) {
         is KSClassDeclaration -> {
             val parentClassDeclaration = rawValue.parentDeclaration as? KSClassDeclaration
                 ?: lapisError("Failed to resolve enclosing enum class of entry: '${rawValue.qualifiedName}'.")
-            AnnotationNode.Argument.EnumValue(
+            AnnotationNode.Argument.EnumEntryValue(
                 type = parentClassDeclaration.asStarProjectedType().parse(),
                 name = rawValue.simpleName.toName(),
             )

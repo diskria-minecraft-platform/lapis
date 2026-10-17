@@ -31,7 +31,7 @@ data class AnnotationNode(
         data class DoubleValue(val double: Double) : ValidValue
         data class StringValue(val string: String) : ValidValue
         data class TypeValue(val type: ParsedType) : ValidValue
-        data class EnumValue(val type: ParsedType, val name: String) : ValidValue
+        data class EnumEntryValue(val type: ParsedType, val name: String) : ValidValue
         data class AnnotationValue(val annotation: AnnotationNode) : ValidValue
     }
 
@@ -54,7 +54,7 @@ data class AnnotationNode(
     data class InvalidArgument(override val node: Node) : Argument
 }
 
-class AnnotationsContainer(
+data class AnnotationsContainer(
     val apiAnnotations: List<AnnotationNode>,
     val externalAnnotations: List<AnnotationNode>,
 ) {
@@ -87,7 +87,7 @@ class AnnotationsContainer(
         findApiAnnotation<A>()?.arguments?.firstNotNullOfOrNull { argument ->
             if (argument is AnnotationNode.ScalarArgument &&
                 argument.name == property.name &&
-                argument.value is Argument.EnumValue
+                argument.value is Argument.EnumEntryValue
             ) {
                 argument.value.getTypedOrNull<E>()?.let { ApiScalarArgument(it, argument) }
             } else null
@@ -98,21 +98,23 @@ class AnnotationsContainer(
         findApiAnnotation<A>()?.arguments?.firstNotNullOfOrNull { argument ->
             if (argument is AnnotationNode.ArrayArgument && argument.name == property.name) {
                 val elements = argument.elements.map { element ->
-                    val enumValue = element as? Argument.EnumValue
-                    enumValue?.getTypedOrNull<E>() ?: return@firstNotNullOfOrNull null
+                    val enumEntryValue = element as? Argument.EnumEntryValue
+                    enumEntryValue?.getTypedOrNull<E>() ?: return@firstNotNullOfOrNull null
                 }
                 ApiArrayArgument(elements, argument)
             } else null
         }
 
-    inline fun <reified E : Enum<E>> Argument.EnumValue.getTypedOrNull(): E? =
-        if (type is ParsedClassType && type.qualifiedName == qualifiedNameOf<E>()) {
+    inline fun <reified E : Enum<E>> Argument.EnumEntryValue.getTypedOrNull(): E? =
+        if (type is ParsedClassType && type.actualOrThis.qualifiedName == qualifiedNameOf<E>()) {
             enumEntries<E>().find { it.name == name }
         } else null
 
     inline fun <reified A : Annotation> findApiAnnotation(): AnnotationNode? =
         apiAnnotations.firstNotNullOfOrNull { annotation ->
-            if (annotation.type is ParsedClassType && annotation.type.qualifiedName == qualifiedNameOf<A>()) annotation
+            if (annotation.type is ParsedClassType &&
+                annotation.type.actualOrThis.qualifiedName == qualifiedNameOf<A>()
+            ) annotation
             else null
         }
 
@@ -130,7 +132,7 @@ class AnnotationsContainer(
             val externalAnnotations = mutableListOf<AnnotationNode>()
             annotations.forEach { annotation ->
                 if (annotation.type is ParsedClassType &&
-                    annotation.type.packageName.isSubpackageOf(API_ANNOTATIONS_PACKAGE)
+                    annotation.type.actualOrThis.packageName.isSubpackageOf(API_ANNOTATIONS_PACKAGE)
                 ) {
                     apiAnnotations += annotation
                 } else {

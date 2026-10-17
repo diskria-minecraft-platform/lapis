@@ -1,8 +1,6 @@
 package io.github.diskria.lapis.core.lowering.models
 
-import io.github.diskria.poetesse.interop.XClassName
-
-class AnnotationBlueprint(val className: XClassName, val arguments: List<Argument> = emptyList()) {
+class AnnotationBlueprint(val type: ClassTypeBlueprint, val arguments: List<Argument> = emptyList()) {
 
     sealed interface Argument {
 
@@ -18,8 +16,8 @@ class AnnotationBlueprint(val className: XClassName, val arguments: List<Argumen
         class FloatValue(val float: Float) : Value
         class DoubleValue(val double: Double) : Value
         class StringValue(val string: String) : Value
-        class ClassValue(val className: XClassName) : Value
-        class EnumValue(val className: XClassName, val name: String) : Value
+        class ClassValue(val type: TypeBlueprint) : Value
+        class EnumEntryValue(val type: TypeBlueprint, val name: String) : Value
         class AnnotationValue(val annotation: AnnotationBlueprint) : Value
     }
 

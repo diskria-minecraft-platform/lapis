@@ -3,6 +3,7 @@ package io.github.diskria.lapis.core.validator
 import io.github.diskria.lapis.annotations.*
 import io.github.diskria.lapis.core.cli.CliOptions
 import io.github.diskria.lapis.core.extensions.isSubpackageOf
+import io.github.diskria.lapis.core.extensions.lapisLog
 import io.github.diskria.lapis.core.parser.models.*
 import io.github.diskria.lapis.core.utils.JavaModifiers
 import io.github.diskria.lapis.core.utils.Variance
@@ -28,6 +29,7 @@ class CoreValidator<O>(private val options: CliOptions) {
     }
 
     private fun KMixinNode<O>.validate(): KMixinModel<O> {
+        lapisLog("[$frontendName] [CORE-VALIDATOR] Processing KMixin '$name' with annotations: $annotations")
         nodeRequire(isTopLevel) { KMixinMustBeTopLevel }
         nodeRequire(isPublic) { KMixinMustBePublic }
         nodeRequire(!isSealed) { KMixinCannotBeSealed }
@@ -35,15 +37,11 @@ class CoreValidator<O>(private val options: CliOptions) {
         val mixinAnnotations = annotations.filterMixinAnnotations()
         val initStrategy = annotations.findApiArgument(KMixin::initStrategy)?.value ?: InitStrategy.Lazy
         val side = annotations.findApiArgument(KMixin::side)?.value ?: Side.Common
-        val targetArgument = nodeRequireNotNull(annotations.findApiArgument(KMixin::target)) {
-            KMixinTargetRequired
-        }
+        val targetArgument = nodeRequireNotNull(annotations.findApiArgument(KMixin::target)) { KMixinTargetRequired }
         val targetClassType = nodeRequireNotNull(targetArgument.value.validate() as? ParsedClassType) {
             InvalidType("'@KMixin' target")
         }
-        val classType = nodeRequireNotNull(type.validate() as? ParsedClassType) {
-            InvalidType("'@KMixin'")
-        }
+        val classType = nodeRequireNotNull(type.validate() as? ParsedClassType) { InvalidType("'@KMixin'") }
         nodeRequire(typeParameters.isEmpty()) { KMixinTypeParametersNotSupported }
         val typeParameters = emptyList<TargetTypeParameterModel>()
         val shadowProperties = mutableListOf<KMixinModel.Shadow.Property>()
@@ -558,12 +556,10 @@ class CoreValidator<O>(private val options: CliOptions) {
             MixinAnnotationModel.Argument.ClassValue(classTypeModel)
         }
 
-        is AnnotationNode.Argument.EnumValue -> {
+        is AnnotationNode.Argument.EnumEntryValue -> {
             val typeModel = type.validate().toModel()
-            val classTypeModel = nodeHolder.nodeRequireNotNull(typeModel as? ClassTypeModel) {
-                EnumTypeMustBeClass
-            }
-            MixinAnnotationModel.Argument.EnumValue(classTypeModel, name)
+            val classTypeModel = nodeHolder.nodeRequireNotNull(typeModel as? ClassTypeModel) { EnumTypeMustBeClass }
+            MixinAnnotationModel.Argument.EnumEntryValue(classTypeModel, name)
         }
 
         is AnnotationNode.Argument.AnnotationValue -> {

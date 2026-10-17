@@ -7,6 +7,17 @@ fun lapisLog(message: String) {
     File(System.getProperty("user.home"), "lapis.log").appendText("$message\n")
 }
 
+fun lapisFatal(tag: String, throwable: Throwable) {
+    val exceptionClass = throwable::class.java.name
+    if (exceptionClass.contains("CannotReadException") ||
+        exceptionClass.contains("ProcessCanceledException")
+    ) {
+        lapisLog("$tag Analysis canceled by IDE, retrying soon...")
+        return
+    }
+    lapisLog("$tag !!!!! CRASH !!!!!\n${throwable.stackTraceToString()}")
+}
+
 fun lapisError(message: String): Nothing =
     error(buildString {
         appendLine(message)
