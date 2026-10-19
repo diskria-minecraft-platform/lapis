@@ -143,6 +143,7 @@ class CoreLowering<O>(
                     enclosingParameters = enclosingParameters,
                 )
                 MixinDuckBlueprint.Extension.Property(
+                    node = node,
                     type = typeResult.blueprint,
                     declaredName = declaredName,
                     declaredGetterJvmName = getterJvmName,
@@ -171,6 +172,7 @@ class CoreLowering<O>(
                     enclosingParameters = enclosingParameters,
                 )
                 MixinDuckBlueprint.Extension.Function(
+                    node = node,
                     declaredName = declaredName,
                     sourceJvmName = jvmName,
                     name = jvmName.withUniqueModPrefix(),
@@ -229,6 +231,7 @@ class CoreLowering<O>(
 
     private fun KMixinModel.Shadow.lower(isInterface: Boolean) = when (this) {
         is KMixinModel.Shadow.Property -> MixinDuckBlueprint.Shadow.Property(
+            node = node,
             type = type.lowerAsType().blueprint,
             declaredName = declaredName,
             declaredGetterJvmName = getterJvmName,
@@ -253,6 +256,7 @@ class CoreLowering<O>(
         )
 
         is KMixinModel.Shadow.Function -> MixinDuckBlueprint.Shadow.Function(
+            node = node,
             declaredName = declaredName,
             sourceJvmName = jvmName,
             name = jvmName.withUniqueModPrefix(),

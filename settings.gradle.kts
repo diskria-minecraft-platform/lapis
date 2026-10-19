@@ -5,9 +5,6 @@ pluginManagement {
 
         mavenCentral()
         gradlePluginPortal()
-
-        // TODO: Required for KSP API (KSContextParameter support). Remove after KSP API 2.3.13 release.
-        maven("https://central.sonatype.com/repository/maven-snapshots")
     }
 }
 
@@ -31,8 +28,5 @@ dependencyResolutionManagement {
     repositories {
         // TODO: Remove after Poetesse 0.1.5 release
         mavenLocal()
-
-        // TODO: Required for KSP API (KSContextParameter support). Remove after KSP API 2.3.13 release.
-        maven("https://central.sonatype.com/repository/maven-snapshots")
     }
 }

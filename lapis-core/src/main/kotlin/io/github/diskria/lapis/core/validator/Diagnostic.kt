@@ -1,6 +1,6 @@
 package io.github.diskria.lapis.core.validator
 
-import io.github.diskria.lapis.core.parser.models.Node
+import io.github.diskria.lapis.core.Node
 import io.github.diskria.lapis.core.parser.models.Type
 
 class DiagnosticReport(

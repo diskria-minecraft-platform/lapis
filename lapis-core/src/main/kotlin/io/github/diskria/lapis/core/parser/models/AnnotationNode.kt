@@ -2,6 +2,8 @@ package io.github.diskria.lapis.core.parser.models
 
 import io.github.diskria.lapis.annotations.Extension
 import io.github.diskria.lapis.annotations.KMixin
+import io.github.diskria.lapis.core.Node
+import io.github.diskria.lapis.core.NodeHolder
 import io.github.diskria.lapis.core.extensions.isSubpackageOf
 import io.github.diskria.lapis.core.extensions.qualifiedNameOf
 import io.github.diskria.lapis.core.parser.models.AnnotationNode.Argument
@@ -122,7 +124,7 @@ data class AnnotationsContainer(
     data class ApiArrayArgument<T>(val elements: List<T>, val node: NodeHolder)
 
     companion object {
-        val KMIXIN_FQCN = qualifiedNameOf<KMixin>()
+        val KMIXIN_FQCN = qualifiedNameOf<KMixin<*>>()
         val EXTENSION_FQCN = qualifiedNameOf<Extension>()
 
         private const val API_ANNOTATIONS_PACKAGE = "io.github.diskria.lapis.annotations"

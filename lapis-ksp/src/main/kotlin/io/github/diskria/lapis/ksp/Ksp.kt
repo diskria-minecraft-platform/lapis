@@ -1,5 +1,7 @@
 package io.github.diskria.lapis.ksp
 
+import com.google.devtools.ksp.ApiFeatures
+import com.google.devtools.ksp.buildApiFeatures
 import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.processing.SymbolProcessor
@@ -22,6 +24,8 @@ class Ksp(
 
     private val validator = CoreValidator<KSFile>(options)
     private val blueprints: MutableList<KMixinBlueprint<KSFile>> = mutableListOf()
+
+    override val apiFeatures: ApiFeatures get() = buildApiFeatures { enableContextParameters = true }
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
         val nodes = KspParser(resolver).parseNodes()

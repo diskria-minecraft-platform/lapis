@@ -38,6 +38,7 @@ class KspParser(private val resolver: Resolver) {
             isAbstract = Modifier.ABSTRACT in modifiers,
             isSealed = Modifier.SEALED in modifiers,
             isTopLevel = parentDeclaration == null,
+            typeParameters = typeParameters.map { it.parse() },
             isPublic = isPublic(),
             constructors = constructorDeclarations.map { it.parseAsConstructor() }.toList(),
             properties = propertyDeclarations.map { it.parse() }.toList(),
@@ -45,7 +46,6 @@ class KspParser(private val resolver: Resolver) {
             companionObject = declarations.filterIsInstance<KSClassDeclaration>().find { it.isCompanionObject }
                 ?.parseAsCompanionObject(),
             annotations = annotations.parse(),
-            typeParameters = typeParameters.map { it.parse() },
             origin = containingFile,
             frontendName = "KSP",
             node = toNode(),
@@ -271,7 +271,7 @@ private inline fun <reified A : Annotation> Sequence<KSAnnotation>.findAnnotatio
     return find { annotation ->
         val type = annotation.annotationType
         if (annotation.shortName.toName() != expectedShortName) return@find false
-        if (type.validate(enableNewFeatures = true)) {
+        if (type.validate(apiFeatures = buildApiFeatures { enableContextParameters = true })) {
             type.resolve().declaration.qualifiedName?.toName() == expectedQualifiedName
         } else {
             type.toString() == "<ERROR TYPE: $expectedQualifiedName>"

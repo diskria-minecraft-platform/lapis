@@ -12,6 +12,7 @@ import org.jetbrains.kotlin.fir.FirElement
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.analysis.checkers.declaration.hasExplicitReturnType
 import org.jetbrains.kotlin.fir.declarations.FirResolvePhase
+import org.jetbrains.kotlin.fir.declarations.getAnnotationByClassId
 import org.jetbrains.kotlin.fir.declarations.primaryConstructorIfAny
 import org.jetbrains.kotlin.fir.declarations.toAnnotationClassId
 import org.jetbrains.kotlin.fir.declarations.utils.*
@@ -41,18 +42,18 @@ import org.jetbrains.kotlin.types.ConstantValueKind
 
 class FirParser(session: FirSession) : FirExtensionSessionComponent(session) {
 
-    private val kMixinClassId = FqName(AnnotationsContainer.KMIXIN_FQCN)
+    private val kMixinFqn = FqName(AnnotationsContainer.KMIXIN_FQCN)
+    private val kMixinClassId = ClassId.topLevel(kMixinFqn)
 
     private fun FirBasedSymbol<*>.findAnnotation(fqName: FqName): FirAnnotation? =
         resolvedAnnotationsWithArguments.firstOrNull { annotation ->
             annotation.toAnnotationClassId(session)?.getTopLevelFqNameOrNull() == fqName
         }
 
-    fun parse(classSymbols: List<FirRegularClassSymbol>): List<KMixinNode<Nothing>> =
-        classSymbols.mapNotNull { symbol ->
-            val kMixinAnnotation = symbol.findAnnotation(kMixinClassId) ?: return@mapNotNull null
-            symbol.parseAsKMixin(kMixinAnnotation)
-        }
+    fun parse(classSymbol: FirRegularClassSymbol): KMixinNode<Nothing>? {
+        val kMixinAnnotation = classSymbol.getAnnotationByClassId(kMixinClassId, session) ?: return null
+        return classSymbol.parseAsKMixin(kMixinAnnotation)
+    }
 
     @OptIn(SymbolInternals::class)
     private fun FirRegularClassSymbol.parseAsKMixin(kMixinAnnotation: FirAnnotation): KMixinNode<Nothing> {

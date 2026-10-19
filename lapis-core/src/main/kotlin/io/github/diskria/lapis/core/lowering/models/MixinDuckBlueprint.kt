@@ -1,5 +1,6 @@
 package io.github.diskria.lapis.core.lowering.models
 
+import io.github.diskria.lapis.core.Node
 import io.github.diskria.lapis.core.lowering.models.MixinDuckBlueprint.Entry.Kind
 import io.github.diskria.poetesse.interop.XClassName
 import io.github.diskria.poetesse.interop.XTypeVariableName
@@ -13,6 +14,7 @@ class MixinDuckBlueprint<O>(
 ) {
     sealed interface Entry {
 
+        val node: Node
         val declaredName: String
         val kinds: List<Kind>
 
@@ -78,6 +80,7 @@ class MixinDuckBlueprint<O>(
         val typeVariables: List<XTypeVariableName>
 
         class Property(
+            override val node: Node,
             override val declaredName: String,
             override val type: TypeBlueprint,
             override val declaredGetterJvmName: String,
@@ -91,6 +94,7 @@ class MixinDuckBlueprint<O>(
             Extension
 
         class Function(
+            override val node: Node,
             override val declaredName: String,
             override val name: String,
             override val sourceJvmName: String,
@@ -110,6 +114,7 @@ class MixinDuckBlueprint<O>(
         val annotations: List<AnnotationBlueprint>
 
         class Property(
+            override val node: Node,
             override val declaredName: String,
             override val type: TypeBlueprint,
             override val getterName: String,
@@ -123,6 +128,7 @@ class MixinDuckBlueprint<O>(
             Shadow
 
         class Function(
+            override val node: Node,
             override val declaredName: String,
             override val name: String,
             override val sourceJvmName: String,

@@ -172,7 +172,7 @@ data class CliOptions(
             val requiredKeys = specs.filter { it.isRequired }.map { it.name }.toSet()
             val missingRequiredKeys = requiredKeys - scopeArguments.keys
             if (missingRequiredKeys.isNotEmpty()) {
-                onError("Missing required arguments: ${missingRequiredKeys.joinToString { "'$it'" }} Passed: $rawArguments.")
+                onError("Missing required arguments: ${missingRequiredKeys.joinToString { "'$it'" }}.")
             }
             val options = runCatching {
                 optionsJson.decodeFromJsonElement<CliOptions>(buildJsonObject {

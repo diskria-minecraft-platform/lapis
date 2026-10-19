@@ -5,7 +5,6 @@ import com.google.devtools.ksp.processing.Dependencies
 import com.google.devtools.ksp.symbol.KSFile
 import io.github.diskria.lapis.annotations.InitStrategy
 import io.github.diskria.lapis.core.cli.CliOptions
-import io.github.diskria.lapis.core.extensions.qualifiedNameOf
 import io.github.diskria.lapis.core.lowering.models.*
 import io.github.diskria.lapis.ksp.generator.models.GeneratedMixinsJson
 import io.github.diskria.poetesse.PoetesseFile
@@ -13,7 +12,6 @@ import io.github.diskria.poetesse.interop.*
 import io.github.diskria.poetesse.java.*
 import io.github.diskria.poetesse.kotlin.*
 import kotlinx.serialization.json.Json
-import javax.annotation.processing.Generated
 
 class KspGenerator(
     private val kMixins: List<KMixinBlueprint<KSFile>>,
@@ -129,13 +127,16 @@ class KspGenerator(
                             }
                         }
                         extension.setter?.let { setter ->
-                            setter(setter.parameter.name) { newValue ->
+                            fullSetter {
+                                parameter("newValue", extension.type.inKotlin) {
+                                    if (extension.type.isFunctionType) noinline()
+                                }
                                 body {
                                     val callable = code { N(setter.name) }
                                     val arguments = code {
                                         val nameToType = buildList {
                                             addAll(extension.contextParameters.map { it.name to it.type })
-                                            add(newValue to extension.type)
+                                            add("newValue" to extension.type)
                                         }
                                         nameToType.joinToString { (name, type) -> N(name).maybeCastToJava(type) }
                                     }
@@ -522,10 +523,11 @@ class KspGenerator(
                 val callable = code { N(injection.sourceJvmName) }
                 val arguments = code {
                     buildList {
+                        addAll(injection.contextParameters.map { N(it.name) })
                         if (injection is MixinBlueprint.MemberInjection) {
                             injection.extensionReceiverType?.let { add("this".unsafeCastTo(it)) }
                         }
-                        addAll((injection.contextParameters + injection.parameters).map { N(it.name) })
+                        addAll(injection.parameters.map { N(it.name) })
                     }.joinToString()
                 }
                 line { "$returner${L(delegate)}.${L(callable)}(${L(arguments)})" }
@@ -636,35 +638,35 @@ private fun KotlinFunctionScope.returnsIfNeeded(type: TypeBlueprint?): String =
     } else ""
 
 private fun JavaTypeScope.suppressAllWarnings() {
-    annotation<SuppressWarnings> {
-        member(SuppressWarnings::value, "ALL")
-    }
+//    annotation<SuppressWarnings> {
+//        member(SuppressWarnings::value, "ALL")
+//    }
 }
 
 private fun KotlinTypeScope.suppressAllWarnings() {
-    annotation<Suppress> {
-        member(Suppress::names, "warnings")
-    }
+//    annotation<Suppress> {
+//        member(Suppress::names, "warnings")
+//    }
 }
 
 private fun JavaTypeScope.generatedMarkers(originClassName: XClassName, roleDesc: String) {
-    documentation {
-        line { "AUTO-GENERATED FILE. DO NOT MODIFY." }
-        line { "Generated from origin: {@link ${originClassName.qualifiedName}}" }
-    }
-    annotation<Generated> {
-        member(Generated::value, qualifiedNameOf<KspGenerator>())
-        member(Generated::comments, roleDesc)
-    }
+//    documentation {
+//        line { "AUTO-GENERATED FILE. DO NOT MODIFY." }
+//        line { "Generated from origin: {@link ${originClassName.qualifiedName}}" }
+//    }
+//    annotation<Generated> {
+//        member(Generated::value, qualifiedNameOf<KspGenerator>())
+//        member(Generated::comments, roleDesc)
+//    }
 }
 
 private fun KotlinTypeScope.generatedMarkers(originClassName: XClassName, roleDesc: String) {
-    documentation {
-        line { "AUTO-GENERATED FILE. DO NOT MODIFY." }
-        line { "Generated from origin: [${originClassName.qualifiedName}]" }
-    }
-    annotation<Generated> {
-        member(Generated::value, qualifiedNameOf<KspGenerator>())
-        member(Generated::comments, roleDesc)
-    }
+//    documentation {
+//        line { "AUTO-GENERATED FILE. DO NOT MODIFY." }
+//        line { "Generated from origin: [${originClassName.qualifiedName}]" }
+//    }
+//    annotation<Generated> {
+//        member(Generated::value, qualifiedNameOf<KspGenerator>())
+//        member(Generated::comments, roleDesc)
+//    }
 }

@@ -2,12 +2,14 @@ package io.github.diskria.lapis.core.validator.models
 
 import io.github.diskria.lapis.annotations.InitStrategy
 import io.github.diskria.lapis.annotations.Side
+import io.github.diskria.lapis.core.Node
 import io.github.diskria.lapis.core.utils.Variance
 import java.util.*
 import javax.lang.model.element.Modifier
 
 class KMixinModel<O>(
     val origin: O?,
+    val node: Node,
     val type: ClassTypeModel,
     val name: String,
     val side: Side,
@@ -42,10 +44,13 @@ class KMixinModel<O>(
 
     sealed interface Extension {
 
+        val node: Node
         val typeParameters: List<TypeParameterModel>
         val contextParameters: List<ContextParameterModel>
+        val declaredName: String
 
         class Property(
+            override val node: Node,
             override val declaredName: String,
             override val getterJvmName: String,
             override val setterJvmName: String?,
@@ -56,6 +61,7 @@ class KMixinModel<O>(
             Extension
 
         class Function(
+            override val node: Node,
             override val declaredName: String,
             override val jvmName: String,
             override val parameters: List<FunctionParameterModel>,
@@ -68,11 +74,13 @@ class KMixinModel<O>(
 
     sealed interface Shadow {
 
+        val node: Node
         val modifiers: EnumSet<Modifier>
         val mappingName: String
         val mixinAnnotations: List<MixinAnnotationModel>
 
         class Property(
+            override val node: Node,
             override val declaredName: String,
             override val getterJvmName: String,
             override val setterJvmName: String?,
@@ -84,6 +92,7 @@ class KMixinModel<O>(
             Shadow
 
         class Function(
+            override val node: Node,
             override val declaredName: String,
             override val jvmName: String,
             override val parameters: List<Parameter>,

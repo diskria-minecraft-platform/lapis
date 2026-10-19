@@ -1,6 +1,7 @@
 package io.github.diskria.lapis.core.validator
 
 import io.github.diskria.lapis.annotations.*
+import io.github.diskria.lapis.core.NodeHolder
 import io.github.diskria.lapis.core.cli.CliOptions
 import io.github.diskria.lapis.core.extensions.isSubpackageOf
 import io.github.diskria.lapis.core.extensions.lapisLog
@@ -21,9 +22,11 @@ class CoreValidator<O>(private val options: CliOptions) {
 
     private val diagnosticReports = mutableListOf<DiagnosticReport>()
 
-    fun validate(node: KMixinNode<O>): Pair<KMixinModel<O>?, List<DiagnosticReport>> {
+    data class Result<O>(val model: KMixinModel<O>?, val diagnosticReports: List<DiagnosticReport>)
+
+    fun validate(node: KMixinNode<O>): Result<O> {
         val model = node.ifValid { it.validate() }
-        val result = model to diagnosticReports.toList()
+        val result = Result(model, diagnosticReports.toList())
         diagnosticReports.clear()
         return result
     }
@@ -35,10 +38,17 @@ class CoreValidator<O>(private val options: CliOptions) {
         nodeRequire(!isSealed) { KMixinCannotBeSealed }
         nodeRequire(!isOpen) { CannotBeOpen("'@KMixin'") }
         val mixinAnnotations = annotations.filterMixinAnnotations()
-        val initStrategy = annotations.findApiArgument(KMixin::initStrategy)?.value ?: InitStrategy.Lazy
-        val side = annotations.findApiArgument(KMixin::side)?.value ?: Side.Common
-        val targetArgument = nodeRequireNotNull(annotations.findApiArgument(KMixin::target)) { KMixinTargetRequired }
-        val targetClassType = nodeRequireNotNull(targetArgument.value.validate() as? ParsedClassType) {
+        val initStrategy = annotations.findApiArgument(KMixin<*>::initStrategy)?.value ?: InitStrategy.Lazy
+        val side = annotations.findApiArgument(KMixin<*>::side)?.value ?: Side.Common
+        val kMixinType = nodeRequireNotNull(annotations.findApiAnnotation<KMixin<*>>()?.type as? ParsedClassType) {
+            InvalidType("'@KMixin' target")
+        }
+        val kMixinTargetTypeArgument = nodeRequireNotNull(
+            kMixinType.typeArguments.singleOrNull() as? ParsedClassType.TypeProjectionArgument
+        ) {
+            InvalidType("'@KMixin' target")
+        }
+        val targetClassType = nodeRequireNotNull(kMixinTargetTypeArgument.type as? ParsedClassType) {
             InvalidType("'@KMixin' target")
         }
         val classType = nodeRequireNotNull(type.validate() as? ParsedClassType) { InvalidType("'@KMixin'") }
@@ -140,6 +150,7 @@ class CoreValidator<O>(private val options: CliOptions) {
             nodeError { KMixinMustBeClassOrInterface }
         }
         return KMixinModel(
+            node = node,
             origin = origin,
             type = classType.toModel(),
             name = name,
@@ -203,6 +214,7 @@ class CoreValidator<O>(private val options: CliOptions) {
         val localTypeParameters = typeParameters.validate(enclosingTypeParameters)
         val scopeTypeParameters = localTypeParameters + enclosingTypeParameters
         return KMixinModel.Extension.Property(
+            node = node,
             declaredName = name,
             getterJvmName = getterJvmName,
             setterJvmName = setterJvmName,
@@ -236,6 +248,7 @@ class CoreValidator<O>(private val options: CliOptions) {
             )
         }
         return KMixinModel.Extension.Function(
+            node = node,
             declaredName = name,
             jvmName = jvmName,
             parameters = parameters,
@@ -273,6 +286,7 @@ class CoreValidator<O>(private val options: CliOptions) {
         }
         val modifiers = annotations.findApiArgument(KShadow::modifiers)?.elements.orEmpty()
         return KMixinModel.Shadow.Property(
+            node = node,
             declaredName = name,
             getterJvmName = getterJvmName,
             setterJvmName = setterJvmName,
@@ -308,6 +322,7 @@ class CoreValidator<O>(private val options: CliOptions) {
         val localTypeParameters = typeParameters.validate(enclosingTypeParameters)
         val scopeTypeParameters = localTypeParameters + enclosingTypeParameters
         return KMixinModel.Shadow.Function(
+            node = node,
             declaredName = name,
             jvmName = jvmName,
             mappingName = mappingName,

@@ -18,8 +18,6 @@ class KspCliProvider : SymbolProcessorProvider {
             onWarn = { message -> logger.warn(message) },
             onError = { message -> logger.fatal(message) },
         )
-        return Ksp(options, environment.codeGenerator, logger).apply {
-            environment.registerProcessorForNewFeatures(this)
-        }
+        return Ksp(options, environment.codeGenerator, logger)
     }
 }

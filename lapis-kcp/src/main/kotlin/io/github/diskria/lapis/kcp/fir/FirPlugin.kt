@@ -11,6 +11,6 @@ class FirPlugin(private val options: CliOptions) : FirExtensionRegistrar() {
     override fun ExtensionRegistrarContext.configurePlugin() {
         +::FirParser
         +(::FirValidator.bind(options))
-        +::FirGenerator
+//        +(::FirGenerator.bind(options))
     }
 }

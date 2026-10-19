@@ -7,8 +7,7 @@ import kotlin.reflect.KClass
 
 @Target(CLASS)
 @Retention(SOURCE)
-annotation class KMixin(
-    val target: KClass<*> = Any::class,
+annotation class KMixin<T : Any>(
     val side: Side,
     val initStrategy: InitStrategy = InitStrategy.Lazy,
 )

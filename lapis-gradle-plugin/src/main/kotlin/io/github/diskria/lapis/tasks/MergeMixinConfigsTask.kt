@@ -47,7 +47,7 @@ abstract class MergeMixinConfigsTask : DefaultTask() {
             prettyPrint = true
             prettyPrintIndent = indent
         }
-        val mergedFileText = jsonForOutput.encodeToString(JsonElement.serializer(), mergedJson)
+        val mergedFileText = jsonForOutput.encodeToString(mergedJson)
         mergedConfigFile.parentFile.mkdirs()
         mergedConfigFile.writeText(mergedFileText + trailingWhitespaces)
     }

@@ -1,4 +1,4 @@
-package io.github.diskria.lapis.core.parser.models
+package io.github.diskria.lapis.core
 
 interface Node
 

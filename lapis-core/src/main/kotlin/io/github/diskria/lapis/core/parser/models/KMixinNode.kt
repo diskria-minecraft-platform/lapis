@@ -1,5 +1,7 @@
 package io.github.diskria.lapis.core.parser.models
 
+import io.github.diskria.lapis.core.Node
+import io.github.diskria.lapis.core.NodeHolder
 import io.github.diskria.lapis.core.utils.Variance
 
 class KMixinNode<O>(
